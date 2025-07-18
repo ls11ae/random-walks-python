@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 project(random_walk LANGUAGES C)
 
 # Add the C library project
-add_subdirectory(random-walk_c)
+add_subdirectory(random-walks)
 
 # Copy the shared library to the Python package directory after build
 install(TARGETS random_walk
