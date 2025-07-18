@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/omar/Documents/random_walks/random-walk_py/build/cmake_install.cmake",
+		"/home/omar/Documents/random_walks/random-walk_py/build/random-walk_c/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

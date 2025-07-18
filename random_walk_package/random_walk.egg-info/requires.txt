@@ -1,0 +1,10 @@
+numpy
+matplotlib
+PyQt6
+requests
+pandas
+pystac_client
+planetary_computer
+rioxarray
+xarray
+memory_profiler

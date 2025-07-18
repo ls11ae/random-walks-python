@@ -1,0 +1,35 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11", "setuptools"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "random_walk"
+version = "0.1.0"
+description = "Random walk package with C backend"
+authors = [
+    { name = "Kevin Buchin" },
+    { name = "Mart Hagedoorn" },
+    { name = "Omar Chatila" }
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "PyQt6",
+    "requests",
+    "pandas",
+    "pystac_client",
+    "planetary_computer",
+    "rioxarray",
+    "xarray",
+    "memory_profiler"
+]
+
+[tool.scikit-build]
+cmake.version = ">=3.15"
+build.verbose = true
+build-dir = "build"
+install.components = ["random_walk"]
+
+[tool.scikit-build.wheel]
+packages = ["random_walk_package"]
