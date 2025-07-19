@@ -1,3 +1,4 @@
+import ctypes
 import os
 from _ctypes import byref
 from ctypes import c_char
@@ -49,6 +50,41 @@ dll.parse_terrain_map.restype = ctypes.c_int
 dll.tensor_map_terrain_biased_grid.argtypes = [TerrainMapPtr, Point2DArrayGridPtr]
 dll.tensor_map_terrain_biased_grid.restype = KernelsMap4DPtr
 
+dll.tensor_map_terrain_biased_grid_serialized.argtypes = [TerrainMapPtr, Point2DArrayGridPtr,ctypes.c_char_p]
+dll.tensor_map_terrain_biased_grid_serialized.restype = None
+
+dll.tensor_map_terrain_serialize.argtypes = [TerrainMapPtr, ctypes.c_char_p]
+dll.tensor_map_terrain_serialize.restype = None
+
+dll.tensor_at.argtypes = [ctypes.c_char_p, ctypes.c_ssize_t, ctypes.c_ssize_t]
+dll.tensor_at.restype = TensorPtr
+
+dll.tensor_at_xyt.argtypes = [ctypes.c_char_p, ctypes.c_ssize_t, ctypes.c_ssize_t, ctypes.c_ssize_t]
+dll.tensor_at_xyt.restype = TensorPtr
+
+def load_tensor_at(file, x, y):
+    file = os.path.join(script_dir, 'resources', file)
+    if not os.path.exists(file):
+        raise FileNotFoundError(f"File '{file}' does not exist.")
+    c_file = file.encode('ascii')
+    return dll.tensor_at(c_file,x, y)
+
+def load_tensor_at_xyt(file, x, y, t):
+    file = os.path.join(script_dir, 'resources', file)
+    if not os.path.exists(file):
+        raise FileNotFoundError(f"File '{file}' does not exist.")
+    c_file = file.encode('ascii')
+    return dll.tensor_at_xyt(c_file,x, y, t)
+
+def tensor_map_terrain_serialize(terrain: TerrainMapPtr, output_path: str):
+    file = os.path.join(script_dir, 'resources', output_path)
+    c_file = file.encode('ascii')
+    return dll.tensor_map_terrain_serialize(terrain, c_file)
+
+def tensor_map_terrain_time_serialize(terrain: TerrainMapPtr, grid: Point2DArrayGridPtr, output_path: str):
+    file = os.path.join(script_dir, 'resources', output_path)
+    c_file = file.encode('ascii')
+    return dll.tensor_map_terrain_time_serialized(terrain, grid, c_file)
 
 def tensor_map_terrain_bias(terrain: TerrainMapPtr, bias: Point2DArrayPtr) -> KernelsMap4DPtr: # type: ignore
     return dll.tensor_map_terrain_biased(terrain, bias)

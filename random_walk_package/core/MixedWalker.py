@@ -51,46 +51,6 @@ class MixedWalker:
                      W=self.spatial_map.width, H=height)
         return walk
 
-    def mixed_walk_time(self, tensor4D, steps=None):
-        full_path = []
-        width = self.spatial_map.contents.width
-        height = self.spatial_map.contents.height
-        T = self.T
-
-        if steps is None:
-            steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=10)
-
-        # TODO:  add padding to bbox
-        steps = [(57, 20), (130, 55)]
-
-        for i in range(len(steps) - 1):
-            start_x, start_y = steps[i]
-            print(start_x)
-            print(start_y)
-            end_x, end_y = steps[i + 1]
-
-            dp_matrix = time_walk_init(
-                width, height,
-                self.spatial_map,
-                tensor4D,
-                self.T,
-                start_x,
-                start_y
-            )
-
-            walk_ptr = time_walk_backtrace(dp_matrix, T, self.spatial_map, tensor4D, end_x, end_y, 0)
-
-            segment = get_walk_points(walk_ptr)
-
-            dll.tensor4D_free(dp_matrix, T)
-            dll.point2d_array_free(walk_ptr)
-
-            full_path.extend(segment[:-1])
-
-        full_path.append(steps[-1])
-        walk = np.array(full_path)
-        plot_combined_terrain(self.spatial_map, walk, steps=steps, title=self.movebank_study)
-
     def generate_walk(self, steps=None):
 
         full_path = []
@@ -100,7 +60,7 @@ class MixedWalker:
             steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=10)
 
         # TODO: (very) cheap fix here ... add padding to bbox
-        steps = [(100, 100), (40, 40)]
+        steps = [(400, 400), (1600, 1340)]
 
         for i in range(len(steps) - 1):
             start_x, start_y = steps[i]

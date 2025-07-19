@@ -160,13 +160,13 @@ def corr_movebank_test():
     print(f"Generated walk in {end - start:.4f} seconds")
     plot_walk_multistep(steps, walk, terrain_width=W, terrain_height=H)
 
-
+@profile
 def mixed_walk():
-    T = 90
+    T = 500
 
     study = "Baboon group movement, South Africa (data from Bonnell et al. 2016).csv"
 
-    walker = MixedWalker(T=T, width=200, movebank_study=study)
+    walker = MixedWalker(T=T, width=2000, movebank_study=study)
     walker.set_kernels()
     walk_np = walker.generate_walk()
 
@@ -326,13 +326,14 @@ def test_time_walker_multi():
         
 
 if __name__ == "__main__":
+    mixed_walk()
     #corr(7, 16, 300)
-    test_time_walker()
     #benchmark_brownian(200)
     #mixed_walk()
     #test_time_walk()
     # test_weather()
 """
+    test_time_walker()
     test_time_walker_multi()
     test_biased_walk()
     test_brownian_wrapper()
