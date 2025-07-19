@@ -100,7 +100,7 @@ class MixedWalker:
             steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=10)
 
         # TODO: (very) cheap fix here ... add padding to bbox
-        steps = [(100, 190), (100, 45)]
+        steps = [(100, 100), (40, 40)]
 
         for i in range(len(steps) - 1):
             start_x, start_y = steps[i]

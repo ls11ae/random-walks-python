@@ -18,6 +18,7 @@ class MixedTimeWalker:
         self.T = T
         self.resolution = resolution
         self.grid_points_per_edge = grid_points_per_edge
+        self.movebank_processor = None
 
         self.script_dir = os.path.dirname(os.path.realpath(__file__))
         base_project_dir = os.path.join(self.script_dir, '..')

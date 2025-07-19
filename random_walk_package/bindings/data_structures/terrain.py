@@ -1,17 +1,10 @@
-import ctypes
 import os
 from _ctypes import byref
 from ctypes import c_char
 
 import rasterio
-from random_walk_package.bindings.data_structures.tensor import Point2DArrayPtr
-from random_walk_package.bindings.data_processing.weather_parser import WeatherGridPtr
-from random_walk_package.bindings.data_structures.types import *
-
-from .tensor import TensorPtr, TensorSet, TensorSetPtr, Tensor
 from .matrix import *
 from random_walk_package.wrapper import dll, script_dir
-
 
 
 dll.kernels_map_new.argtypes = [TerrainMapPtr, MatrixPtr]
@@ -19,9 +12,6 @@ dll.kernels_map_new.restype = KernelsMapPtr
 
 dll.tensor_map_new.argtypes = [TerrainMapPtr, TensorPtr]
 dll.tensor_map_new.restype = TensorMapPtr
-
-dll.tensor_map_mixed.argtypes = [TerrainMapPtr, TensorSetPtr]
-dll.tensor_map_mixed.restype = TensorMapPtr
 
 dll.kernel_at.argtypes = [KernelsMapPtr, ctypes.c_ssize_t, ctypes.c_ssize_t]
 dll.kernel_at.restype = Matrix
@@ -46,9 +36,6 @@ dll.terrain_set.restype = None
 
 dll.tensor_map_terrain.argtypes = [TerrainMapPtr]
 dll.tensor_map_terrain.restype = TensorMapPtr
-
-dll.tensor_map_terrain_weather.argtypes = [TerrainMapPtr, WeatherGridPtr]
-dll.tensor_map_terrain_weather.restype = KernelsMap4DPtr
 
 dll.kernels_maps_equal.argtypes = [TensorMapPtr, KernelsMap4DPtr]
 dll.kernels_maps_equal.restype = ctypes.c_bool
@@ -93,10 +80,6 @@ def parse_terrain(file: str, delim: str) -> TerrainMap:
 
 def tensor_maps_equal(tensor3d, tensor4d):
     return dll.kernels_maps_equal(tensor3d, tensor4d)
-
-
-def kernels_map4D(terrain, weathergrid) -> KernelsMap4DPtr: # type: ignore
-    return dll.tensor_map_terrain_weather(terrain, weathergrid)
 
 
 def tensor_map_terrain_biased(terrain, bias_array) -> KernelsMap4DPtr: # type: ignore

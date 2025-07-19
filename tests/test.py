@@ -44,6 +44,10 @@ def test_terrain_correlated():
 
 def benchmark_brownian(num_steps=100):
     brownian_walker = BrownianWalker.from_parameters(T=num_steps, S=7, W=2 * num_steps + 1, H=2 * num_steps + 1)
+    start = time.perf_counter()
+    brownian_walker.generate_walk(175, 175)
+    end = time.perf_counter()
+    print(f"Generated walk in {end - start:.4f} seconds")
 
 
 def test_brownian_wrapper():
@@ -99,23 +103,23 @@ def movebank_test():
     plot_walk_multistep(steps_csv, walk_plot_array_csv, 200, 200)
 
 
-def corr(D):
-    S = 9
-    T = 80
-    W = 201
-    H = 201
+def corr(S, D, T):
+    W = 2 * T + 1
+    H = 2 * T + 1
 
     walker = CorrelatedWalker(D, S, W, H, T)
     walker.generate_kernel()
-    walker.generate(start_x=50, start_y=50)
 
-    # Time the execution
+    #Time the execution
+
+    walker.generate(start_x=50, start_y=50)
     start = time.perf_counter()
     walk = walker.backtrace(180, 190, 0)
     end = time.perf_counter()
-
     print(f"Generated walk in {end - start:.4f} seconds")
     plot_walk(walk, W, H)
+    return None
+
 
 
 def corr_simple(D):
@@ -181,38 +185,6 @@ def landcover_test():
     print(map_lon_to_x(-34.467708, min_lat, max_lat, res_y))
     fetch_landcover_data(bb, "landcover_baboons.tif")
     landcover_to_discrete_txt("landcover_baboons.tif", res_x, res_y, min_lon, max_lat, max_lon, min_lat)
-
-
-def test_weather():
-    try:
-        # Ensure the data file exists in your resources directory or provide an absolute path
-        animal_processor = AnimalMovementProcessor(
-            'Baboon group movement, South Africa (data from Bonnell et al. 2016).csv'
-        )
-
-        terrain_ptr = animal_processor.create_landcover_data()
-
-        # Fetch gridded weather data for 7 days starting from the earliest data point
-        # This will create 'gridded_weather_data.csv' in your resources folder
-        gridded_data = animal_processor.fetch_gridded_weather_data(
-            output_filename="my_gridded_weather.csv",
-            days_to_fetch=3,
-            grid_points_per_edge=5
-        )
-
-        kmap = kernels_map4D(terrain_ptr, gridded_data)
-        print(kmap)
-
-        # weather_grid_print(gridded_data)
-
-        if gridded_data:
-            print(f"Successfully fetched hourly records for the grid.")
-        else:
-            print("Failed to fetch gridded weather data.")
-    except:
-        raise Exception("Failed to fetch gridded weather data.")
-    finally:
-        print("Finished fetching gridded weather data.")
 
 
 def temporal_data_test():
@@ -320,10 +292,11 @@ def test_time_walk():
     walknp = get_walk_points(walk_points)
     plot_combined_terrain(terrain, walk_points=walknp, terrain_height=terrain.height, terrain_width=terrain.width,
                            title="Time-Aware Mixed Walk")
-    
+
+@profile
 def test_time_walker():
-    start = ((150, 170))
-    end = ((100, 100))
+    start = (150, 170)
+    end = (100, 100)
     
     walker = MixedTimeWalker(
         T=150,
@@ -353,7 +326,9 @@ def test_time_walker_multi():
         
 
 if __name__ == "__main__":
-    plot_terrain_from_json("/home/omar/Documents/random_walks/random-walk_py/random_walk_package/resources/walk.json")
+    #corr(7, 16, 300)
+    test_time_walker()
+    #benchmark_brownian(200)
     #mixed_walk()
     #test_time_walk()
     # test_weather()

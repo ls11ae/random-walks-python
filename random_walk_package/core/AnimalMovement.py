@@ -102,7 +102,7 @@ class AnimalMovementProcessor:
                                          self.discrete_params[3],  # height_discrete
                                          min_lon, max_lat, max_lon, min_lat)  # min_lon, max_lat for origin (top-left)
     
-    def create_landcover_data_txt(self, resolution=200, out_directory=None, input_file="landcover_baboons123.tif") -> None:
+    def create_landcover_data_txt(self, resolution=200, out_directory=None, input_file="landcover_baboons123.tif") -> str:
         """Generate landcover data for movement area and save as .txt if not already present."""
         # Construct output name: input_file without .tif, add _{resolution}.txt
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -124,11 +124,11 @@ class AnimalMovementProcessor:
 
         if not self.bbox:
             print("Error: Bounding box not computed. Load data first.")
-            return None
+            return "None"
         self._compute_discrete_params(resolution)
         if not self.discrete_params:
             print("Error: Discrete parameters not computed.")
-            return None
+            return "None"
 
         min_lon, min_lat, max_lon, max_lat = self.bbox
 
