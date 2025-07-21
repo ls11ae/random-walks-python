@@ -51,7 +51,7 @@ class MixedWalker:
 
     def generate_walk(self, steps=None, serialized=False):
         recmp: bool = True
-        serialization_dir = Path(self.base_project_dir) / 'resources' / self.serialization_path
+        serialization_dir = Path(self.base_project_dir) / 'resources' / self.serialization_path / 'tensors'
         if serialization_dir.exists():
             recmp = False
         if not serialized:
