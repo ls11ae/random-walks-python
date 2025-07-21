@@ -15,7 +15,7 @@ landcover_classes = {
 }
 
 
-def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, output="terrain.txt"):
+def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, output="terrain.txt") -> str:
     try:
         with rasterio.open(file_path) as src:
             landcover_array = src.read(1)

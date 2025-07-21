@@ -1,8 +1,6 @@
 # mixed_walk.py
-import ctypes
 import os
 
-from random_walk_package import TensorMapPtr, KernelsMapPtr, KernelsMap4DPtr
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 
@@ -23,7 +21,10 @@ dll.m_walk.argtypes = [
     TensorMapPtr,  # tensor_map
     ctypes.c_ssize_t,  # T
     ctypes.c_ssize_t,  # start x
-    ctypes.c_ssize_t]  # start y
+    ctypes.c_ssize_t,
+    ctypes.c_bool,
+    ctypes.c_bool,
+    ctypes.c_char_p]
 dll.m_walk.restype = ctypes.POINTER(TensorPtr)
 
 dll.tensor_set_free.argtypes = [TensorSetPtr]
@@ -36,7 +37,10 @@ dll.m_walk_backtrace.argtypes = [
     TerrainMapPtr,
     ctypes.c_ssize_t,
     ctypes.c_ssize_t,
-    ctypes.c_ssize_t
+    ctypes.c_ssize_t,
+    ctypes.c_bool,
+    ctypes.c_char_p,
+    ctypes.c_char_p
 ]
 dll.m_walk_backtrace.restype = Point2DArrayPtr
 
@@ -62,22 +66,21 @@ dll.backtrace_time_walk.argtypes = [
 ]
 dll.backtrace_time_walk.restype = Point2DArrayPtr
 
-
-
 # Python wrappers
 
 # Wrap time_walk_geo
 dll.time_walk_geo.argtypes = [
-    ctypes.c_ssize_t,           # T
-    ctypes.c_char_p,            # csv_path
-    ctypes.c_char_p,            # terrain_path
-    ctypes.c_char_p,            # walk_path
-    ctypes.c_int,               # grid_x
-    ctypes.c_int,               # grid_y
-    Point2D,                    # start
-    Point2D                     # goal
+    ctypes.c_ssize_t,  # T
+    ctypes.c_char_p,  # csv_path
+    ctypes.c_char_p,  # terrain_path
+    ctypes.c_char_p,  # walk_path
+    ctypes.c_int,  # grid_x
+    ctypes.c_int,  # grid_y
+    Point2D,  # start
+    Point2D  # goal
 ]
 dll.time_walk_geo.restype = Point2DArrayPtr
+
 
 def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, goal):
     """
@@ -96,7 +99,7 @@ def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, g
         Point2DArrayPtr: Pointer to the resulting walk
     """
     script_dir = os.path.dirname(os.path.realpath(__file__))
-    base_project_dir = os.path.join(script_dir, '..') 
+    base_project_dir = os.path.join(script_dir, '..')
     resources_dir = os.path.join(base_project_dir, 'resources')
 
     terrain_path = os.path.join(resources_dir, terrain_path)
@@ -122,20 +125,22 @@ def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, g
         goal_pt
     )
 
+
 # Wrap time_walk_geo_multi
 
 dll.time_walk_geo_multi.argtypes = [
-    ctypes.c_ssize_t,           # T
-    ctypes.c_char_p,            # csv_path
-    ctypes.c_char_p,            # terrain_path
-    ctypes.c_char_p,            # walk_path
-    ctypes.c_int,               # grid_x
-    ctypes.c_int,               # grid_y
-    Point2DArrayPtr             # steps
+    ctypes.c_ssize_t,  # T
+    ctypes.c_char_p,  # csv_path
+    ctypes.c_char_p,  # terrain_path
+    ctypes.c_char_p,  # walk_path
+    ctypes.c_int,  # grid_x
+    ctypes.c_int,  # grid_y
+    Point2DArrayPtr  # steps
 ]
 dll.time_walk_geo_multi.restype = Point2DArrayPtr
 
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array
+
 
 def time_walk_geo_multi(T, csv_path, terrain_path, walk_path, grid_x, grid_y, steps):
     """
@@ -162,6 +167,7 @@ def time_walk_geo_multi(T, csv_path, terrain_path, walk_path, grid_x, grid_y, st
         steps_array
     )
 
+
 def mixed_walk(W, H, spatial_map, tensor_map, c_kernel, T, steps):
     return dll.c_walk_backtrace_multiple(T, W, H, c_kernel, spatial_map, tensor_map, steps)
 
@@ -177,8 +183,8 @@ def tensor_set_new(tensors):
     return tensor_set
 
 
-def mix_walk(W, H, terrain_map, kernels_map, T, start_x,
-             start_y):
+def mix_walk(W, H, terrain_map, kernels_map, T, start_x, start_y, serialize: bool, recompute: bool,
+             serialize_path: str):
     result = dll.m_walk(
         ctypes.c_ssize_t(W),
         ctypes.c_ssize_t(H),
@@ -186,13 +192,18 @@ def mix_walk(W, H, terrain_map, kernels_map, T, start_x,
         kernels_map,
         ctypes.c_ssize_t(T),
         ctypes.c_ssize_t(start_x),
-        ctypes.c_ssize_t(start_y))
+        ctypes.c_ssize_t(start_y),
+        ctypes.c_bool(serialize),
+        ctypes.c_bool(recompute),
+        serialize_path.encode('utf-8'))
 
     return result
 
 
-def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, dir):
-    return dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, dir)
+def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, dir, serialize: bool, serialize_path: str,
+                  dp_dir: str):
+    return dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, dir, serialize,
+                                serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
 
 
 def time_walk_init(W, H, terrain, tensormap, T, start_x, start_y):

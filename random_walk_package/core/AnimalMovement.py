@@ -1,20 +1,15 @@
-import os
 import time
-import pandas as pd
-import requests  # Added for API calls
-import numpy as np  # Added for numerical operations like linspace
 
 # Assuming these imports are correctly resolved from your project structure
-from random_walk_package.bindings.data_processing.weather_parser import *
-from random_walk_package import landcover_to_discrete_ptr, weather_entry_free
-from random_walk_package.bindings.data_processing.weather_parser import WeatherTimeline, weather_entry_new, \
-    weather_timeline, WeatherGrid, weather_grid, WeatherEntry
-from random_walk_package.data_sources.geo_fetcher import *
+from random_walk_package import landcover_to_discrete_ptr
 from random_walk_package.bindings.data_processing.movebank_parser import *
+from random_walk_package.bindings.data_processing.weather_parser import weather_entry_new, \
+    weather_timeline
+from random_walk_package.bindings.data_structures.types import TerrainMapPtr
+from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import get_start_end_dates, get_bounding_box, \
     bbox_to_discrete_space, get_unique_animal_ids, get_animal_coordinates
-from random_walk_package.bindings.data_structures.types import TerrainMapPtr
 
 
 # landcover_to_discrete_txt is imported in the original but not used, can be kept or removed.
@@ -71,7 +66,8 @@ class AnimalMovementProcessor:
             self.discrete_params = bbox_to_discrete_space(self.bbox, resolution)
 
     # Public interface methods
-    def create_landcover_data(self, resolution=200, input_file="landcover_baboons.tif") -> TerrainMapPtr: # type: ignore
+    def create_landcover_data(self, resolution=200,
+                              input_file="landcover_baboons.tif") -> TerrainMapPtr:  # type: ignore
         """Generate landcover data for movement area"""
         if not self.bbox:
             print("Error: Bounding box not computed. Load data first.")
@@ -101,11 +97,13 @@ class AnimalMovementProcessor:
                                          self.discrete_params[2],  # width_discrete
                                          self.discrete_params[3],  # height_discrete
                                          min_lon, max_lat, max_lon, min_lat)  # min_lon, max_lat for origin (top-left)
-    
-    def create_landcover_data_txt(self, resolution=200, out_directory=None, input_file="landcover_baboons123.tif") -> str:
+
+    def create_landcover_data_txt(self, resolution=200, out_directory=None,
+                                  input_file="landcover_baboons123.tif") -> str:
         """Generate landcover data for movement area and save as .txt if not already present."""
         # Construct output name: input_file without .tif, add _{resolution}.txt
         base_name = os.path.splitext(os.path.basename(input_file))[0]
+
         if out_directory:
             landcover_tif_path = os.path.join(out_directory, input_file)
         else:
@@ -125,6 +123,7 @@ class AnimalMovementProcessor:
         if not self.bbox:
             print("Error: Bounding box not computed. Load data first.")
             return "None"
+
         self._compute_discrete_params(resolution)
         if not self.discrete_params:
             print("Error: Discrete parameters not computed.")
@@ -137,9 +136,14 @@ class AnimalMovementProcessor:
 
         os.makedirs(os.path.dirname(landcover_tif_path), exist_ok=True)
 
-        # Generate and process landcover
-        fetch_landcover_data(self.bbox, landcover_tif_path)  # expects full path for output
+        # ⚠️ TIFF nur erzeugen, wenn sie noch nicht existiert
+        if not os.path.exists(landcover_tif_path):
+            print(f"Fetching landcover data to {landcover_tif_path}")
+            fetch_landcover_data(self.bbox, landcover_tif_path)
+        else:
+            print(f"TIFF file already exists at {landcover_tif_path}, skipping fetch.")
 
+        # TXT wird neu erstellt
         return landcover_to_discrete_txt(
             landcover_tif_path,
             self.discrete_params[2],  # width_discrete
@@ -403,7 +407,7 @@ class AnimalMovementProcessor:
 
         return self.fetch_trajectory_weather(output_path)
 
-    def create_weather_tuples_ctypes(self) -> ctypes.POINTER(WeatherTimeline): # type: ignore
+    def create_weather_tuples_ctypes(self) -> ctypes.POINTER(WeatherTimeline):  # type: ignore
         """Convert trajectory weather data to C-compatible WeatherTimeline structure"""
         if not self._weather_data:  # Check if it's None or empty
             raise ValueError(

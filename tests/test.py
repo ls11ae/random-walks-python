@@ -1,10 +1,10 @@
 from memory_profiler import profile
-from random_walk_package.bindings.correlated_walk import *
-from random_walk_package.core.MixedTimeWalker import MixedTimeWalker
+
 from random_walk_package.core.AnimalMovement import *
 from random_walk_package.core.BiasedWalker import BiasedWalker
 from random_walk_package.core.BrownianWalker import *
 from random_walk_package.core.CorrelatedWalker import *
+from random_walk_package.core.MixedTimeWalker import MixedTimeWalker
 from random_walk_package.core.MixedWalker import *
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
@@ -110,7 +110,7 @@ def corr(S, D, T):
     walker = CorrelatedWalker(D, S, W, H, T)
     walker.generate_kernel()
 
-    #Time the execution
+    # Time the execution
 
     walker.generate(start_x=50, start_y=50)
     start = time.perf_counter()
@@ -119,7 +119,6 @@ def corr(S, D, T):
     print(f"Generated walk in {end - start:.4f} seconds")
     plot_walk(walk, W, H)
     return None
-
 
 
 def corr_simple(D):
@@ -160,17 +159,14 @@ def corr_movebank_test():
     print(f"Generated walk in {end - start:.4f} seconds")
     plot_walk_multistep(steps, walk, terrain_width=W, terrain_height=H)
 
+
 @profile
 def mixed_walk():
-    T = 500
+    T = 100
 
-    study = "Baboon group movement, South Africa (data from Bonnell et al. 2016).csv"
-
-    walker = MixedWalker(T=T, width=2000, movebank_study=study)
-    walker.set_kernels()
-    walk_np = walker.generate_walk()
-
-    # plot_combined_terrain(walker.spatial_map, walk_np, steps=None, title=study)
+    study = "baboon_SA_study/"
+    walker = MixedWalker(T=T, resolution=200, study_folder=study)
+    walker.generate_walk(serialized=True, steps=[(66, 66), (150, 100)])
 
 
 def landcover_test():
@@ -221,7 +217,7 @@ def test_mixed_walk_time():
 
     landcover = animal_processor.create_landcover_data(resolution, "landcover_baboons.tif")
 
-    gridded_data: Point2DArrayGridPtr = animal_processor.fetch_gridded_weather_data( # type: ignore
+    gridded_data: Point2DArrayGridPtr = animal_processor.fetch_gridded_weather_data(  # type: ignore
         output_filename="my_gridded_weather.csv",
         days_to_fetch=5,
         grid_points_per_edge=5,
@@ -269,8 +265,9 @@ def test_biased_walk():
         terrain.height,
         title="Time-Aware Mixed Walk"
     )
-    
-#@profile
+
+
+# @profile
 def test_time_walk():
     terrain = parse_terrain("time_walk_data/terrain_movebank.txt", " ")
     T = 100
@@ -280,7 +277,7 @@ def test_time_walk():
     end = (60, 20)
 
     steps = [start, mid, end]
-   
+
     walk_points = time_walk_geo_multi(
         T=T,
         csv_path="time_walk_data/my_gridded_weather_grid_csvs",
@@ -291,13 +288,14 @@ def test_time_walk():
     )
     walknp = get_walk_points(walk_points)
     plot_combined_terrain(terrain, walk_points=walknp, terrain_height=terrain.height, terrain_width=terrain.width,
-                           title="Time-Aware Mixed Walk")
+                          title="Time-Aware Mixed Walk")
+
 
 @profile
 def test_time_walker():
     start = (150, 170)
     end = (100, 100)
-    
+
     walker = MixedTimeWalker(
         T=150,
         resolution=200,
@@ -314,7 +312,7 @@ def test_time_walker_multi():
     end = (150, 120)
 
     steps = [start, mid, end]
-    
+
     walker = MixedTimeWalker(
         T=100,
         resolution=200,
@@ -323,14 +321,14 @@ def test_time_walker_multi():
     )
     walker.preprocess()
     walker.generate_walk_multi(steps=steps, output_file="time_walk3.json")
-        
+
 
 if __name__ == "__main__":
     mixed_walk()
-    #corr(7, 16, 300)
-    #benchmark_brownian(200)
-    #mixed_walk()
-    #test_time_walk()
+    # corr(7, 16, 300)
+    # benchmark_brownian(200)
+    # mixed_walk()
+    # test_time_walk()
     # test_weather()
 """
     test_time_walker()
