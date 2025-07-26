@@ -1,0 +1,16 @@
+build/
+dist/
+*.egg-info/
+build/CMakeFiles/rules.ninja
+build/CMakeFiles/InstallScripts.json
+build/CMakeFiles/rules.ninja
+random_walk_package/
+librandom_walk.so
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/*
+
+random-walks
+build/.ninja_deps
+build/.skbuild-info.json
+build/cmake_install.cmake

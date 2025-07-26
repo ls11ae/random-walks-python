@@ -74,15 +74,17 @@ dll.time_walk_geo.argtypes = [
     ctypes.c_char_p,  # csv_path
     ctypes.c_char_p,  # terrain_path
     ctypes.c_char_p,  # walk_path
+    ctypes.c_char_p,  # serialization_path
     ctypes.c_int,  # grid_x
     ctypes.c_int,  # grid_y
     Point2D,  # start
-    Point2D  # goal
+    Point2D,  # goal
+    ctypes.c_bool # use_serialized
 ]
 dll.time_walk_geo.restype = Point2DArrayPtr
 
 
-def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, goal):
+def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, goal, serialization_path, use_serialized=True):
     """
     Calls the C function time_walk_geo to perform a time-dependent walk with geospatial data.
     Args:
@@ -119,10 +121,12 @@ def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, g
         csv_path.encode('utf-8'),
         terrain_path.encode('utf-8'),
         walk_path.encode('utf-8'),
+        serialization_path.encode('utf-8'),
         ctypes.c_int(grid_x),
         ctypes.c_int(grid_y),
         start_pt,
-        goal_pt
+        goal_pt,
+        ctypes.c_bool(use_serialized)
     )
 
 
@@ -135,14 +139,16 @@ dll.time_walk_geo_multi.argtypes = [
     ctypes.c_char_p,  # walk_path
     ctypes.c_int,  # grid_x
     ctypes.c_int,  # grid_y
-    Point2DArrayPtr  # steps
+    Point2DArrayPtr,  # steps
+    ctypes.c_bool,  # use_serialized
+    ctypes.c_char_p  # serialization_path
 ]
 dll.time_walk_geo_multi.restype = Point2DArrayPtr
 
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array
 
 
-def time_walk_geo_multi(T, csv_path, terrain_path, walk_path, grid_x, grid_y, steps):
+def time_walk_geo_multi(T, csv_path, terrain_path, walk_path, grid_x, grid_y, steps, use_serialized=False, serialization_path=''):
     """
     Calls the C function time_walk_geo_multi to perform a time-dependent walk with multiple steps.
     Args:
@@ -164,7 +170,9 @@ def time_walk_geo_multi(T, csv_path, terrain_path, walk_path, grid_x, grid_y, st
         walk_path.encode('utf-8'),
         ctypes.c_int(grid_x),
         ctypes.c_int(grid_y),
-        steps_array
+        steps_array,
+        ctypes.c_bool(use_serialized),
+        serialization_path.encode('utf-8')
     )
 
 

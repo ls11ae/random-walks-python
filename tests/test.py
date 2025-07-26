@@ -293,13 +293,13 @@ def test_time_walk():
 
 @profile
 def test_time_walker():
-    start = (150, 170)
-    end = (100, 100)
+    start = (50, 70)
+    end = (10, 10)
 
     walker = MixedTimeWalker(
-        T=150,
-        resolution=200,
-        duration_in_days=7,
+        T=50,
+        resolution=100,
+        duration_in_days=3,
         study_folder="elephant_study/"
     )
     walker.preprocess()
@@ -314,7 +314,7 @@ def test_time_walker_multi():
     steps = [start, mid, end]
 
     walker = MixedTimeWalker(
-        T=100,
+        T=50,
         resolution=200,
         duration_in_days=5,
         study_folder="baboon_SA_study/"
@@ -324,7 +324,7 @@ def test_time_walker_multi():
 
 
 if __name__ == "__main__":
-    mixed_walk()
+    test_time_walker_multi()
     # corr(7, 16, 300)
     # benchmark_brownian(200)
     # mixed_walk()

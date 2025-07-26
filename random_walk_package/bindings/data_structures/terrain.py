@@ -38,9 +38,6 @@ dll.terrain_set.restype = None
 dll.tensor_map_terrain.argtypes = [TerrainMapPtr]
 dll.tensor_map_terrain.restype = TensorMapPtr
 
-dll.kernels_maps_equal.argtypes = [TensorMapPtr, KernelsMap4DPtr]
-dll.kernels_maps_equal.restype = ctypes.c_bool
-
 dll.tensor_map_terrain_biased.argtypes = [TerrainMapPtr, Point2DArrayPtr]
 dll.tensor_map_terrain_biased.restype = KernelsMap4DPtr
 
@@ -61,6 +58,58 @@ dll.tensor_at.restype = TensorPtr
 
 dll.tensor_at_xyt.argtypes = [ctypes.c_char_p, ctypes.c_ssize_t, ctypes.c_ssize_t, ctypes.c_ssize_t]
 dll.tensor_at_xyt.restype = TensorPtr
+
+dll.kernels_map_serialized.argtypes = [TerrainMapPtr, MatrixPtr]
+dll.kernels_map_serialized.restype = KernelsMapPtr
+
+dll.kernels_map3d_free.argtypes = [KernelsMap3DPtr]
+dll.kernels_map3d_free.restype = None
+
+dll.kernels_map4d_free.argtypes = [KernelsMap4DPtr]
+dll.kernels_map4d_free.restype = None
+
+dll.tensor_map_free.argtypes = [ctypes.POINTER(KernelsMap3DPtr), ctypes.c_size_t]
+dll.tensor_map_free.restype = None
+
+dll.terrain_map_free.argtypes = [TerrainMapPtr]
+dll.terrain_map_free.restype = None
+
+dll.create_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
+dll.create_terrain_map.restype = TerrainMapPtr
+
+dll.tensor_map_terrain_serialize_time.argtypes = [ctypes.c_void_p, TerrainMapPtr, ctypes.c_char_p]
+dll.tensor_map_terrain_serialize_time.restype = None
+
+# --- Neue/angepasste Python-Wrapper ---
+
+def kernels_map_serialized(terrain: TerrainMapPtr, kernel: MatrixPtr) -> KernelsMapPtr:
+    return dll.kernels_map_serialized(terrain, kernel)
+
+def kernels_map3d_free(kernels_map3d: KernelsMap3DPtr):
+    dll.kernels_map3d_free(kernels_map3d)
+
+def kernels_map4d_free(kernels_map4d: KernelsMap4DPtr):
+    dll.kernels_map4d_free(kernels_map4d)
+
+
+def terrain_map_free(terrain_map: TerrainMapPtr):
+    dll.terrain_map_free(terrain_map)
+
+def create_terrain_map(file: str, delim: str) -> TerrainMapPtr:
+    file = os.path.join(script_dir, 'resources', file)
+    if not os.path.exists(file):
+        raise FileNotFoundError(f"File '{file}' does not exist.")
+    if len(delim) != 1:
+        raise ValueError("Delimiter must be a single character.")
+    c_file = file.encode('ascii')
+    c_delim = c_char(delim.encode('ascii')[0])
+    return dll.create_terrain_map(c_file, c_delim)
+
+def tensor_map_terrain_serialize_time(tensor_set_time, terrain: TerrainMapPtr, output_path: str):
+    file = os.path.join(script_dir, 'resources', output_path)
+    c_file = file.encode('ascii')
+    dll.tensor_map_terrain_serialize_time(tensor_set_time, terrain, c_file)
+
 
 def load_tensor_at(file, x, y):
     file = os.path.join(script_dir, 'resources', file)
@@ -112,10 +161,6 @@ def parse_terrain(file: str, delim: str) -> TerrainMap:
     print(f"Parsed terrain map from {file} with dimensions {terrain.width}x{terrain.height}")
 
     return terrain
-
-
-def tensor_maps_equal(tensor3d, tensor4d):
-    return dll.kernels_maps_equal(tensor3d, tensor4d)
 
 
 def tensor_map_terrain_biased(terrain, bias_array) -> KernelsMap4DPtr: # type: ignore

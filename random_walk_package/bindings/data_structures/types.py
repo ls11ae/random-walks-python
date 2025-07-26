@@ -119,6 +119,7 @@ TerrainMapPtr = ctypes.POINTER(TerrainMap)
 KernelsMapPtr = ctypes.POINTER(KernelsMap)
 TensorMapPtr = ctypes.POINTER(KernelsMap3D)
 KernelsMap4DPtr = ctypes.POINTER(KernelsMap4D)
+KernelsMap3DPtr = ctypes.POINTER(KernelsMap3D)
 
 
 

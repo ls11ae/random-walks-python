@@ -52,10 +52,11 @@ class MixedWalker:
     def generate_walk(self, steps=None, serialized=False):
         recmp: bool = True
         serialization_dir = Path(self.base_project_dir) / 'resources' / self.serialization_path / 'tensors'
-        if serialization_dir.exists():
+        if serialization_dir.exists() and any(serialization_dir.iterdir()):
             recmp = False
-        if not serialized:
+        if serialized and recmp:
             tensor_map_terrain_serialize(self.spatial_map, self.serialization_path)
+            print(f"Serialized terrain map to {self.serialization_path}")
         else:
             self.tensor_map = get_tensor_map_terrain(self.spatial_map)
 
