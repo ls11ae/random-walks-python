@@ -1,10 +1,7 @@
-import ctypes
-import numpy as np
-from random_walk_package.bindings.data_structures.types import *
-from random_walk_package.wrapper import dll
 import matplotlib.pyplot as plt
 
-
+from random_walk_package.bindings.data_structures.types import *
+from random_walk_package.wrapper import dll
 
 # Core matrix operations
 dll.matrix_new.restype = MatrixPtr
@@ -134,3 +131,27 @@ def plot_kernel(matrix):
     plt.imshow(matrix, cmap='viridis', aspect='auto')
     plt.colorbar()
     plt.show()
+
+
+import numpy as np
+
+
+def matrix_generator_gaussian_pdf(width, height, sigma, x_offset=0, y_offset=0):
+    assert sigma > 0, "Sigma must be positive"
+    sigma = max(sigma, 2.0)
+
+    width_half = width // 2
+    height_half = height // 2
+
+    x_offset += width_half
+    y_offset += height_half
+
+    x = np.arange(width)
+    y = np.arange(height)
+    xx, yy = np.meshgrid(x, y)
+
+    distance_squared = (xx - x_offset) ** 2 + (yy - y_offset) ** 2
+    gaussian = np.exp(-distance_squared / (2.0 * sigma ** 2))
+    gaussian /= gaussian.sum()
+
+    return gaussian.astype(np.float32)

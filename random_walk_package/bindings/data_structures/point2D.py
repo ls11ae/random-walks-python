@@ -1,10 +1,7 @@
-import ctypes
 import numpy as np
 
-
-from random_walk_package.wrapper import dll
 from random_walk_package.bindings.data_structures.types import *
-
+from random_walk_package.wrapper import dll
 
 # Load DLL functions
 dll.point_2d_new.argtypes = [ctypes.c_size_t, ctypes.c_size_t]
@@ -28,7 +25,6 @@ dll.point_2d_array_grid_new.restype = Point2DArrayGridPtr
 dll.point_2d_array_grid_free.argtypes = [Point2DArrayGridPtr]
 dll.point_2d_array_grid_free.restype = None
 
-
 dll.point_2d_array_new_empty.argtypes = [ctypes.c_size_t]
 dll.point_2d_array_new_empty.restype = Point2DArrayPtr
 
@@ -36,11 +32,18 @@ dll.point_2d_array_new_empty.restype = Point2DArrayPtr
 dll.load_weather_grid.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
 dll.load_weather_grid.restype = Point2DArrayGridPtr
 
+
 def point2d_array_new(length):
     return dll.point_2d_array_new_empty(length)
 
+
+def point2d_arr_free(array_ptr):
+    dll.point2d_array_free(array_ptr)
+
+
 def point2d_array_grid(width, height, times):
     return dll.point_2d_array_grid_new(width, height, times)
+
 
 def load_weather_grid(filename_base: str, grid_y: int, grid_x: int, times: int):
     """
@@ -62,7 +65,7 @@ def point2d_array_grid_new(height, width, times):
     grid.height = height
     grid.width = width
     grid.times = times
-    
+
     # Allocate 2D array of Point2DArray pointers
     data = (ctypes.POINTER(ctypes.POINTER(Point2DArray)) * height)()
     for y in range(height):
@@ -70,7 +73,7 @@ def point2d_array_grid_new(height, width, times):
         for x in range(width):
             # Initialize with empty arrays
             data[y][x] = point2d_array_new(times)
-    
+
     grid.data = data
     return grid
 
@@ -105,7 +108,7 @@ def get_point2d(x, y):
     return ptr.contents
 
 
-def create_point2d_array(steps) -> Point2DArrayPtr: # type: ignore
+def create_point2d_array(steps) -> Point2DArrayPtr:  # type: ignore
     point_array = (Point2D * len(steps))()
     for i, (x, y) in enumerate(steps):
         point_array[i].x = x
