@@ -9,6 +9,7 @@ description = "Random walk package with C backend"
 authors = [
     { name = "Kevin Buchin" },
     { name = "Mart Hagedoorn" },
+    { name = "Alexander Korn" },
     { name = "Omar Chatila" }
 ]
 requires-python = ">=3.8"
@@ -27,6 +28,7 @@ dependencies = [
 
 [tool.scikit-build]
 cmake.version = ">=3.15"
+cmake.args = ["-DENABLE_CUDA=OFF"]
 build.verbose = true
 build-dir = "build"
 install.components = ["random_walk"]
