@@ -4,8 +4,11 @@ from random_walk_package.bindings.mixed_walk import time_walk_init, time_walk_ba
 
 
 class BiasedWalker:
-    def __init__(self, terrain=None, bias_array=None):
-        self.terrain = terrain
+    def __init__(self, terrain=None, width = 200, height = 200, bias_array=None):
+        if terrain is None:
+            self.terrain = terrain_single_value(40, width, height)
+        else:
+            self.terrain = terrain
         self.T = len(bias_array)
         self.bias_array = create_point2d_array(bias_array)
         self.tensor_map = tensor_map_terrain_biased(self.terrain, self.bias_array)

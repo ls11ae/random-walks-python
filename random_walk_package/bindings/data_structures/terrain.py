@@ -7,6 +7,25 @@ import rasterio
 from .matrix import *
 from random_walk_package.wrapper import dll, script_dir
 
+# landcover types
+TREE_COVER = 10
+SHRUBLAND = 20
+GRASSLAND = 30
+CROPLAND = 40
+BUILT_UP = 50
+SPARSE_VEGETATION = 60
+SNOW_AND_ICE = 70
+WATER = 80
+HERBACEOUS_WETLAND = 90
+MANGROVES = 95
+MOSS_AND_LICHEN = 100
+
+# animal types
+AIRBORNE = 0
+AMPHIBIAN = 1
+LIGHT = 2
+MEDIUM = 3
+HEAVY = 4
 
 dll.kernels_map_new.argtypes = [TerrainMapPtr, MatrixPtr]
 dll.kernels_map_new.restype = KernelsMapPtr
@@ -80,7 +99,12 @@ dll.create_terrain_map.restype = TerrainMapPtr
 dll.tensor_map_terrain_serialize_time.argtypes = [ctypes.c_void_p, TerrainMapPtr, ctypes.c_char_p]
 dll.tensor_map_terrain_serialize_time.restype = None
 
-# --- Neue/angepasste Python-Wrapper ---
+dll.terrain_single_value.argtypes = [ctypes.c_int, ctypes.c_ssize_t, ctypes.c_ssize_t]
+dll.terrain_single_value.restype = TerrainMapPtr
+
+
+def terrain_single_value(land_type: int, width: int, height: int):
+    return dll.terrain_single_value(land_type, width, height)
 
 def kernels_map_serialized(terrain: TerrainMapPtr, kernel: MatrixPtr) -> KernelsMapPtr:
     return dll.kernels_map_serialized(terrain, kernel)
