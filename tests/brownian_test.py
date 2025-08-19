@@ -1,5 +1,6 @@
 import time
 
+from random_walk_package import matrix_to_numpy
 from random_walk_package.core.BiasedWalker import BiasedWalker
 from random_walk_package.core.BrownianWalker import *
 

@@ -1,10 +1,5 @@
 import ctypes
 
-import pandas as pd
-
-import requests
-
-from random_walk_package.bindings.data_processing.movebank_parser import Coordinate_array
 from random_walk_package.bindings.data_structures.point2D import *
 from random_walk_package.bindings.data_structures.types import *
 

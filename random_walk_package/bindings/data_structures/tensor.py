@@ -1,11 +1,7 @@
 import ctypes
-from ctypes import c_int
-
-import numpy as np
 
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
-from .matrix import Matrix
 
 dll.tensor_set_new.argtypes = [ctypes.c_ssize_t, ]
 dll.tensor_set_new.restype = TensorSetPtr

@@ -1,7 +1,10 @@
+import os
 import time
 
+import numpy as np
+
 # Assuming these imports are correctly resolved from your project structure
-from random_walk_package import landcover_to_discrete_ptr
+from random_walk_package import landcover_to_discrete_ptr, create_point2d_array
 from random_walk_package.bindings.data_processing.movebank_parser import *
 from random_walk_package.bindings.data_processing.weather_parser import weather_entry_new, \
     weather_timeline
@@ -13,6 +16,148 @@ from random_walk_package.data_sources.movebank_adapter import get_start_end_date
 
 
 # landcover_to_discrete_txt is imported in the original but not used, can be kept or removed.
+
+def _fetch_single_weather(lat: float, lon: float, timestamp_str: str) -> dict | None:
+    """Helper for individual weather fetches with retry logic for a specific hour."""
+    timestamp = pd.to_datetime(timestamp_str)
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": timestamp.strftime("%Y-%m-%d"),
+        "end_date": timestamp.strftime("%Y-%m-%d"),
+        "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,snowfall,weather_code,cloud_cover",
+        "timezone": "UTC"
+    }
+
+    for attempt in range(3):
+        try:
+            response = requests.get("https://archive-api.open-meteo.com/v1/archive", params=params)
+            response.raise_for_status()  # Raise HTTPError for bad responses (4XX or 5XX)
+            data = response.json()
+
+            hourly_data = data.get("hourly", {})
+            times = hourly_data.get("time", [])
+
+            if not times:
+                print(
+                    f"Warning: No hourly data returned for {lat}, {lon} on {timestamp.strftime('%Y-%m-%d')} in API response: {data}")
+                return None  # Or handle as an error
+
+            target_hour = timestamp.hour
+            for idx, time_str_from_api in enumerate(hourly_data["time"]):
+                if pd.to_datetime(time_str_from_api).hour == target_hour:
+                    entry_data = {
+                        "timestamp": timestamp_str,  # Original requested timestamp
+                        "latitude": lat,
+                        "longitude": lon
+                    }
+                    for k in ['temperature_2m', 'relative_humidity_2m', 'precipitation', 'wind_speed_10m',
+                              'wind_direction_10m', 'snowfall', 'weather_code', 'cloud_cover']:
+                        value_list = hourly_data.get(k)
+                        if value_list is not None and idx < len(value_list):
+                            entry_data[k] = value_list[idx]
+                        else:
+                            entry_data[k] = 0.0  # Handle missing data for a variable
+                    return entry_data
+
+            print(f"Warning: Target hour {target_hour} not found in API response for {timestamp_str}.")
+            return None
+
+        except requests.exceptions.RequestException as e:
+            print(f"Attempt {attempt + 1} (RequestException) failed for {timestamp_str}: {str(e)}")
+            time.sleep(2 ** attempt)
+        except Exception as e:  # Catch other potential errors like JSON parsing
+            print(f"Attempt {attempt + 1} (Exception) failed for {timestamp_str}: {str(e)}")
+            time.sleep(2 ** attempt)
+
+    print(f"Failed to fetch weather for {timestamp_str} at {lat},{lon} after multiple attempts.")
+    return None
+
+
+def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_str: str, end_date_str: str) -> \
+        list[dict]:
+    """
+    Helper for fetching all hourly weather data for a date range at a specific lat/lon.
+    Returns a list of dictionaries, each dictionary representing one hourly record.
+    """
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": start_date_str,
+        "end_date": end_date_str,
+        "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,snowfall,weather_code,cloud_cover",
+        "timezone": "UTC"
+    }
+    weather_records_for_point = []
+
+    for attempt in range(3):  # Retry logic
+        try:
+            response = requests.get("https://archive-api.open-meteo.com/v1/archive", params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            hourly_data = data.get("hourly", {})
+            times = hourly_data.get("time", [])
+
+            if not times:
+                print(
+                    f"Warning: No hourly data returned for Lat: {lat:.4f}, Lon: {lon:.4f} between {start_date_str} and {end_date_str}. API Response: {data.get('reason', '')}")
+                return []  # Return empty list if no time entries
+
+            # Prepare series data, ensuring all expected keys exist and have correct length
+            series_data = {}
+            expected_vars = ['temperature_2m', 'relative_humidity_2m', 'precipitation', 'wind_speed_10m',
+                             'wind_direction_10m', 'snowfall', 'weather_code', 'cloud_cover']
+            num_timestamps = len(times)
+
+            for var_name in expected_vars:
+                raw_var_data = hourly_data.get(var_name, [None] * num_timestamps)
+                # Ensure the list has the same length as 'times'
+                if len(raw_var_data) < num_timestamps:
+                    print(
+                        f"Warning: Data for '{var_name}' at {lat},{lon} is shorter than time series. Padding with None.")
+                    raw_var_data.extend([None] * (num_timestamps - len(raw_var_data)))
+                elif len(raw_var_data) > num_timestamps:
+                    print(f"Warning: Data for '{var_name}' at {lat},{lon} is longer than time series. Truncating.")
+                    raw_var_data = raw_var_data[:num_timestamps]
+                series_data[var_name] = raw_var_data
+
+            for i, time_str in enumerate(times):
+                record = {
+                    "latitude": lat,
+                    "longitude": lon,
+                    "timestamp": time_str,
+                    "temperature_2m": series_data['temperature_2m'][i],
+                    "relative_humidity_2m": series_data['relative_humidity_2m'][i],
+                    "precipitation": series_data['precipitation'][i],
+                    "wind_speed_10m": series_data['wind_speed_10m'][i],
+                    "wind_direction_10m": series_data['wind_direction_10m'][i],
+                    "snowfall": series_data['snowfall'][i],
+                    "weather_code": series_data['weather_code'][i],
+                    "cloud_cover": series_data['cloud_cover'][i],
+                }
+                weather_records_for_point.append(record)
+            return weather_records_for_point  # Success
+
+        except requests.exceptions.HTTPError as e:
+            print(
+                f"Attempt {attempt + 1} (HTTPError: {e.response.status_code}) for {lat},{lon} ({start_date_str}-{end_date_str}): {e.response.text}")
+            if e.response.status_code == 400:  # Bad request, likely won't succeed on retry
+                print("Bad request, not retrying for this point.")
+                break
+            time.sleep(2 ** attempt)
+        except requests.exceptions.RequestException as e:
+            print(
+                f"Attempt {attempt + 1} (RequestException) for {lat},{lon} ({start_date_str}-{end_date_str}): {str(e)}")
+            time.sleep(2 ** attempt)
+        except Exception as e:
+            print(
+                f"Attempt {attempt + 1} (Unexpected Error) for {lat},{lon} ({start_date_str}-{end_date_str}): {str(e)}")
+            time.sleep(2 ** attempt)
+
+    print(f"Failed to fetch weather data for Lat: {lat:.4f}, Lon: {lon:.4f} after multiple attempts.")
+    return []  # Return empty list on failure after retries
+
 
 class AnimalMovementProcessor:
     def __init__(self, data_file):
@@ -67,7 +212,7 @@ class AnimalMovementProcessor:
 
     # Public interface methods
     def create_landcover_data(self, resolution=200,
-                              input_file="landcover_baboons.tif") -> TerrainMapPtr:  # type: ignore
+                              input_file="landcover_baboons.tif") -> TerrainMapPtr | None:  # type: ignore
         """Generate landcover data for movement area"""
         if not self.bbox:
             print("Error: Bounding box not computed. Load data first.")
@@ -77,7 +222,7 @@ class AnimalMovementProcessor:
             print("Error: Discrete parameters not computed.")
             return None
 
-        min_lon, min_lat, max_lon, max_lat = self.bbox
+        _min_lon, _min_lat, _max_lon, _max_lat = self.bbox
 
         # Print discrete space parameters
         print(f"Discrete space params: {self.discrete_params}")
@@ -96,7 +241,7 @@ class AnimalMovementProcessor:
         return landcover_to_discrete_ptr(landcover_tif_path,
                                          self.discrete_params[2],  # width_discrete
                                          self.discrete_params[3],  # height_discrete
-                                         min_lon, max_lat, max_lon, min_lat)  # min_lon, max_lat for origin (top-left)
+                                         _min_lon, _max_lat, _max_lon, _min_lat)  # min_lon, max_lat for origin (top-left)
 
     def create_landcover_data_txt(self, resolution=200, out_directory=None,
                                   input_file="landcover_baboons123.tif") -> str:
@@ -129,7 +274,7 @@ class AnimalMovementProcessor:
             print("Error: Discrete parameters not computed.")
             return "None"
 
-        min_lon, min_lat, max_lon, max_lat = self.bbox
+        _min_lon, _min_lat, _max_lon, _max_lat = self.bbox
 
         # Print discrete space parameters
         print(f"Discrete space params: {self.discrete_params}")
@@ -148,7 +293,7 @@ class AnimalMovementProcessor:
             landcover_tif_path,
             self.discrete_params[2],  # width_discrete
             self.discrete_params[3],  # height_discrete
-            min_lon, max_lat, max_lon, min_lat,
+            _min_lon, _max_lat, _max_lon, _min_lat,
             txt_name
         )
 
@@ -219,62 +364,6 @@ class AnimalMovementProcessor:
 
         return create_point2d_array(sampled_coords_tuples)
 
-    def _fetch_single_weather(self, lat: float, lon: float, timestamp_str: str) -> dict:
-        """Helper for individual weather fetches with retry logic for a specific hour."""
-        timestamp = pd.to_datetime(timestamp_str)
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "start_date": timestamp.strftime("%Y-%m-%d"),
-            "end_date": timestamp.strftime("%Y-%m-%d"),
-            "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,snowfall,weather_code,cloud_cover",
-            "timezone": "UTC"
-        }
-
-        for attempt in range(3):
-            try:
-                response = requests.get("https://archive-api.open-meteo.com/v1/archive", params=params)
-                response.raise_for_status()  # Raise HTTPError for bad responses (4XX or 5XX)
-                data = response.json()
-
-                hourly_data = data.get("hourly", {})
-                times = hourly_data.get("time", [])
-
-                if not times:
-                    print(
-                        f"Warning: No hourly data returned for {lat}, {lon} on {timestamp.strftime('%Y-%m-%d')} in API response: {data}")
-                    return None  # Or handle as an error
-
-                target_hour = timestamp.hour
-                for idx, time_str_from_api in enumerate(hourly_data["time"]):
-                    if pd.to_datetime(time_str_from_api).hour == target_hour:
-                        entry_data = {
-                            "timestamp": timestamp_str,  # Original requested timestamp
-                            "latitude": lat,
-                            "longitude": lon
-                        }
-                        for k in ['temperature_2m', 'relative_humidity_2m', 'precipitation', 'wind_speed_10m',
-                                  'wind_direction_10m', 'snowfall', 'weather_code', 'cloud_cover']:
-                            value_list = hourly_data.get(k)
-                            if value_list is not None and idx < len(value_list):
-                                entry_data[k] = value_list[idx]
-                            else:
-                                entry_data[k] = None  # Handle missing data for a variable
-                        return entry_data
-
-                print(f"Warning: Target hour {target_hour} not found in API response for {timestamp_str}.")
-                return None
-
-            except requests.exceptions.RequestException as e:
-                print(f"Attempt {attempt + 1} (RequestException) failed for {timestamp_str}: {str(e)}")
-                time.sleep(2 ** attempt)
-            except Exception as e:  # Catch other potential errors like JSON parsing
-                print(f"Attempt {attempt + 1} (Exception) failed for {timestamp_str}: {str(e)}")
-                time.sleep(2 ** attempt)
-
-        print(f"Failed to fetch weather for {timestamp_str} at {lat},{lon} after multiple attempts.")
-        return None
-
     def fetch_trajectory_weather(self, output_filename="weather_trajectory.csv") -> list[tuple]:
         """Fetch weather for pre-loaded trajectory coordinates and timestamps"""
         if not self.coords or not self.timeline:
@@ -307,7 +396,7 @@ class AnimalMovementProcessor:
                 raise AttributeError("Coordinates structure not recognized in self.coords")
 
             timestamp_str = self.timeline[i]
-            entry_dict = self._fetch_single_weather(lat, lon, timestamp_str)
+            entry_dict = _fetch_single_weather(lat, lon, timestamp_str)
             if entry_dict:
                 weather_data_collected.append(entry_dict)
             time.sleep(0.15)
@@ -421,7 +510,7 @@ class AnimalMovementProcessor:
 
         # Create array of WeatherEntry structures
         # Assuming weather_timeline creates the timeline structure and allocates memory for entries
-        c_timeline = weather_timeline(num_entries, num_entries)  # capacity, size
+        c_timeline = weather_timeline(num_entries)  # capacity, size
 
         for i, data_tuple in enumerate(self._weather_data):
             # data_tuple: (timestamp, lat, lon, temp, hum, precip, wind_s, wind_d, snow, code, cloud)
@@ -445,90 +534,6 @@ class AnimalMovementProcessor:
         return c_timeline
 
     # --- New methods for gridded weather data ---
-
-    def _fetch_hourly_data_for_period_at_point(self, lat: float, lon: float, start_date_str: str, end_date_str: str) -> \
-            list[dict]:
-        """
-        Helper for fetching all hourly weather data for a date range at a specific lat/lon.
-        Returns a list of dictionaries, each dictionary representing one hourly record.
-        """
-        params = {
-            "latitude": lat,
-            "longitude": lon,
-            "start_date": start_date_str,
-            "end_date": end_date_str,
-            "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,snowfall,weather_code,cloud_cover",
-            "timezone": "UTC"
-        }
-        weather_records_for_point = []
-
-        for attempt in range(3):  # Retry logic
-            try:
-                response = requests.get("https://archive-api.open-meteo.com/v1/archive", params=params)
-                response.raise_for_status()
-                data = response.json()
-
-                hourly_data = data.get("hourly", {})
-                times = hourly_data.get("time", [])
-
-                if not times:
-                    print(
-                        f"Warning: No hourly data returned for Lat: {lat:.4f}, Lon: {lon:.4f} between {start_date_str} and {end_date_str}. API Response: {data.get('reason', '')}")
-                    return []  # Return empty list if no time entries
-
-                # Prepare series data, ensuring all expected keys exist and have correct length
-                series_data = {}
-                expected_vars = ['temperature_2m', 'relative_humidity_2m', 'precipitation', 'wind_speed_10m',
-                                 'wind_direction_10m', 'snowfall', 'weather_code', 'cloud_cover']
-                num_timestamps = len(times)
-
-                for var_name in expected_vars:
-                    raw_var_data = hourly_data.get(var_name, [None] * num_timestamps)
-                    # Ensure the list has the same length as 'times'
-                    if len(raw_var_data) < num_timestamps:
-                        print(
-                            f"Warning: Data for '{var_name}' at {lat},{lon} is shorter than time series. Padding with None.")
-                        raw_var_data.extend([None] * (num_timestamps - len(raw_var_data)))
-                    elif len(raw_var_data) > num_timestamps:
-                        print(f"Warning: Data for '{var_name}' at {lat},{lon} is longer than time series. Truncating.")
-                        raw_var_data = raw_var_data[:num_timestamps]
-                    series_data[var_name] = raw_var_data
-
-                for i, time_str in enumerate(times):
-                    record = {
-                        "latitude": lat,
-                        "longitude": lon,
-                        "timestamp": time_str,
-                        "temperature_2m": series_data['temperature_2m'][i],
-                        "relative_humidity_2m": series_data['relative_humidity_2m'][i],
-                        "precipitation": series_data['precipitation'][i],
-                        "wind_speed_10m": series_data['wind_speed_10m'][i],
-                        "wind_direction_10m": series_data['wind_direction_10m'][i],
-                        "snowfall": series_data['snowfall'][i],
-                        "weather_code": series_data['weather_code'][i],
-                        "cloud_cover": series_data['cloud_cover'][i],
-                    }
-                    weather_records_for_point.append(record)
-                return weather_records_for_point  # Success
-
-            except requests.exceptions.HTTPError as e:
-                print(
-                    f"Attempt {attempt + 1} (HTTPError: {e.response.status_code}) for {lat},{lon} ({start_date_str}-{end_date_str}): {e.response.text}")
-                if e.response.status_code == 400:  # Bad request, likely won't succeed on retry
-                    print("Bad request, not retrying for this point.")
-                    break
-                time.sleep(2 ** attempt)
-            except requests.exceptions.RequestException as e:
-                print(
-                    f"Attempt {attempt + 1} (RequestException) for {lat},{lon} ({start_date_str}-{end_date_str}): {str(e)}")
-                time.sleep(2 ** attempt)
-            except Exception as e:
-                print(
-                    f"Attempt {attempt + 1} (Unexpected Error) for {lat},{lon} ({start_date_str}-{end_date_str}): {str(e)}")
-                time.sleep(2 ** attempt)
-
-        print(f"Failed to fetch weather data for Lat: {lat:.4f}, Lon: {lon:.4f} after multiple attempts.")
-        return []  # Return empty list on failure after retries
 
     def fetch_gridded_weather_data(self, output_folder: str,
                                    start_date_override: str = None, days_to_fetch: int = 7,
@@ -605,7 +610,7 @@ class AnimalMovementProcessor:
         total_points_to_fetch = len(grid_points_to_query)
         for i, (lat, lon) in enumerate(grid_points_to_query):
             print(f"Fetching weather for grid point {i + 1}/{total_points_to_fetch} (Lat: {lat:.4f}, Lon: {lon:.4f})")
-            point_weather_data_list = self._fetch_hourly_data_for_period_at_point(
+            point_weather_data_list = _fetch_hourly_data_for_period_at_point(
                 lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
             )
             # Save per-grid-point CSV

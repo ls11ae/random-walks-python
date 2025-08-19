@@ -1,6 +1,5 @@
 import ctypes
 
-import numpy as np
 import pandas as pd
 
 from random_walk_package import dll
@@ -70,7 +69,6 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, samples: int = None
         clean_df = clean_df.iloc[::step].head(samples)
 
     # Create Coordinate array
-    num_points = len(clean_df)
     min_lon, max_lon = clean_df['location-long'].min(), clean_df['location-long'].max()
     min_lat, max_lat = clean_df['location-lat'].min(), clean_df['location-lat'].max()
 
@@ -91,15 +89,14 @@ def get_animal_coordinates_safe(df: pd.DataFrame, animal_id: str):
     arr = get_animal_coordinates(df, animal_id)
 
     # Allocate memory that can be freed by the C code
-    c_array = (Coordinate * arr.length)()
+    c_array = (Coordinate * len(arr))()
 
     # Copy the data
-    for i in range(arr.length):
-        print(str(arr.points[i].x) + ":" + str(arr.points[i].y))
-        c_array[i].x = arr.points[i].x
-        c_array[i].y = arr.points[i].y
+    for i in range(len(arr)):
+        c_array[i].x = arr[i].x
+        c_array[i].y = arr[i].y
 
     # Create a new Coordinate_array that owns its memory
-    result = dll.coordinate_array_new(ctypes.pointer(Coordinate_array(c_array)), arr.length)
+    result = dll.coordinate_array_new(ctypes.pointer(Coordinate_array(c_array)), len(arr))
 
     return result

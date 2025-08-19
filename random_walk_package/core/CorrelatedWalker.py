@@ -1,5 +1,6 @@
 import hashlib
 
+from random_walk_package import create_correlated_chi_kernels
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
 
 from random_walk_package.bindings.brownian_walk import *
@@ -17,7 +18,7 @@ def _dp_folder_name(D, W, H, T, start_x, start_y, is_terrain):
 
 
 class CorrelatedWalker:
-    def __init__(self, D=4, S=3, W=101, H=101, T=50, kernel=None, dp_mat=None, terrain=None, tensor_map=None):
+    def __init__(self, D=4, S=3, W=101, H=101, T=50, kernel=None, dp_mat=None, terrain=None, kernel_mapping=None, tensor_map=None):
         self.D = D  # Number of directions
         self.S = S  # Step size
         self.W = W  # Width of the grid
@@ -26,9 +27,10 @@ class CorrelatedWalker:
         self.kernels = kernel
         self.dp_matrix = dp_mat
         self.terrain = terrain
+        self.kernel_mapping = kernel_mapping
         self.tensor_map = tensor_map
 
-    def generate_from_terrain(self, terrain=None, start_x=None, start_y=None):
+    def generate_from_terrain(self, terrain=None, kernel_mapping = None, start_x=None, start_y=None):
         if start_x is None:
             start_x = terrain.width // 2
         if start_y is None:
@@ -36,8 +38,10 @@ class CorrelatedWalker:
 
         if self.terrain is None:
             self.terrain = terrain
+        if self.kernel_mapping is None:
+            self.kernel_mapping = kernel_mapping if kernel_mapping is not None else create_correlated_kernel_parameters(MEDIUM, 7)
         if self.tensor_map is None:
-            self.tensor_map = get_tensor_map(self.terrain, self.kernels)
+            self.tensor_map = get_tensor_map(self.terrain, self.kernels, self.kernel_mapping)
         self.W = terrain.width
         self.H = terrain.height
 
@@ -108,6 +112,7 @@ class CorrelatedWalker:
 
     def generate_multistep_walk(self, steps):
         """Python-implemented multistep backtrace with low RAM support"""
+        dp_matrix_step=None
         if self.kernels is None:
             self.generate()
 
@@ -177,7 +182,7 @@ class CorrelatedWalker:
         """
         Static method to generate a Movebank walk from CSV data.
         """
-        file = os.path.join(script_dir, 'resources', csv_file)
+        file = str(os.path.join(script_dir, 'resources', csv_file))
         steps = extract_steps_from_csv(file, step_count, self.W, self.H)
         steps_np = get_walk_points(steps)
         if self.kernels is None:

@@ -1,12 +1,8 @@
-import rasterio
 import requests
 import pandas as pd
 from pystac_client import Client
 import planetary_computer
 import rioxarray
-import xarray  # Required by rioxarray for some operations
-import os
-from datetime import datetime, timedelta
 
 from random_walk_package.bindings.data_processing.movebank_parser import Coordinate_array
 
@@ -14,10 +10,11 @@ from random_walk_package.bindings.data_processing.movebank_parser import Coordin
 
 # 1. Area of Interest (AOI)
 # Example Bounding Box around the study reference location (adjust as needed)
-AOI_BBOX_KAZAKHSTAN = [75.0, 43.0, 77.0, 44.0]  # Wider example
-AOI_BBOX = AOI_BBOX_KAZAKHSTAN
-AOI_CENTER_LAT = (AOI_BBOX[1] + AOI_BBOX[3]) / 2
-AOI_CENTER_LON = (AOI_BBOX[0] + AOI_BBOX[2]) / 2
+AOI_BBOX_KAZAKHSTAN: tuple[float, float, float, float] = (75.0, 43.0, 77.0, 44.0)  # Wider example
+AOI_BBOX: tuple[float, float, float, float] = AOI_BBOX_KAZAKHSTAN
+min_lon, min_lat, max_lon, max_lat = AOI_BBOX
+AOI_CENTER_LAT: float = (min_lat + max_lat) / 2.0
+AOI_CENTER_LON: float = (min_lon + max_lon) / 2.0
 
 # 2. Time Period
 # For Movebank, use the entire study duration based on the provided info

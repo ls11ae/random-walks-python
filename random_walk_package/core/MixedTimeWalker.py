@@ -1,12 +1,6 @@
-from random_walk_package.bindings.brownian_walk import plot_combined_terrain, plot_terrain_from_json
+from random_walk_package.bindings.brownian_walk import plot_terrain_from_json
 
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
-
-from random_walk_package.bindings.data_processing.movebank_parser import extract_steps_from_csv
-
-from random_walk_package.bindings.data_processing.walk_json import walk_to_json
-
-from random_walk_package.bindings.correlated_walk import *
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 import numpy as np
@@ -34,7 +28,7 @@ class MixedTimeWalker:
             raise FileNotFoundError("Expected exactly one CSV file in the study folder.")
         self.movebank_study = os.path.join(self.study_folder, csv_files[0])
 
-        # Create weather_data folder in study_folder and set as csv_path
+        # Create the weather_data folder in study_folder and set as csv_path
         self.csv_path = os.path.join(self.study_folder, 'weather_data')
         if not os.path.exists(self.csv_path):
             os.makedirs(self.csv_path)
@@ -43,7 +37,7 @@ class MixedTimeWalker:
         if not os.path.exists(self.serialization_path):
             os.makedirs(self.serialization_path)
 
-        # Create walks folder in study_folder and set as walks_path
+        # Create the walks folder in study_folder and set as walks_path
         self.walks_path = os.path.join(self.study_folder, 'walks')
         if not os.path.exists(self.walks_path):
             os.makedirs(self.walks_path)
@@ -57,14 +51,14 @@ class MixedTimeWalker:
         self.csv_path = self.movebank_processor.fetch_gridded_weather_data(self.csv_path, days_to_fetch=self.duration_in_days, grid_points_per_edge=self.grid_points_per_edge)
         
 
-    def generate_walk(self, start, end, output_file='time_walk.json', serialized=True):
+    def generate_walk(self, start:tuple[int,int], end:tuple[int,int], output_file='time_walk.json', serialized=True):
         """
         Generates a time-dependent walk using the C function time_walk_geo.
         Args:
             start (tuple): Starting coordinates (x, y).
             end (tuple): Ending coordinates (x, y).
-            grid_x (int): Number of grid cells in the x direction.
-            grid_y (int): Number of grid cells in the y direction.
+            output_file (str): Name of the output file.
+            serialized (bool): Whether to use serialized data.
         Returns:
             np.ndarray: Array of points representing the walk.
         """
@@ -90,10 +84,9 @@ class MixedTimeWalker:
         """
         Generates a time-dependent walk using the C function time_walk_geo.
         Args:
-            start (tuple): Starting coordinates (x, y).
-            end (tuple): Ending coordinates (x, y).
-            grid_x (int): Number of grid cells in the x direction.
-            grid_y (int): Number of grid cells in the y direction.
+            steps (list of tuples): List of (x, y) points the walk should pass through.
+            output_file (str): Name of the output file.
+            serialized (bool): Whether to use serialized data.
         Returns:
             np.ndarray: Array of points representing the walk.
         """

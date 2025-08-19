@@ -2,7 +2,6 @@ import os
 import ctypes
 import sys
 from pathlib import Path
-from memory_profiler import profile  # Import memory profiler
 
 # Get the absolute path to the current file (random_walk_package/random_walk_package/)
 _base_dir = Path(__file__).resolve().parent

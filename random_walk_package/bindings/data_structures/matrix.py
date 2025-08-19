@@ -5,7 +5,7 @@ from random_walk_package.wrapper import dll
 
 # Core matrix operations
 dll.matrix_new.restype = MatrixPtr
-dll.matrix_new.argtypes = [ctypes.c_ssize_t, ctypes.c_ssize_t]
+dll.matrix_new.argtypes = [c_ssize_t, c_ssize_t]
 
 dll.matrix_free.argtypes = [MatrixPtr]
 dll.matrix_free.restype = None
@@ -14,23 +14,23 @@ dll.matrix_copy.restype = MatrixPtr
 dll.matrix_copy.argtypes = [MatrixPtr]
 
 # Accessors and basic manipulation
-dll.matrix_set.argtypes = [MatrixPtr, ctypes.c_ssize_t, ctypes.c_ssize_t, ctypes.c_double]
+dll.matrix_set.argtypes = [MatrixPtr, c_ssize_t, c_ssize_t, c_double]
 dll.matrix_set.restype = None
 
-dll.matrix_get.argtypes = [MatrixPtr, ctypes.c_ssize_t, ctypes.c_ssize_t]
-dll.matrix_get.restype = ctypes.c_double
+dll.matrix_get.argtypes = [MatrixPtr, c_ssize_t, c_ssize_t]
+dll.matrix_get.restype = c_double
 
-dll.matrix_in_bounds.argtypes = [MatrixPtr, ctypes.c_ssize_t, ctypes.c_ssize_t]
-dll.matrix_in_bounds.restype = ctypes.c_int
+dll.matrix_in_bounds.argtypes = [MatrixPtr, c_ssize_t, c_ssize_t]
+dll.matrix_in_bounds.restype = c_int
 
-dll.matrix_fill.argtypes = [MatrixPtr, ctypes.c_double]
+dll.matrix_fill.argtypes = [MatrixPtr, c_double]
 dll.matrix_fill.restype = None
 
 # Mathematical operations
 dll.matrix_add.restype = MatrixPtr
 dll.matrix_add.argtypes = [MatrixPtr, MatrixPtr]
 
-dll.matrix_add_inplace.restype = ctypes.c_int
+dll.matrix_add_inplace.restype = c_int
 dll.matrix_add_inplace.argtypes = [MatrixPtr, MatrixPtr]
 
 dll.matrix_sub.restype = MatrixPtr
@@ -42,14 +42,14 @@ dll.matrix_mul.argtypes = [MatrixPtr, MatrixPtr]
 dll.matrix_elementwise_mul.restype = MatrixPtr
 dll.matrix_elementwise_mul.argtypes = [MatrixPtr, MatrixPtr]
 
-dll.matrix_sum.restype = ctypes.c_double
+dll.matrix_sum.restype = c_double
 dll.matrix_sum.argtypes = [MatrixPtr]
 
 # Matrix transformations
 dll.matrix_transpose.argtypes = [MatrixPtr]
 dll.matrix_transpose.restype = None
 
-dll.matrix_determinant.restype = ctypes.c_double
+dll.matrix_determinant.restype = c_double
 dll.matrix_determinant.argtypes = [MatrixPtr]
 
 dll.matrix_invert.restype = MatrixPtr
@@ -59,17 +59,17 @@ dll.matrix_invert.argtypes = [MatrixPtr]
 dll.matrix_print.argtypes = [MatrixPtr]
 dll.matrix_print.restype = None
 
-dll.matrix_to_string.restype = ctypes.c_char_p
+dll.matrix_to_string.restype = c_char_p
 dll.matrix_to_string.argtypes = [MatrixPtr]
 
-dll.matrix_save.restype = ctypes.c_ssize_t
-dll.matrix_save.argtypes = [MatrixPtr, ctypes.c_char_p]
+dll.matrix_save.restype = c_ssize_t
+dll.matrix_save.argtypes = [MatrixPtr, c_char_p]
 
 dll.matrix_load.restype = MatrixPtr
-dll.matrix_load.argtypes = [ctypes.c_char_p]
+dll.matrix_load.argtypes = [c_char_p]
 
 # Normalization functions
-dll.matrix_normalize.argtypes = [MatrixPtr, ctypes.c_double]
+dll.matrix_normalize.argtypes = [MatrixPtr, c_double]
 dll.matrix_normalize.restype = None
 
 dll.matrix_normalize_01.argtypes = [MatrixPtr]
@@ -82,26 +82,26 @@ dll.matrix_normalize_L1.restype = None
 dll.matrix_combind.restype = MatrixPtr
 dll.matrix_combind.argtypes = [MatrixPtr, MatrixPtr]
 
-dll.matrix_combind_inplace.restype = ctypes.c_int
+dll.matrix_combind_inplace.restype = c_int
 dll.matrix_combind_inplace.argtypes = [MatrixPtr, MatrixPtr]
 
 dll.matrix_upsample_bilinear.restype = MatrixPtr
-dll.matrix_upsample_bilinear.argtypes = [MatrixPtr, ctypes.c_ssize_t, ctypes.c_ssize_t]
+dll.matrix_upsample_bilinear.argtypes = [MatrixPtr, c_ssize_t, c_ssize_t]
 
 dll.matrix_rotate.restype = MatrixPtr
-dll.matrix_rotate.argtypes = [MatrixPtr, ctypes.c_double]
+dll.matrix_rotate.argtypes = [MatrixPtr, c_double]
 
 dll.matrix_rotate_center.restype = MatrixPtr
-dll.matrix_rotate_center.argtypes = [MatrixPtr, ctypes.c_double]
+dll.matrix_rotate_center.argtypes = [MatrixPtr, c_double]
 
 dll.matrix_generator_gaussian_pdf.restype = MatrixPtr
 dll.matrix_generator_gaussian_pdf.argtypes = [
-    ctypes.c_ssize_t,  # width
-    ctypes.c_ssize_t,  # height
-    ctypes.c_double,  # sigma
-    ctypes.c_double,  # scale
-    ctypes.c_ssize_t,  # x_offset
-    ctypes.c_ssize_t  # y_offset
+    c_ssize_t,  # width
+    c_ssize_t,  # height
+    c_double,  # sigma
+    c_double,  # scale
+    c_ssize_t,  # x_offset
+    c_ssize_t  # y_offset
 ]
 
 
@@ -117,7 +117,7 @@ def matrix_new(width, height) -> Matrix:
     return matrix
 
 
-def create_gaussian_kernel(width, height, sigma, scale, x_offset=0, y_offset=0) -> Matrix:
+def create_gaussian_kernel(width, height, sigma, scale, x_offset=0, y_offset=0) -> MatrixPtr:
     kernel = dll.matrix_generator_gaussian_pdf(width, height, sigma, scale, x_offset, y_offset)
     return kernel
 

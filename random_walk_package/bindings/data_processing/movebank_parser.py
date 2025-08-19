@@ -1,6 +1,3 @@
-from ctypes import *
-
-from random_walk_package.bindings.data_structures.point2D import *
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 

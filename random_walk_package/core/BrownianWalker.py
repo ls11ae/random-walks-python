@@ -1,3 +1,4 @@
+from random_walk_package import create_gaussian_kernel
 from random_walk_package.bindings.brownian_walk import *
 from random_walk_package.bindings.data_processing.movebank_parser import extract_steps_from_csv
 from random_walk_package.bindings.data_structures.point2D import *
@@ -12,12 +13,12 @@ class BrownianWalker:
         """
         Static method to generate a Movebank walk from CSV data.
         """
-        file = os.path.join(script_dir, 'resources', csv_file)
+        file = str(os.path.join(script_dir, 'resources', csv_file))
         steps = extract_steps_from_csv(file, step_count, width, height)
         steps_np = get_walk_points(steps)
         kernel = create_gaussian_kernel(width=2 * S + 1, height=2 * S + 1, sigma=sigma, scale=scale, x_offset=x_offset,
                                         y_offset=y_offset)
-        walk = brownian_backtrace_multiple_ctype(kernel, steps, T, width, height)
+        walk = brownian_backtrace_multiple_ctype(kernel, steps, T, width, height, None)
         walk_to_json(walk=walk, json_file="multistepwalk.json", steps=steps, terrain_map=None,
                      W=ctypes.c_size_t(width),
                      H=ctypes.c_size_t(height))
@@ -49,7 +50,7 @@ class BrownianWalker:
         return cls(kernel, dp_tensor, T, W, H)
 
     @classmethod
-    def from_terrain_map(cls, terrain, T, S, sigma=0.5, scale=0.8, x_offset=0, y_offset=0, start_x=None, start_y=None):
+    def from_terrain_map(cls, terrain, T, S, sigma=0.5, scale=0.8, x_offset=0, y_offset=0, kernel_mapping = None,start_x=None, start_y=None):
         """
         Creates a BrownianWalker instance using the specified parameters to generate a Gaussian kernel and DP matrix.
 
@@ -69,9 +70,12 @@ class BrownianWalker:
         if start_y is None:
             start_y = terrain.height // 2
 
+        if kernel_mapping is None:
+            kernel_mapping = create_brownian_kernel_parameters(animal_type=MEDIUM, base_step_size=S)
+
         kernel = create_gaussian_kernel(width=2 * S + 1, height=2 * S + 1, sigma=sigma, scale=scale, x_offset=x_offset,
                                         y_offset=y_offset)
-        kernels_map = get_kernels_map(terrain=terrain, kernel=kernel)
+        kernels_map = get_kernels_map(terrain=terrain, kernel=kernel, mapping=kernel_mapping)
         dp_tensor = brownian_dp_matrix_terrain(kernel=kernel, terrain=terrain, kernels_map=kernels_map, time=T,
                                                start_x=start_x, start_y=start_y)
         return cls(kernel=kernel, dp_tensor=dp_tensor, T=T, W=terrain.width, H=terrain.height, terrain=terrain,
@@ -106,7 +110,7 @@ class BrownianWalker:
         dp_tensor = dll.tensor_load(ctypes.c_char_p(filename.encode('utf-8')))
         return cls(kernel, dp_tensor, T, W, H)
 
-    def __init__(self, kernel, dp_tensor, T, W, H, start_x=None, start_y=None, terrain=None, kernels_map=None):
+    def __init__(self, kernel, dp_tensor, T, W, H, terrain=None, kernels_map=None):
         self.kernel = kernel
         self.dp_tensor = dp_tensor
         self.T = T

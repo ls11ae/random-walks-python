@@ -1,7 +1,5 @@
 # mixed_walk.py
-import os
 
-from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_mixed_kernel_parameters
 from random_walk_package.wrapper import dll
@@ -100,22 +98,25 @@ dll.time_walk_geo.restype = Point2DArrayPtr
 def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, goal, serialization_path, use_serialized=True, mapping=None):
     """
     Calls the C function time_walk_geo to perform a time-dependent walk with geospatial data.
+
     Args:
-        T (int): Number of time steps
-        csv_path (str): Path to CSV file
-        terrain_path (str): Path to terrain file
-        grid_x (int): Grid width
-        grid_y (int): Grid height
-        start (tuple): Start point as (x, y)
-        goal (tuple): Goal point as (x, y)
-        serialization_path (str): Serialization directory
-        use_serialized (bool): Whether to use serialized data
-        mapping: Optional KernelParametersMapping; if None, defaults to create_mixed_kernel_parameters(MEDIUM, 7)
+        T (int): Number of time steps.
+        csv_path (str): Path to CSV file.
+        terrain_path (str): Path to terrain file.
+        walk_path (str): Path to walk file (input/output as expected by the C function).
+        grid_x (int): Grid width.
+        grid_y (int): Grid height.
+        start (tuple[int, int]): Start point as (x, y).
+        goal (tuple[int, int]): Goal point as (x, y).
+        serialization_path (str): Serialization directory.
+        use_serialized (bool): Whether to use serialized data.
+        mapping: Optional KernelParametersMapping; if None, defaults to create_mixed_kernel_parameters(MEDIUM, 7).
+
     Returns:
-        Point2DArrayPtr: Pointer to the resulting walk
+        Point2DArrayPtr: Pointer to the resulting walk.
     """
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    base_project_dir = os.path.join(script_dir, '..')
+    _script_dir = os.path.dirname(os.path.realpath(__file__))
+    base_project_dir = os.path.join(_script_dir, '..')
     resources_dir = os.path.join(base_project_dir, 'resources')
 
     terrain_path = os.path.join(resources_dir, terrain_path)
@@ -178,6 +179,8 @@ def time_walk_geo_multi(T, csv_path, terrain_path, walk_path, grid_x, grid_y, st
         grid_x (int): Grid width
         grid_y (int): Grid height
         steps (list of tuple): List of (x, y) tuples
+        use_serialized (bool): Whether to use serialized data
+        serialization_path (str): Serialization directory
         mapping: Optional KernelParametersMapping; if None, defaults to create_mixed_kernel_parameters(MEDIUM, 7)
     Returns:
         Point2DArrayPtr: Pointer to the resulting walk
@@ -239,11 +242,11 @@ def mix_walk(W, H, terrain_map, kernels_map, T, start_x, start_y, serialize: boo
     return result
 
 
-def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, dir, serialize: bool, serialize_path: str,
+def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, directory, serialize: bool, serialize_path: str,
                   dp_dir: str, mapping=None):
     if mapping is None:
         mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-    return dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, dir, serialize,
+    return dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, directory, serialize,
                                 serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
 
 

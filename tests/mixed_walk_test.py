@@ -12,47 +12,6 @@ def mixed_walk():
     walker = MixedWalker(T=T, resolution=200, study_folder=study)
     walker.generate_walk(serialized=True, steps=[(66, 66), (150, 100)])
 
-
-def test_mixed_walk_time():
-    animal_processor = AnimalMovementProcessor(
-        'Baboon group movement, South Africa (data from Bonnell et al. 2016).csv')
-
-    resolution = 200
-
-    landcover = animal_processor.create_landcover_data(resolution, "landcover_baboons.tif")
-
-    gridded_data: Point2DArrayGridPtr = animal_processor.fetch_gridded_weather_data(  # type: ignore
-        output_filename="my_gridded_weather.csv",
-        days_to_fetch=5,
-        grid_points_per_edge=5,
-        num_entries=60
-    )
-
-    kernels4d = tensor_map_terrain_bias_grid(landcover, gridded_data)
-
-    walker = MixedWalker(
-        T=60,
-        width=resolution,
-        spatial_map=landcover,
-        movebank_study='Baboon group movement, South Africa (data from Bonnell et al. 2016).csv'
-    )
-
-    walker.set_kernels(terrain_only=False)
-
-    print("Generating time-aware walk...")
-    walk_np = walker.mixed_walk_time(kernels4d)
-
-    plot_combined_terrain(
-        landcover,
-        walk_np,
-        landcover.contents.width,
-        landcover.contents.height,
-        title="Time-Aware Mixed Walk"
-    )
-
-    return walk_np
-
-
 # @profile
 def test_time_walk():
     terrain = parse_terrain("time_walk_data/terrain_movebank.txt", " ")
@@ -63,14 +22,17 @@ def test_time_walk():
     end = (60, 20)
 
     steps = [start, mid, end]
+    kernels_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=7)
 
     walk_points = time_walk_geo_multi(
         T=T,
         csv_path="time_walk_data/my_gridded_weather_grid_csvs",
         terrain_path="time_walk_data/terrain_movebank.txt",
+        walk_path="time_walk_data/time_walk.json",
         grid_x=5,
         grid_y=5,
-        steps=steps
+        steps=steps,
+        mapping=kernels_mapping
     )
     walknp = get_walk_points(walk_points)
     plot_combined_terrain(terrain, walk_points=walknp, terrain_height=terrain.height, terrain_width=terrain.width,

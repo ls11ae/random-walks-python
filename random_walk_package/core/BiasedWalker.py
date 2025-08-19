@@ -1,4 +1,6 @@
-from random_walk_package import get_walk_points, create_point2d_array
+import numpy as np
+
+from random_walk_package import get_walk_points
 from random_walk_package.bindings.correlated_walk import *
 from random_walk_package.bindings.mixed_walk import time_walk_init, time_walk_backtrace
 

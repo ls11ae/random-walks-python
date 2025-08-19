@@ -1,10 +1,6 @@
 import planetary_computer
 from pystac_client import Client
 import rioxarray
-import xarray  # Required by rioxarray for some operations
-import os
-from datetime import datetime, timedelta
-
 
 # --- 1. Fetch Landcover Data (ESA WorldCover via Planetary Computer) ---
 def fetch_landcover_data(bbox, output_filename="landcover_aoi.tif"):

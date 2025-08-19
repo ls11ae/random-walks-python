@@ -1,9 +1,13 @@
 import json
+import matplotlib.pyplot as plt
+import numpy as np
 import matplotlib.colors as mcolors
 import sys
 
+from random_walk_package import matrix_new
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array
 from random_walk_package.bindings.data_structures.terrain import *
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters
 
 # Add package directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -19,6 +23,29 @@ dll.b_walk_init_terrain.argtypes = [ctypes.POINTER(Matrix), ctypes.POINTER(Matri
                                     KernelsMapPtr,
                                     ctypes.c_ssize_t]
 dll.b_walk_init_terrain.restype = ctypes.POINTER(Tensor)
+
+# New functions from header
+dll.brownian_walk_init.argtypes = [
+    ctypes.c_ssize_t,  # T
+    ctypes.c_ssize_t,  # W
+    ctypes.c_ssize_t,  # H
+    ctypes.c_ssize_t,  # start_x
+    ctypes.c_ssize_t,  # start_y
+    ctypes.POINTER(Matrix)  # kernel
+]
+dll.brownian_walk_init.restype = ctypes.POINTER(Tensor)
+
+dll.brownian_walk_terrain_init.argtypes = [
+    ctypes.c_ssize_t,           # T
+    ctypes.c_ssize_t,           # W
+    ctypes.c_ssize_t,           # H
+    ctypes.c_ssize_t,           # start_x
+    ctypes.c_ssize_t,           # start_y
+    ctypes.POINTER(Matrix),     # kernel
+    ctypes.POINTER(TerrainMap), # terrain_map
+    KernelsMapPtr               # kernels_map
+]
+dll.brownian_walk_terrain_init.restype = ctypes.POINTER(Tensor)
 
 dll.b_walk_backtrace.argtypes = [
     ctypes.POINTER(Tensor), ctypes.POINTER(Matrix), KernelsMapPtr,
@@ -86,11 +113,20 @@ def brownian_dp_matrix(width, height, kernel, time, start_x=None, start_y=None):
     return dp_matrix_tensor
 
 
-def brownian_dp_matrix_terrain(kernel, terrain, kernels_map, time, start_x, start_y):
+def brownian_dp_matrix_terrain(kernel, terrain, kernels_map, time, start_x, start_y, mapping=None):
     width = terrain.width
     height = terrain.height
     dp_matrix = matrix_new(width, height)
     dll.matrix_set(dp_matrix, start_x, start_y, 1.0)
+
+    # If no KernelsMap is provided, create one using the given/default mapping
+    if kernels_map is None:
+        if mapping is None:
+            # Default to MEDIUM with base step size 7
+            mapping = create_brownian_kernel_parameters(MEDIUM, 7)
+        # Build KernelsMap based on terrain, mapping, and kernel
+        kernels_map = get_kernels_map(terrain, mapping, kernel)
+
     dp_matrix_tensor = dll.b_walk_init_terrain(dp_matrix, kernel, terrain, kernels_map, time)
     return dp_matrix_tensor
 

@@ -1,5 +1,3 @@
-from ctypes import *
-
 from random_walk_package import create_kernel_parameters
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll

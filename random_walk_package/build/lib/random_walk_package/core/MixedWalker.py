@@ -119,7 +119,7 @@ class MixedWalker:
                 terrain=self.spatial_map,
                 end_x=int(end_x),
                 end_y=int(end_y),
-                dir=0
+                directory=0
             )
             segment = get_walk_points(walk_ptr)
 
