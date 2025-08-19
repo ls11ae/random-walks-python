@@ -9,6 +9,7 @@ class Matrix(Structure):
         ("data", POINTER(c_double))
     ]
 
+MatrixPtr: type[_Pointer[Matrix]]
 
 MatrixPtr = POINTER(Matrix)
 
@@ -28,7 +29,9 @@ class Point2DArray(Structure):
     _fields_ = [("points", POINTER(Point2D)),
                 ("length", c_size_t)]
 
+Point2DArrayPtr: type[_Pointer[Point2DArray]]
 Point2DArrayPtr = POINTER(Point2DArray)
+Point2DPtr: type[_Pointer[Point2D]]
 Point2DPtr = POINTER(Point2D)
 
 class Vector2D(Structure):
@@ -48,7 +51,9 @@ class TensorSet(Structure):
     ]
 
 
+TensorPtr: type[_Pointer[Tensor]]
 TensorPtr = POINTER(Tensor)
+TensorSetPtr: type[_Pointer[TensorSet]]
 TensorSetPtr = POINTER(TensorSet)
 
 class TerrainMap(Structure):
@@ -115,10 +120,15 @@ class KernelsMap4D(Structure):
     ]
 
 
+TerrainMapPtr: type[_Pointer[TerrainMap]]
 TerrainMapPtr = POINTER(TerrainMap)
+KernelsMapPtr: type[_Pointer[KernelsMap]]
 KernelsMapPtr = POINTER(KernelsMap)
+TensorMapPtr: type[_Pointer[KernelsMap3D]]
 TensorMapPtr = POINTER(KernelsMap3D)
+KernelsMap4DPtr: type[_Pointer[KernelsMap4D]]
 KernelsMap4DPtr = POINTER(KernelsMap4D)
+KernelsMap3DPtr: type[_Pointer[KernelsMap3D]]
 KernelsMap3DPtr = POINTER(KernelsMap3D)
 
 class Coordinate(Structure):
@@ -130,6 +140,7 @@ class Coordinate_array(Structure):
     _fields_ = [("points", POINTER(Coordinate)),
                 ("length", c_size_t)]
 
+CoordArray: type[_Pointer[Coordinate_array]]
 
 CoordArray = POINTER(Coordinate_array)
 
@@ -181,9 +192,13 @@ class WeatherGrid(Structure):
     ]
 
 
+KernelParametersPtr: type[_Pointer[KernelParameters]]
 KernelParametersPtr = POINTER(KernelParameters)
+WeatherTimelinePtr: type[_Pointer[WeatherTimeline]]
 WeatherTimelinePtr = POINTER(WeatherTimeline)
+WeatherGridPtr: type[_Pointer[WeatherGrid]]
 WeatherGridPtr = POINTER(WeatherGrid)
+WeatherEntryPtr: type[_Pointer[WeatherEntry]]
 WeatherEntryPtr = POINTER(WeatherEntry)
 
 class Point2DArrayGrid(Structure):
@@ -193,6 +208,7 @@ class Point2DArrayGrid(Structure):
                 ("times", c_size_t)
                 ]
 
+Point2DArrayGridPtr: type[_Pointer[Point2DArrayGrid]]
 
 Point2DArrayGridPtr = POINTER(Point2DArrayGrid)
 

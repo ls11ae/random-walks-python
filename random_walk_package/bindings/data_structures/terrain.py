@@ -1,11 +1,10 @@
-import ctypes
 import os
-from _ctypes import byref
-from ctypes import c_char
-
 import rasterio
-from .matrix import *
+
+from .kernel_terrain_mapping import create_mixed_kernel_parameters
+from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll, script_dir
+import ctypes
 
 # landcover types
 TREE_COVER = 10
@@ -27,11 +26,11 @@ LIGHT = 2
 MEDIUM = 3
 HEAVY = 4
 
-dll.kernels_map_new.argtypes = [TerrainMapPtr, MatrixPtr]
+dll.kernels_map_new.argtypes = [TerrainMapPtr, KernelParametersMappingPtr, MatrixPtr]
 dll.kernels_map_new.restype = KernelsMapPtr
 
-dll.tensor_map_new.argtypes = [TerrainMapPtr, TensorPtr]
-dll.tensor_map_new.restype = TensorMapPtr
+dll.tensor_map_new.argtypes = [TerrainMapPtr, KernelParametersMappingPtr, TensorPtr]
+dll.tensor_map_new.restype = KernelsMap3DPtr
 
 dll.kernel_at.argtypes = [KernelsMapPtr, ctypes.c_ssize_t, ctypes.c_ssize_t]
 dll.kernel_at.restype = Matrix
@@ -54,22 +53,27 @@ dll.terrain_map_new.restype = TerrainMapPtr
 dll.terrain_set.argtypes = [TerrainMapPtr, ctypes.c_ssize_t, ctypes.c_ssize_t, ctypes.c_int]
 dll.terrain_set.restype = None
 
-dll.tensor_map_terrain.argtypes = [TerrainMapPtr]
-dll.tensor_map_terrain.restype = TensorMapPtr
+dll.tensor_map_terrain.argtypes = [TerrainMapPtr, KernelParametersMappingPtr]
+dll.tensor_map_terrain.restype = KernelsMap3DPtr
 
-dll.tensor_map_terrain_biased.argtypes = [TerrainMapPtr, Point2DArrayPtr]
+dll.tensor_map_terrain_biased.argtypes = [TerrainMapPtr, Point2DArrayPtr, KernelParametersMappingPtr]
 dll.tensor_map_terrain_biased.restype = KernelsMap4DPtr
 
 dll.parse_terrain_map.argtypes = [ctypes.c_char_p, TerrainMapPtr, ctypes.c_char]
 dll.parse_terrain_map.restype = ctypes.c_int
 
-dll.tensor_map_terrain_biased_grid.argtypes = [TerrainMapPtr, Point2DArrayGridPtr]
+dll.tensor_map_terrain_biased_grid.argtypes = [TerrainMapPtr, Point2DArrayGridPtr, KernelParametersMappingPtr]
 dll.tensor_map_terrain_biased_grid.restype = KernelsMap4DPtr
 
-dll.tensor_map_terrain_biased_grid_serialized.argtypes = [TerrainMapPtr, Point2DArrayGridPtr,ctypes.c_char_p]
+dll.tensor_map_terrain_biased_grid_serialized.argtypes = [
+    TerrainMapPtr,
+    Point2DArrayGridPtr,
+    KernelParametersMappingPtr,
+    ctypes.c_char_p,
+]
 dll.tensor_map_terrain_biased_grid_serialized.restype = None
 
-dll.tensor_map_terrain_serialize.argtypes = [TerrainMapPtr, ctypes.c_char_p]
+dll.tensor_map_terrain_serialize.argtypes = [TerrainMapPtr, KernelParametersMappingPtr, ctypes.c_char_p]
 dll.tensor_map_terrain_serialize.restype = None
 
 dll.tensor_at.argtypes = [ctypes.c_char_p, ctypes.c_ssize_t, ctypes.c_ssize_t]
@@ -96,7 +100,7 @@ dll.terrain_map_free.restype = None
 dll.create_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
 dll.create_terrain_map.restype = TerrainMapPtr
 
-dll.tensor_map_terrain_serialize_time.argtypes = [ctypes.c_void_p, TerrainMapPtr, ctypes.c_char_p]
+dll.tensor_map_terrain_serialize_time.argtypes = [ctypes.c_void_p, TerrainMapPtr, KernelParametersMappingPtr, ctypes.c_char_p]
 dll.tensor_map_terrain_serialize_time.restype = None
 
 dll.terrain_single_value.argtypes = [ctypes.c_int, ctypes.c_ssize_t, ctypes.c_ssize_t]
@@ -129,10 +133,14 @@ def create_terrain_map(file: str, delim: str) -> TerrainMapPtr:
     c_delim = c_char(delim.encode('ascii')[0])
     return dll.create_terrain_map(c_file, c_delim)
 
-def tensor_map_terrain_serialize_time(tensor_set_time, terrain: TerrainMapPtr, output_path: str):
+
+def tensor_map_terrain_serialize_time(tensor_set_time, terrain: TerrainMapPtr,
+                                      mapping: KernelParametersMappingPtr | None = None, output_path: str = ""):
     file = os.path.join(script_dir, 'resources', output_path)
     c_file = file.encode('ascii')
-    dll.tensor_map_terrain_serialize_time(tensor_set_time, terrain, c_file)
+    if mapping is None:
+        mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=7)
+    dll.tensor_map_terrain_serialize_time(tensor_set_time, terrain, mapping, c_file)
 
 
 def load_tensor_at(file, x, y):
@@ -149,21 +157,22 @@ def load_tensor_at_xyt(file, x, y, t):
     c_file = file.encode('ascii')
     return dll.tensor_at_xyt(c_file,x, y, t)
 
-def tensor_map_terrain_serialize(terrain: TerrainMapPtr, output_path: str):
-    file = os.path.join(script_dir, 'resources', output_path)
-    c_file = file.encode('ascii')
-    return dll.tensor_map_terrain_serialize(terrain, c_file)
+def tensor_map_terrain_serialize(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr, output_path: str) -> None:
+    dll.tensor_map_terrain_serialize(terrain, mapping, output_path.encode('utf-8'))
 
 def tensor_map_terrain_time_serialize(terrain: TerrainMapPtr, grid: Point2DArrayGridPtr, output_path: str):
     file = os.path.join(script_dir, 'resources', output_path)
     c_file = file.encode('ascii')
     return dll.tensor_map_terrain_time_serialized(terrain, grid, c_file)
 
-def tensor_map_terrain_bias(terrain: TerrainMapPtr, bias: Point2DArrayPtr) -> KernelsMap4DPtr: # type: ignore
-    return dll.tensor_map_terrain_biased(terrain, bias)
+def tensor_map_terrain_biased(terrain: TerrainMapPtr, biases: Point2DArrayPtr, mapping: KernelParametersMappingPtr) -> KernelsMap4DPtr:  # type: ignore
+    return dll.tensor_map_terrain_biased(terrain, biases, mapping)
 
-def tensor_map_terrain_bias_grid(terrain: TerrainMapPtr, bias: Point2DArrayGridPtr) -> KernelsMap4DPtr: # type: ignore
-    return dll.tensor_map_terrain_biased_grid(terrain, bias)
+def tensor_map_terrain_biased_grid(terrain: TerrainMapPtr, biases: Point2DArrayGridPtr, mapping: KernelParametersMappingPtr) -> KernelsMap4DPtr:  # type: ignore
+    return dll.tensor_map_terrain_biased_grid(terrain, biases, mapping)
+
+def tensor_map_terrain_biased_grid_serialized(terrain: TerrainMapPtr, biases: Point2DArrayGridPtr, mapping: KernelParametersMappingPtr, output_path: str) -> None:
+    dll.tensor_map_terrain_biased_grid_serialized(terrain, biases, mapping, output_path.encode('utf-8'))
 
 
 def parse_terrain(file: str, delim: str) -> TerrainMap:
@@ -191,12 +200,12 @@ def tensor_map_terrain_biased(terrain, bias_array) -> KernelsMap4DPtr: # type: i
     return dll.tensor_map_terrain_biased(terrain, bias_array)
 
 
-def get_kernels_map(terrain, kernel) -> KernelsMapPtr: # type: ignore
-    return dll.kernels_map_new(terrain, kernel)
+def get_kernels_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr, kernel: MatrixPtr) -> KernelsMapPtr:  # type: ignore
+    return dll.kernels_map_new(terrain, mapping, kernel)
 
 
-def get_tensor_map(terrain, kernels) -> TensorMapPtr: # type: ignore
-    return dll.tensor_map_new(terrain, kernels)
+def get_tensor_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr, kernels: TensorPtr) -> KernelsMap3DPtr:  # type: ignore
+    return dll.tensor_map_new(terrain, mapping, kernels)
 
 
 def get_tensor_map_mixed(terrain, tensors) -> TensorMapPtr: # type: ignore
@@ -205,8 +214,8 @@ def get_tensor_map_mixed(terrain, tensors) -> TensorMapPtr: # type: ignore
     return dll.tensor_map_mixed(terrain, tensors)
 
 
-def get_tensor_map_terrain(terrain):
-    return dll.tensor_map_terrain(terrain)
+def get_tensor_map_terrain(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr) -> KernelsMap3DPtr:  # type: ignore
+    return dll.tensor_map_terrain(terrain, mapping)
 
 
 def free_tensor_map(tensor_map):
@@ -236,7 +245,7 @@ def terrain_at(terrain, x, y):
     return dll.terrain_at(x, y, terrain_ptr)
 
 
-def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, txt_output_path="terrain_movebank.txt") -> TerrainMapPtr:  # type: ignore
+def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, txt_output_path="terrain_movebank.txt") -> TerrainMapPtr | None:  # type: ignore
     try:
         with rasterio.open(file_path) as src:
             landcover_array = src.read(1)
@@ -298,4 +307,3 @@ def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon
     except rasterio.RasterioIOError as e:
         print(f"Error opening the file: {e}")
         return None
-

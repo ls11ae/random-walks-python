@@ -1,5 +1,7 @@
+from random_walk_package import create_point2d_array
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.bindings.data_structures.terrain import *
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_correlated_kernel_parameters
 from random_walk_package.wrapper import dll
 
 
@@ -25,6 +27,7 @@ dll.backtrace.argtypes = [
     ctypes.c_ssize_t,  # T
     ctypes.POINTER(Tensor),  # kernel
     TerrainMapPtr,  # terrain
+    KernelParametersMappingPtr,  # mapping
     TensorMapPtr,  # tensormap
     ctypes.c_ssize_t,  # end_x
     ctypes.c_ssize_t,  # end_y
@@ -38,12 +41,13 @@ dll.c_walk_backtrace_multiple.argtypes = [
     ctypes.c_ssize_t,  # T
     ctypes.c_ssize_t,  # W
     ctypes.c_ssize_t,  # H
-    ctypes.POINTER(Tensor),  # DP_Matrix (Tensor**)
+    ctypes.POINTER(Tensor),  # kernel
     TerrainMapPtr,
+    KernelParametersMappingPtr,  # mapping
     TensorMapPtr,
     Point2DArrayPtr  # steps
 ]
-dll.backtrace.restype = ctypes.POINTER(Point2DArray)
+dll.c_walk_backtrace_multiple.restype = ctypes.POINTER(Point2DArray)
 
 # DP Calculation
 dll.dp_calculation.argtypes = [
@@ -85,6 +89,7 @@ dll.c_walk_init_terrain.argtypes = [
     ctypes.c_ssize_t,  # matrix_height
     ctypes.POINTER(Tensor),  # kernel
     TerrainMapPtr,
+    KernelParametersMappingPtr,  # mapping
     TensorMapPtr,
     ctypes.c_ssize_t,  # T
     ctypes.c_ssize_t,  # start x
@@ -98,13 +103,14 @@ dll.c_walk_init_terrain_low_ram.argtypes = [
     ctypes.c_ssize_t,  # matrix_height
     ctypes.POINTER(Tensor),  # kernel
     TerrainMapPtr,
+    KernelParametersMappingPtr,  # mapping
     TensorMapPtr,
     ctypes.c_ssize_t,  # T
     ctypes.c_ssize_t,  # start x
     ctypes.c_ssize_t,  # start y
     ctypes.c_char_p
 ]
-dll.c_walk_init_terrain.restype = None  # dp matrix
+dll.c_walk_init_terrain_low_ram.restype = None  # dp matrix
 
 dll.free_Vector2D.argtypes = [ctypes.POINTER(Vector2D)]
 dll.free_Vector2D.restype = None
@@ -147,9 +153,15 @@ def dp_calculation_low_ram(width, height, kernel, time, start_x, start_y, output
     dll.dp_calculation_low_ram(width, height, kernel, time, start_x, start_y, output_folder_bytes)
 
 
-def dp_calculation_terrain_low_ram(W, H, kernel, terrain_map, kernels_map, T, start_x, start_y, output_folder):
+def dp_calculation_terrain_low_ram(W, H, kernel, terrain_map, kernels_map, T, start_x, start_y, output_folder, mapping=None):
     output_folder_bytes = output_folder.encode('utf-8')
-    dll.c_walk_init_terrain_low_ram(W, H, kernel, terrain_map, kernels_map, T, start_x, start_y, output_folder_bytes)
+
+    if kernels_map is None:
+        if mapping is None:
+            mapping = create_correlated_kernel_parameters(MEDIUM, 7)
+        kernels_map = get_tensor_map(terrain_map, mapping, kernel)
+
+    dll.c_walk_init_terrain_low_ram(W, H, kernel, terrain_map, mapping, kernels_map, T, start_x, start_y, output_folder_bytes)
 
 
 def correlated_dp_matrix(kernel, width, height, time, start_x=None, start_y=None):
@@ -160,17 +172,37 @@ def correlated_dp_matrix(kernel, width, height, time, start_x=None, start_y=None
     return dp_matrix_tensor
 
 
-def correlated_dp_matrix_terrain(width, height, kernel, terrain, tensor_map, time, start_x, start_y):
-    dp_matrix_tensor = dll.c_walk_init_terrain(width, height, kernel, terrain, tensor_map, time, start_x, start_y)
+def correlated_dp_matrix_terrain(width, height, kernel, terrain, tensor_map, time, start_x, start_y, mapping=None):
+    # If no tensor map is provided, create one using the given/default mapping
+    if tensor_map is None:
+        if mapping is None:
+            mapping = create_correlated_kernel_parameters(MEDIUM, 7)
+        tensor_map = get_tensor_map(terrain, mapping, kernel)
+
+    dp_matrix_tensor = dll.c_walk_init_terrain(width, height, kernel, terrain, mapping, tensor_map, time, start_x, start_y)
     return dp_matrix_tensor
 
 
-def correlated_backtrace(dp_mat, T, kernels, terrain, tensor_map, end_x, end_y, direction, directions):
-    return dll.backtrace(dp_mat, T, kernels, terrain, tensor_map, end_x, end_y, direction, directions)
+def correlated_backtrace(dp_mat, T, kernels, terrain, tensor_map, end_x, end_y, direction, directions, mapping=None):
+    if tensor_map is None:
+        if mapping is None:
+            mapping = create_correlated_kernel_parameters(MEDIUM, 7)
+        tensor_map = get_tensor_map(terrain, mapping, kernels)
+    elif mapping is None:
+        mapping = create_correlated_kernel_parameters(MEDIUM, 7)
+
+    return dll.backtrace(dp_mat, T, kernels, terrain, mapping, tensor_map, end_x, end_y, direction, directions)
 
 
-def walk_backtrace_multiple(T, W, H, kernel, tensor_map, steps):
+def walk_backtrace_multiple(T, W, H, kernel, terrain, tensor_map, steps, mapping=None):
+    if tensor_map is None:
+        if mapping is None:
+            mapping = create_correlated_kernel_parameters(MEDIUM, 7)
+        tensor_map = get_tensor_map(terrain, mapping, kernel)
+    elif mapping is None:
+        mapping = create_correlated_kernel_parameters(MEDIUM, 7)
+
     array_ptr = create_point2d_array(steps)
-    multistep_walk = dll.c_walk_backtrace_multiple(T, W, H, kernel, tensor_map, array_ptr)
-    dll.point2d_array_free(array_ptr)  # Add this line
+    multistep_walk = dll.c_walk_backtrace_multiple(T, W, H, kernel, terrain, mapping, tensor_map, array_ptr)
+    dll.point2d_array_free(array_ptr)
     return multistep_walk
