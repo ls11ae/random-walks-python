@@ -6,12 +6,12 @@ from random_walk_package.core.MixedWalker import *
 
 @profile
 def mixed_walk():
-    T = 150
+    T = 30
 
-    study = "baboon_SA_study/"
-    walker = MixedWalker(T=T, resolution=500, study_folder=study)
-    steps = [(166, 166), (422, 300)]
-    walker.generate_walk(serialized=False, steps=steps)
+    study = "Boars_Austria/"
+    walker = MixedWalker(T=T, resolution=800, animal_type=MEDIUM, S=3, study_folder=study)
+    #steps = [(166, 166), (422, 300)]
+    walker.generate_walk(serialized=False)
 
 # @profile
 def test_time_walk():

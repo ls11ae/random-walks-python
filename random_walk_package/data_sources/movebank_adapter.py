@@ -1,4 +1,5 @@
 import ctypes
+import math
 
 import pandas as pd
 
@@ -55,16 +56,35 @@ def bbox_to_discrete_space(bbox: tuple[float, float, float, float], samples: int
     min_lon, min_lat, max_lon, max_lat = bbox
     lon_range = max_lon - min_lon
     lat_range = max_lat - min_lat
-    aspect_ratio = lon_range / lat_range
 
-    if lon_range >= lat_range:
+    # Guard tiny/zero extents
+    lon_range = lon_range if lon_range != 0.0 else 1e-12
+    lat_range = lat_range if lat_range != 0.0 else 1e-12
+
+    # Use ground-distance-aware aspect ratio (meters), not degrees
+    mean_lat = (min_lat + max_lat) / 2.0
+    meters_per_deg_lat = 111_320.0
+    meters_per_deg_lon = meters_per_deg_lat * math.cos(math.radians(mean_lat))
+
+    width_m = lon_range * meters_per_deg_lon
+    height_m = lat_range * meters_per_deg_lat
+    aspect_ratio_m = width_m / height_m
+
+    # Optional: also compute degree aspect for logging/diagnostics
+    aspect_ratio_deg = lon_range / lat_range
+    print(f"aspect ratio (deg): {aspect_ratio_deg}")
+    print(f"aspect ratio (meters): {aspect_ratio_m}")
+
+    # Size grid using metric aspect so it matches GeoTIFF appearance
+    if width_m >= height_m:
         x_res = samples
-        y_res = round(samples / aspect_ratio)
+        y_res = max(1, round(samples / aspect_ratio_m))
     else:
         y_res = samples
-        x_res = round(samples * aspect_ratio)
+        x_res = max(1, round(samples * aspect_ratio_m))
 
     return 0, 0, x_res, y_res
+
 
 
 def get_start_end_dates(df):

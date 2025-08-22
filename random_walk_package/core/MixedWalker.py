@@ -10,11 +10,11 @@ from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 
 
 class MixedWalker:
-    def __init__(self, T=30, resolution=100, kernel_mapping=None,study_folder=None):
+    def __init__(self, T=30, S=9, animal_type = MEDIUM, resolution=100, kernel_mapping=None,study_folder=None):
         self.T = T
         self.resolution = resolution
         self.spatial_map = None
-        self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(MEDIUM, 9)
+        self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(animal_type, S)
         self.tensor_map = None
         self.movebank_processor = None
 
@@ -65,51 +65,52 @@ class MixedWalker:
             self.tensor_map = get_tensor_map_terrain(self.spatial_map, self.mapping)
             print("create tensor map")
 
-        full_path = []
         width = self.spatial_map.width
         height = self.spatial_map.height
         if steps is None:
-            steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=0)
-
+            steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=-1)
         for i in range(len(steps) - 1):
-            start_x, start_y = steps[i]
-            end_x, end_y = steps[i + 1]
-            print(start_x, start_y, end_x, end_y)
-            print(self.serialization_path)
-            dp_dir = os.path.join(self.base_project_dir, 'resources', self.serialization_path,
-                                  "DP_T" + str(self.T) + "_X" + str(start_x) + "_Y" + str(start_y))
-            print(f"Recomputing {recmp}")
-            # Initialize DP matrix for the current start point
-            dp_matrix_step = mix_walk(W=width, H=height, terrain_map=self.spatial_map, kernels_map=self.tensor_map,
-                                      start_x=int(start_x), start_y=int(start_y), T=self.T, serialize=serialized,
-                                      recompute=recmp,
-                                      serialize_path=self.serialization_path)
+            full_path = []
+            steps_per_animal = steps[i]
+            for j in range(len(steps_per_animal) - 1):
+                start_x, start_y = steps_per_animal[j]
+                end_x, end_y = steps_per_animal[j + 1]
+                print(start_x, start_y, end_x, end_y)
+                print(self.serialization_path)
+                dp_dir = os.path.join(self.base_project_dir, 'resources', self.serialization_path,
+                                      "DP_T" + str(self.T) + "_X" + str(start_x) + "_Y" + str(start_y))
+                print(f"Recomputing {recmp}")
+                # Initialize DP matrix for the current start point
+                dp_matrix_step = mix_walk(W=width, H=height, terrain_map=self.spatial_map, kernels_map=self.tensor_map,
+                                          start_x=int(start_x), start_y=int(start_y), T=self.T, serialize=serialized,
+                                          recompute=recmp,
+                                          serialize_path=self.serialization_path)
 
-            print(dp_dir)
-            # Backtrace from the end point
-            walk_ptr = mix_backtrace(
-                DP_Matrix=dp_matrix_step,
-                T=self.T,
-                tensor_map=self.tensor_map,
-                terrain=self.spatial_map,
-                end_x=int(end_x),
-                end_y=int(end_y),
-                directory=0,
-                serialize=serialized,
-                serialize_path=self.serialization_path,
-                dp_dir=dp_dir
-            )
-            segment = get_walk_points(walk_ptr)
+                print(dp_dir)
+                # Backtrace from the end point
+                walk_ptr = mix_backtrace(
+                    DP_Matrix=dp_matrix_step,
+                    T=self.T,
+                    tensor_map=self.tensor_map,
+                    terrain=self.spatial_map,
+                    end_x=int(end_x),
+                    end_y=int(end_y),
+                    directory=0,
+                    serialize=serialized,
+                    serialize_path=self.serialization_path,
+                    dp_dir=dp_dir
+                )
+                segment = get_walk_points(walk_ptr)
 
-            # Cleanup C memory
-            if not serialized:
-                dll.tensor4D_free(dp_matrix_step, self.T)
-            dll.point2d_array_free(walk_ptr)
+                # Cleanup C memory
+                if not serialized:
+                    dll.tensor4D_free(dp_matrix_step, self.T)
+                dll.point2d_array_free(walk_ptr)
 
-            # Concatenate paths (skip duplicate point)
-            full_path.extend(segment[:-1])
+                # Concatenate paths (skip duplicate point)
+                full_path.extend(segment[:-1])
 
-        # Add final point
-        full_path.append(steps[-1])
-        walk = np.array(full_path)
-        plot_combined_terrain(pointer(self.spatial_map), walk, steps=steps, title=self.movebank_study)
+            # Add final point
+            full_path.append(steps_per_animal[-1])
+            walk = np.array(full_path)
+            plot_combined_terrain(pointer(self.spatial_map), walk, steps=steps_per_animal, title=self.movebank_study)

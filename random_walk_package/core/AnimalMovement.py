@@ -323,22 +323,21 @@ class AnimalMovementProcessor:
             ))
         return sampled_weather
 
-    def create_movement_data(self, animal_id=None, samples=10, width=None, height=None):
+    def create_movement_data(self, samples=10, width=None, height=None):
         if self.df is None:
             self._load_data()
 
-        if animal_id is None:
-            animal_ids = get_unique_animal_ids(self.df)
-            if not animal_ids:
-                raise ValueError("No unique animal IDs found in the data.")
-            animal_id = animal_ids[0]
+        # Process each animal ID and store coordinates in a list
+        all_coords = []
+        animal_ids = get_unique_animal_ids(self.df)
+        for aid in animal_ids:
+            # Get coordinates for current animal ID
+            coords_data = get_animal_coordinates(
+                self.df, aid, samples, width, height, self.bbox
+            )
+            all_coords.append(coords_data)
 
-        # This method returns coordinates and sets self.coords
-        coords_data = get_animal_coordinates(
-            self.df, animal_id, samples, width, height, self.bbox
-        )
-
-        self.coords = coords_data  # Assuming coords_data is the Point2DArray or similar
+        self.coords = all_coords  # Store list of coordinate data
         return self.coords
 
     def create_step_points(self, steps: int) -> Point2DArray:
