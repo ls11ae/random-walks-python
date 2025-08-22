@@ -14,7 +14,7 @@ class MixedWalker:
         self.T = T
         self.resolution = resolution
         self.spatial_map = None
-        self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(MEDIUM, 7)
+        self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(MEDIUM, 9)
         self.tensor_map = None
         self.movebank_processor = None
 
@@ -62,7 +62,7 @@ class MixedWalker:
             print(f"Serialized terrain map to {self.serialization_path}")
         else:
             print("create kernels")
-            #self.tensor_map = get_tensor_map_terrain(self.spatial_map, self.mapping)
+            self.tensor_map = get_tensor_map_terrain(self.spatial_map, self.mapping)
             print("create tensor map")
 
         full_path = []
@@ -71,13 +71,6 @@ class MixedWalker:
         if steps is None:
             steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=0)
 
-        print(steps)
-        if steps is not None:
-            steps = steps
-        steps_dll = create_point2d_array(steps)
-        steps2 = [steps[0], steps[-1]]
-        plot_combined_terrain(pointer(self.spatial_map), np.array(steps2), steps2, title=self.movebank_study)
-        exit(0)
         for i in range(len(steps) - 1):
             start_x, start_y = steps[i]
             end_x, end_y = steps[i + 1]

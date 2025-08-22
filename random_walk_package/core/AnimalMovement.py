@@ -335,7 +335,7 @@ class AnimalMovementProcessor:
 
         # This method returns coordinates and sets self.coords
         coords_data = get_animal_coordinates(
-            self.df, animal_id, samples, width, height
+            self.df, animal_id, samples, width, height, self.bbox
         )
 
         self.coords = coords_data  # Assuming coords_data is the Point2DArray or similar
