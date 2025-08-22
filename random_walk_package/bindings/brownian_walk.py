@@ -1,10 +1,9 @@
 import json
-import matplotlib.pyplot as plt
-import numpy as np
+
 import matplotlib.colors as mcolors
 import sys
 
-from random_walk_package import matrix_new
+from random_walk_package.bindings.data_structures.matrix import *
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array
 from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters

@@ -1,9 +1,10 @@
-from tests.mixed_walk_test import test_time_walker_multi
+from tests.mixed_walk_test import test_time_walker_multi, mixed_walk
 
 # debugging: gdb --args python -m tests.test
 
 if __name__ == "__main__":
-    test_time_walker_multi()
+    mixed_walk()
+    #test_time_walker_multi()
     # corr(7, 16, 300)
     # benchmark_brownian(200)
     # mixed_walk()

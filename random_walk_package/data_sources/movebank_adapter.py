@@ -11,15 +11,44 @@ def get_unique_animal_ids(df: pd.DataFrame) -> list:
     return df['tag-local-identifier'].unique().tolist()
 
 
-def get_bounding_box(df: pd.DataFrame) -> tuple[float, float, float, float]:
-    """Return bounding box as (min_lon, max_lon, min_lat, max_lat)."""
+def get_bounding_box(df: pd.DataFrame, padding: float = 0.05) -> tuple[float, float, float, float]:
+    """Return padded bounding box as (min_lon, min_lat, max_lon, max_lat).
+    `padding` is the fraction to add on each side (e.g., 0.05 = 5%).
+    """
     coords = df[['location-long', 'location-lat']].dropna()
-    return (
-        coords['location-long'].min(),
-        coords['location-lat'].min(),
-        coords['location-long'].max(),
-        coords['location-lat'].max()
-    )
+    min_lon_raw = coords['location-long'].min()
+    max_lon_raw = coords['location-long'].max()
+    min_lat_raw = coords['location-lat'].min()
+    max_lat_raw = coords['location-lat'].max()
+
+    lon_range = max(max_lon_raw - min_lon_raw, 0.0)
+    lat_range = max(max_lat_raw - min_lat_raw, 0.0)
+
+    # Handle degenerate cases by inflating a tiny range (avoids division by zero later)
+    if lon_range == 0.0:
+        lon_range = 1e-6
+        min_lon_raw -= lon_range / 2.0
+        max_lon_raw += lon_range / 2.0
+    if lat_range == 0.0:
+        lat_range = 1e-6
+        min_lat_raw -= lat_range / 2.0
+        max_lat_raw += lat_range / 2.0
+
+    lon_pad = lon_range * padding
+    lat_pad = lat_range * padding
+
+    min_lon = min_lon_raw - lon_pad
+    max_lon = max_lon_raw + lon_pad
+    min_lat = min_lat_raw - lat_pad
+    max_lat = max_lat_raw + lat_pad
+
+    # Optionally clamp to valid geographic bounds
+    min_lon = max(min_lon, -180.0)
+    max_lon = min(max_lon, 180.0)
+    min_lat = max(min_lat, -90.0)
+    max_lat = min(max_lat, 90.0)
+
+    return min_lon, min_lat, max_lon, max_lat
 
 
 def bbox_to_discrete_space(bbox: tuple[float, float, float, float], samples: int) -> tuple[int, int, int, int]:
@@ -56,9 +85,12 @@ def map_lat_to_y(lat, min_lat, max_lat, y_res):
     return int((max_lat - lat) / (max_lat - min_lat) * y_res)
 
 
-def get_animal_coordinates(df: pd.DataFrame, animal_id: str, samples: int = None, width=100, height=100):
+def get_animal_coordinates(df: pd.DataFrame, animal_id: str, samples: int = None,
+                           width=100, height=100, bbox: tuple[float, float, float, float] | None = None):
     """Return coordinates and timestamps for a specific animal.
-    If samples is provided, returns equidistant samples."""
+    If samples is provided, returns equidistant samples.
+    If bbox is provided, map using that bbox (must match terrain bbox) for consistent alignment.
+    """
     # Filter and clean data
     animal_df = df[df['tag-local-identifier'] == animal_id]
     clean_df = animal_df[['timestamp', 'location-long', 'location-lat']].dropna()
@@ -68,17 +100,21 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, samples: int = None
         step = max(1, len(clean_df) // samples)
         clean_df = clean_df.iloc[::step].head(samples)
 
-    # Create Coordinate array
-    min_lon, max_lon = clean_df['location-long'].min(), clean_df['location-long'].max()
-    min_lat, max_lat = clean_df['location-lat'].min(), clean_df['location-lat'].max()
+    # Decide mapping extents: use provided bbox if given, else fallback to per-animal extents
+    if bbox is not None:
+        min_lon, min_lat, max_lon, max_lat = bbox
+    else:
+        min_lon, max_lon = clean_df['location-long'].min(), clean_df['location-long'].max()
+        min_lat, max_lat = clean_df['location-lat'].min(), clean_df['location-lat'].max()
 
     mapped_coords = []
-    for i, (_, row) in enumerate(clean_df.iterrows()):
+    for _, row in clean_df.iterrows():
         x = map_lon_to_x(row['location-long'], min_lon, max_lon, width)
         y = map_lat_to_y(row['location-lat'], min_lat, max_lat, height)
         mapped_coords.append((x, y))
 
     return mapped_coords
+
 
 
 def get_animal_coordinates_safe(df: pd.DataFrame, animal_id: str):

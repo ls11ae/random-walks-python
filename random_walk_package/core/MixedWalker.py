@@ -5,6 +5,7 @@ import numpy as np
 from random_walk_package.bindings.brownian_walk import plot_combined_terrain
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
+from random_walk_package.bindings.data_processing.walk_json import walk_to_json
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 
 
@@ -13,7 +14,7 @@ class MixedWalker:
         self.T = T
         self.resolution = resolution
         self.spatial_map = None
-        self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(MEDIUM, 7)
+        self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(MEDIUM, 9)
         self.tensor_map = None
         self.movebank_processor = None
 
@@ -53,27 +54,22 @@ class MixedWalker:
     def generate_walk(self, steps=None, serialized=False):
         recmp: bool = True
         serialization_dir = Path(self.base_project_dir) / 'resources' / self.serialization_path / 'tensors'
-        print(
-            f"Generating mixed walk with {self.T} time steps, resolution {self.resolution}, kernels {self.mapping}, "
-            f"serialized {serialized}"
-        )
+
         if serialization_dir.exists() and any(serialization_dir.iterdir()):
             recmp = False
         if serialized and recmp:
             tensor_map_terrain_serialize(self.spatial_map, self.mapping, self.serialization_path)
             print(f"Serialized terrain map to {self.serialization_path}")
         else:
+            print("create kernels")
             self.tensor_map = get_tensor_map_terrain(self.spatial_map, self.mapping)
+            print("create tensor map")
 
         full_path = []
         width = self.spatial_map.width
         height = self.spatial_map.height
         if steps is None:
-            steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=3)
-
-        print(steps)
-        if steps is not None:
-            steps = steps
+            steps = self.movebank_processor.create_movement_data(width=width, height=height, samples=0)
 
         for i in range(len(steps) - 1):
             start_x, start_y = steps[i]
