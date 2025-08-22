@@ -82,9 +82,6 @@ dll.tensor_at.restype = TensorPtr
 dll.tensor_at_xyt.argtypes = [ctypes.c_char_p, ctypes.c_ssize_t, ctypes.c_ssize_t, ctypes.c_ssize_t]
 dll.tensor_at_xyt.restype = TensorPtr
 
-dll.kernels_map_serialized.argtypes = [TerrainMapPtr, MatrixPtr]
-dll.kernels_map_serialized.restype = KernelsMapPtr
-
 dll.kernels_map3d_free.argtypes = [KernelsMap3DPtr]
 dll.kernels_map3d_free.restype = None
 
@@ -109,9 +106,6 @@ dll.terrain_single_value.restype = TerrainMapPtr
 
 def terrain_single_value(land_type: int, width: int, height: int):
     return dll.terrain_single_value(land_type, width, height)
-
-def kernels_map_serialized(terrain: TerrainMapPtr, kernel: MatrixPtr) -> KernelsMapPtr:
-    return dll.kernels_map_serialized(terrain, kernel)
 
 def kernels_map3d_free(kernels_map3d: KernelsMap3DPtr):
     dll.kernels_map3d_free(kernels_map3d)

@@ -19,6 +19,7 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
     try:
         with rasterio.open(file_path) as src:
             landcover_array = src.read(1)
+            array_height, array_width = landcover_array.shape
 
             # Calculate raster indices for the bounding box coordinates
             row_start, col_start = src.index(min_lon, max_lat)
@@ -30,9 +31,23 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
             if col_start > col_stop:
                 col_start, col_stop = col_stop, col_start
 
+            # Clamp the indices to valid ranges (handle bbox partially or fully outside raster)
+            row_start = max(0, min(row_start, array_height - 1))
+            row_stop = max(0, min(row_stop, array_height - 1))
+            col_start = max(0, min(col_start, array_width - 1))
+            col_stop = max(0, min(col_stop, array_width - 1))
+
             # Calculate the number of rows and columns in the ROI
             roi_rows = row_stop - row_start
             roi_cols = col_stop - col_start
+
+            # If there is no overlap between bbox and raster, fail fast with a clear message
+            if roi_rows < 0 or roi_cols < 0 or (row_start == row_stop and col_start == col_stop):
+                raise ValueError(
+                    "Requested bounding box does not overlap the landcover raster. "
+                    f"Raster bounds (lon, lat): {src.bounds}. "
+                    f"Requested bbox: ({min_lon}, {min_lat}, {max_lon}, {max_lat})."
+                )
 
             # Avoid division by zero when resolution is 1
             step_y = roi_rows / (res_y - 1) if res_y > 1 else 0
@@ -41,15 +56,17 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
             # Open the output file for writing
             with open(output, 'w') as f:
                 for y_idx in range(res_y):
-                    # Calculate row index in the raster, clamped to the ROI
+                    # Calculate row index in the raster, clamped to the ROI and array bounds
                     r = row_start + int(y_idx * step_y)
                     r = max(row_start, min(r, row_stop))
+                    r = min(r, array_height - 1)
 
                     row_values = []
                     for x_idx in range(res_x):
-                        # Calculate column index in the raster, clamped to the ROI
+                        # Calculate column index in the raster, clamped to the ROI and array bounds
                         c = col_start + int(x_idx * step_x)
                         c = max(col_start, min(c, col_stop))
+                        c = min(c, array_width - 1)
 
                         pixel_value = landcover_array[r, c]
                         row_values.append(str(pixel_value))

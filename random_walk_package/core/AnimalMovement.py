@@ -2,6 +2,7 @@ import os
 import time
 
 import numpy as np
+from ctypes import *
 
 # Assuming these imports are correctly resolved from your project structure
 from random_walk_package import landcover_to_discrete_ptr, create_point2d_array
@@ -196,7 +197,7 @@ class AnimalMovementProcessor:
                 raise
 
     def _compute_bbox(self):
-        """Compute bounding box of interest"""
+        """Compute bounding box of interest with 10% padding on each side."""
         if self.bbox is None and self.df is not None:
             self.bbox = get_bounding_box(self.df)
 
@@ -496,11 +497,10 @@ class AnimalMovementProcessor:
 
         return self.fetch_trajectory_weather(output_path)
 
-    def create_weather_tuples_ctypes(self) -> ctypes.POINTER(WeatherTimeline):  # type: ignore
+    def create_weather_tuples_ctypes(self) -> POINTER(WeatherTimeline):  # type: ignore
         """Convert trajectory weather data to C-compatible WeatherTimeline structure"""
         if not self._weather_data:  # Check if it's None or empty
-            raise ValueError(
-                "Weather data not available. Call fetch_trajectory_weather() or load_weather_data() first.")
+            raise ValueError("Weather data not available. Call fetch_trajectory_weather() or load_weather_data() first.")
 
         num_entries = len(self._weather_data)
         if num_entries == 0:

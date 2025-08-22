@@ -1,16 +1,15 @@
 import numpy as np
-
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 
 # Load DLL functions
-dll.point_2d_new.argtypes = [ctypes.c_size_t, ctypes.c_size_t]
-dll.point_2d_new.restype = ctypes.POINTER(Point2D)
+dll.point_2d_new.argtypes = [c_size_t, c_size_t]
+dll.point_2d_new.restype = POINTER(Point2D)
 
-dll.point_2d_free.argtypes = [ctypes.POINTER(Point2D)]
+dll.point_2d_free.argtypes = [POINTER(Point2D)]
 dll.point_2d_free.restype = None
 
-dll.point_2d_array_new.argtypes = [ctypes.POINTER(Point2D), ctypes.c_size_t]
+dll.point_2d_array_new.argtypes = [POINTER(Point2D), c_size_t]
 dll.point_2d_array_new.restype = Point2DArrayPtr
 
 dll.point2d_array_print.argtypes = [Point2DArrayPtr]
@@ -19,17 +18,17 @@ dll.point2d_array_print.restype = None
 dll.point2d_array_free.argtypes = [Point2DArrayPtr]
 dll.point2d_array_free.restype = None
 
-dll.point_2d_array_grid_new.argtypes = [ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t]
+dll.point_2d_array_grid_new.argtypes = [c_size_t, c_size_t, c_size_t]
 dll.point_2d_array_grid_new.restype = Point2DArrayGridPtr
 
 dll.point_2d_array_grid_free.argtypes = [Point2DArrayGridPtr]
 dll.point_2d_array_grid_free.restype = None
 
-dll.point_2d_array_new_empty.argtypes = [ctypes.c_size_t]
+dll.point_2d_array_new_empty.argtypes = [c_size_t]
 dll.point_2d_array_new_empty.restype = Point2DArrayPtr
 
 # Wrap load_weather_grid
-dll.load_weather_grid.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+dll.load_weather_grid.argtypes = [c_char_p, c_int, c_int, c_int]
 dll.load_weather_grid.restype = Point2DArrayGridPtr
 
 
@@ -67,9 +66,9 @@ def point2d_array_grid_new(height, width, times):
     grid.times = times
 
     # Allocate 2D array of Point2DArray pointers
-    data = (ctypes.POINTER(ctypes.POINTER(Point2DArray)) * height)()
+    data = (POINTER(POINTER(Point2DArray)) * height)()
     for y in range(height):
-        data[y] = (ctypes.POINTER(Point2DArray) * width)()
+        data[y] = (POINTER(Point2DArray) * width)()
         for x in range(width):
             # Initialize with empty arrays
             data[y][x] = point2d_array_new(times)
@@ -108,7 +107,7 @@ def get_point2d(x, y):
     return ptr.contents
 
 
-def create_point2d_array(steps) -> Point2DArrayPtr:  # type: ignore
+def create_point2d_array(steps) -> Point2DArray:  # type: ignore
     point_array = (Point2D * len(steps))()
     for i, (x, y) in enumerate(steps):
         point_array[i].x = x
