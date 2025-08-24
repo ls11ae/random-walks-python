@@ -12,44 +12,57 @@ def get_unique_animal_ids(df: pd.DataFrame) -> list:
     return df['tag-local-identifier'].unique().tolist()
 
 
-def get_bounding_box(df: pd.DataFrame, padding: float = 0.05) -> tuple[float, float, float, float]:
-    """Return padded bounding box as (min_lon, min_lat, max_lon, max_lat).
+def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.05) -> dict[
+    str, tuple[float, float, float, float]]:
+    """Return per-animal padded bounding boxes as a dict:
+    { animal_id: (min_lon, min_lat, max_lon, max_lat) }.
     `padding` is the fraction to add on each side (e.g., 0.05 = 5%).
     """
-    coords = df[['location-long', 'location-lat']].dropna()
-    min_lon_raw = coords['location-long'].min()
-    max_lon_raw = coords['location-long'].max()
-    min_lat_raw = coords['location-lat'].min()
-    max_lat_raw = coords['location-lat'].max()
+    result: dict[str, tuple[float, float, float, float]] = {}
 
-    lon_range = max(max_lon_raw - min_lon_raw, 0.0)
-    lat_range = max(max_lat_raw - min_lat_raw, 0.0)
+    if 'tag-local-identifier' not in df.columns:
+        return result  # No animal IDs available
 
-    # Handle degenerate cases by inflating a tiny range (avoids division by zero later)
-    if lon_range == 0.0:
-        lon_range = 1e-6
-        min_lon_raw -= lon_range / 2.0
-        max_lon_raw += lon_range / 2.0
-    if lat_range == 0.0:
-        lat_range = 1e-6
-        min_lat_raw -= lat_range / 2.0
-        max_lat_raw += lat_range / 2.0
+    for animal_id, group in df.groupby('tag-local-identifier'):
+        coords = group[['location-long', 'location-lat']].dropna()
+        if coords.empty:
+            continue
 
-    lon_pad = lon_range * padding
-    lat_pad = lat_range * padding
+        min_lon_raw = coords['location-long'].min()
+        max_lon_raw = coords['location-long'].max()
+        min_lat_raw = coords['location-lat'].min()
+        max_lat_raw = coords['location-lat'].max()
 
-    min_lon = min_lon_raw - lon_pad
-    max_lon = max_lon_raw + lon_pad
-    min_lat = min_lat_raw - lat_pad
-    max_lat = max_lat_raw + lat_pad
+        lon_range = max(max_lon_raw - min_lon_raw, 0.0)
+        lat_range = max(max_lat_raw - min_lat_raw, 0.0)
 
-    # Optionally clamp to valid geographic bounds
-    min_lon = max(min_lon, -180.0)
-    max_lon = min(max_lon, 180.0)
-    min_lat = max(min_lat, -90.0)
-    max_lat = min(max_lat, 90.0)
+        # Handle degenerate cases by inflating a tiny range (avoids division by zero later)
+        if lon_range == 0.0:
+            lon_range = 1e-6
+            min_lon_raw -= lon_range / 2.0
+            max_lon_raw += lon_range / 2.0
+        if lat_range == 0.0:
+            lat_range = 1e-6
+            min_lat_raw -= lat_range / 2.0
+            max_lat_raw += lat_range / 2.0
 
-    return min_lon, min_lat, max_lon, max_lat
+        lon_pad = lon_range * padding
+        lat_pad = lat_range * padding
+
+        min_lon = min_lon_raw - lon_pad
+        max_lon = max_lon_raw + lon_pad
+        min_lat = min_lat_raw - lat_pad
+        max_lat = max_lat_raw + lat_pad
+
+        # Clamp to valid geographic bounds
+        min_lon = max(min_lon, -180.0)
+        max_lon = min(max_lon, 180.0)
+        min_lat = max(min_lat, -90.0)
+        max_lat = min(max_lat, 90.0)
+
+        result[str(animal_id)] = (min_lon, min_lat, max_lon, max_lat)
+
+    return result
 
 
 def bbox_to_discrete_space(bbox: tuple[float, float, float, float], samples: int) -> tuple[int, int, int, int]:
@@ -85,6 +98,25 @@ def bbox_to_discrete_space(bbox: tuple[float, float, float, float], samples: int
 
     return 0, 0, x_res, y_res
 
+
+def bbox_dict_to_discrete_space(
+        bbox_dict: dict[str, tuple[float, float, float, float]],
+        samples: int
+) -> dict[str, tuple[int, int, int, int]]:
+    """
+    Convert a dict of per-animal bboxes into per-animal discrete space parameters.
+
+    Args:
+        bbox_dict: { animal_id: (min_lon, min_lat, max_lon, max_lat) }
+        samples: Target resolution along the longer ground-distance dimension.
+
+    Returns:
+        { animal_id: (0, 0, x_res, y_res) }
+    """
+    result: dict[str, tuple[int, int, int, int]] = {}
+    for animal_id, bbox in bbox_dict.items():
+        result[str(animal_id)] = bbox_to_discrete_space(bbox, samples)
+    return result
 
 
 def get_start_end_dates(df):
@@ -134,25 +166,3 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, samples: int = None
         mapped_coords.append((x, y))
 
     return mapped_coords
-
-
-
-def get_animal_coordinates_safe(df: pd.DataFrame, animal_id: str):
-    """Version that returns pointer for C interop with proper memory management.
-       The caller is responsible for freeing the memory using coordinate_array_free."""
-
-    # First get the coordinates as a Python-managed array
-    arr = get_animal_coordinates(df, animal_id)
-
-    # Allocate memory that can be freed by the C code
-    c_array = (Coordinate * len(arr))()
-
-    # Copy the data
-    for i in range(len(arr)):
-        c_array[i].x = arr[i].x
-        c_array[i].y = arr[i].y
-
-    # Create a new Coordinate_array that owns its memory
-    result = dll.coordinate_array_new(ctypes.pointer(Coordinate_array(c_array)), len(arr))
-
-    return result
