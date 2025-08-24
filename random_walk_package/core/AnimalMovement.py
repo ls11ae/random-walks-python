@@ -2,7 +2,6 @@ import os
 import time
 
 import numpy as np
-from ctypes import *
 
 # Assuming these imports are correctly resolved from your project structure
 from random_walk_package import landcover_to_discrete_ptr, create_point2d_array
@@ -12,8 +11,9 @@ from random_walk_package.bindings.data_processing.weather_parser import weather_
 from random_walk_package.bindings.data_structures.types import TerrainMapPtr
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
-from random_walk_package.data_sources.movebank_adapter import get_start_end_dates, get_bounding_box, \
-    bbox_to_discrete_space, get_unique_animal_ids, get_animal_coordinates
+from random_walk_package.data_sources.movebank_adapter import get_start_end_dates, \
+    bbox_to_discrete_space, get_unique_animal_ids, get_animal_coordinates, get_bounding_boxes_per_animal, \
+    bbox_dict_to_discrete_space
 
 
 # landcover_to_discrete_txt is imported in the original but not used, can be kept or removed.
@@ -173,7 +173,7 @@ class AnimalMovementProcessor:
             self.data_file = data_file
 
         self.df = None
-        self.bbox = None
+        self.bbox:dict[str, tuple[float, float, float, float]] = {}
         self.discrete_params = None
         self.center_lat = None
         self.center_lon = None
@@ -185,7 +185,6 @@ class AnimalMovementProcessor:
         # Initialize common resources
         self._load_data()
         self._compute_bbox()
-        self._compute_center()
 
     def _load_data(self):
         if self.df is None:
@@ -198,105 +197,75 @@ class AnimalMovementProcessor:
 
     def _compute_bbox(self):
         """Compute bounding box of interest with 10% padding on each side."""
-        if self.bbox is None and self.df is not None:
-            self.bbox = get_bounding_box(self.df)
-
-    def _compute_center(self):
-        if self.bbox and (self.center_lat is None or self.center_lon is None):
-            self.center_lat = (self.bbox[1] + self.bbox[3]) / 2
-            self.center_lon = (self.bbox[0] + self.bbox[2]) / 2
+        print("Computing bounding boxes ...")
+        self.bbox = get_bounding_boxes_per_animal(self.df)
 
     def _compute_discrete_params(self, resolution=200):
         """Convert lon lat bbox to array coordinates bb"""
         if self.discrete_params is None and self.bbox:
-            self.discrete_params = bbox_to_discrete_space(self.bbox, resolution)
-
-    # Public interface methods
-    def create_landcover_data(self, resolution=200,
-                              input_file="landcover_baboons.tif") -> TerrainMapPtr | None:  # type: ignore
-        """Generate landcover data for movement area"""
-        if not self.bbox:
-            print("Error: Bounding box not computed. Load data first.")
-            return None
-        self._compute_discrete_params(resolution)
-        if not self.discrete_params:
-            print("Error: Discrete parameters not computed.")
-            return None
-
-        _min_lon, _min_lat, _max_lon, _max_lat = self.bbox
-
-        # Print discrete space parameters
-        print(f"Discrete space params: {self.discrete_params}")
-
-        # Ensure input_file path is relative to resources if not absolute
-        if not os.path.isabs(input_file):
-            landcover_tif_path = os.path.join(self.resources_dir, input_file)
-        else:
-            landcover_tif_path = input_file
-
-        os.makedirs(os.path.dirname(landcover_tif_path), exist_ok=True)
-
-        # Generate and process landcover
-        fetch_landcover_data(self.bbox, landcover_tif_path)  # expects full path for output
-
-        return landcover_to_discrete_ptr(landcover_tif_path,
-                                         self.discrete_params[2],  # width_discrete
-                                         self.discrete_params[3],  # height_discrete
-                                         _min_lon, _max_lat, _max_lon, _min_lat)  # min_lon, max_lat for origin (top-left)
+            self.discrete_params = bbox_dict_to_discrete_space(self.bbox, resolution)
 
     def create_landcover_data_txt(self, resolution=200, out_directory=None,
-                                  input_file="landcover_baboons123.tif") -> str:
-        """Generate landcover data for movement area and save as .txt if not already present."""
-        # Construct output name: input_file without .tif, add _{resolution}.txt
-        base_name = os.path.splitext(os.path.basename(input_file))[0]
+                                  input_file="landcover_baboons123.tif") -> dict[str, str]:
+        """Generate per-animal landcover data (TIFF + TXT), named with animal_id and bbox.
 
-        if out_directory:
-            landcover_tif_path = os.path.join(out_directory, input_file)
-        else:
-            if not os.path.isabs(input_file):
-                landcover_tif_path = os.path.join(self.resources_dir, input_file)
-            else:
-                landcover_tif_path = input_file
-
-        txt_name = f"{base_name}_{resolution}.txt"
-        txt_name = os.path.join(os.path.dirname(landcover_tif_path), txt_name)
-
-        # Check if txt already exists
-        if os.path.exists(txt_name):
-            print(f"Landcover TXT already exists at {txt_name}, skipping generation.")
-            return txt_name
-
+        Returns:
+            dict[str, str]: { animal_id: txt_path }
+        """
         if not self.bbox:
-            print("Error: Bounding box not computed. Load data first.")
-            return "None"
+            print("Error: Bounding boxes not computed. Load data first.")
+            return {}
 
+        # Compute per-animal discrete params once
         self._compute_discrete_params(resolution)
         if not self.discrete_params:
             print("Error: Discrete parameters not computed.")
-            return "None"
+            return {}
 
-        _min_lon, _min_lat, _max_lon, _max_lat = self.bbox
-
-        # Print discrete space parameters
-        print(f"Discrete space params: {self.discrete_params}")
-
-        os.makedirs(os.path.dirname(landcover_tif_path), exist_ok=True)
-
-        # ⚠️ TIFF nur erzeugen, wenn sie noch nicht existiert
-        if not os.path.exists(landcover_tif_path):
-            print(f"Fetching landcover data to {landcover_tif_path}")
-            fetch_landcover_data(self.bbox, landcover_tif_path)
+        # Target directory for outputs
+        if out_directory:
+            target_dir = out_directory
         else:
-            print(f"TIFF file already exists at {landcover_tif_path}, skipping fetch.")
+            target_dir = self.resources_dir
+        os.makedirs(target_dir, exist_ok=True)
 
-        # TXT wird neu erstellt
-        return landcover_to_discrete_txt(
-            landcover_tif_path,
-            self.discrete_params[2],  # width_discrete
-            self.discrete_params[3],  # height_discrete
-            _min_lon, _max_lat, _max_lon, _min_lat,
-            txt_name
-        )
+        results: dict[str, str] = {}
+        # Expecting self.bbox as {animal_id: (min_lon, min_lat, max_lon, max_lat)}
+        for animal_id, bbox in self.bbox.items():
+            min_lon, min_lat, max_lon, max_lat = bbox
+            base = f"landcover_{animal_id}_{min_lon:.1f}_{min_lat:.1f}_{max_lon:.1f}_{max_lat:.1f}"
+            tif_path = os.path.join(target_dir, f"{base}.tif")
+            txt_path = os.path.join(target_dir, f"{base}_{resolution}.txt")
+
+            # Fetch TIFF if needed
+            if not os.path.exists(tif_path):
+                print(f"Fetching landcover data to {tif_path}")
+                fetch_landcover_data(bbox, tif_path)
+            else:
+                print(f"TIFF file already exists at {tif_path}, skipping fetch.")
+
+            # Look up per-animal discrete resolution; expected (0, 0, x_res, y_res)
+            if isinstance(self.discrete_params, dict):
+                dp = self.discrete_params.get(str(animal_id)) or self.discrete_params.get(animal_id)
+            else:
+                dp = None
+            if not dp:
+                print(f"Warning: No discrete params for animal_id={animal_id}. Skipping.")
+                continue
+            _, _, x_res, y_res = dp
+
+            # Always (re)write TXT from TIFF for consistency
+            landcover_to_discrete_txt(
+                tif_path,
+                x_res,  # width_discrete
+                y_res,  # height_discrete
+                min_lon, max_lat, max_lon, min_lat,
+                txt_path
+            )
+            print(f"Wrote landcover TXT: {txt_path}")
+            results[str(animal_id)] = txt_path
+
+        return results
 
     def create_weather_tuples(self) -> list[tuple]:
         """Generate weather tuples grouped by movement steps"""
@@ -323,46 +292,45 @@ class AnimalMovementProcessor:
             ))
         return sampled_weather
 
-    def create_movement_data(self, samples=10, width=None, height=None):
+    def create_movement_data(self, samples=10) -> dict[str, list[tuple[int, int]]]:
         if self.df is None:
             self._load_data()
 
-        # Process each animal ID and store coordinates in a list
-        all_coords = []
+        coords_by_animal: dict[str, list[tuple[int, int]]] = {}
         animal_ids = get_unique_animal_ids(self.df)
+
         for aid in animal_ids:
-            # Get coordinates for current animal ID
+            # Resolve this animal's bbox
+            bbox = None
+            if isinstance(self.bbox, dict):
+                bbox = self.bbox.get(aid) or self.bbox.get(str(aid))
+            if bbox is None:
+                # Skip if no bbox available for this animal
+                continue
+
+            # Resolve width/height from per-animal discrete params (fallback to provided width/height or defaults)
+            x_res = 0
+            y_res = 0
+            if isinstance(self.discrete_params, dict):
+                dp = self.discrete_params.get(aid) or self.discrete_params.get(str(aid))
+                if dp and len(dp) == 4:
+                    _, _, x_res_dp, y_res_dp = dp
+                    x_res = x_res_dp
+                    y_res = y_res_dp
+
+            if x_res is None:
+                x_res = 100
+            if y_res is None:
+                y_res = 100
+
+            # Get coordinates for current animal ID using its own bbox and per-animal resolution
             coords_data = get_animal_coordinates(
-                self.df, aid, samples, width, height, self.bbox
+                self.df, aid, samples, x_res, y_res, bbox
             )
-            all_coords.append(coords_data)
+            coords_by_animal[str(aid)] = coords_data
 
-        self.coords = all_coords  # Store list of coordinate data
-        return self.coords
-
-    def create_step_points(self, steps: int) -> Point2DArray:
-        """Convert sampled coordinates to a Point2D array"""
-        if self.coords is None:  # Removed self.timeline check as it might not always be needed for just points
-            raise ValueError("Call create_movement_data() first to generate coordinates.")
-
-        # Sample coordinates
-        # Assuming self.coords is a structure with .coordinates (list of Point(x,y)) and .num_points
-        num_points = self.coords.num_points if hasattr(self.coords, 'num_points') else len(self.coords.coordinates)
-
-        if num_points == 0:
-            return create_point2d_array([])
-
-        step_size = max(1, num_points // steps)
-        sampled_coords_tuples = []
-
-        for i in range(0, num_points, step_size):
-            if len(sampled_coords_tuples) >= steps:
-                break
-            # Assuming self.coords.coordinates is a list of objects with .x and .y
-            coord = self.coords.coordinates[i]
-            sampled_coords_tuples.append((coord.x, coord.y))
-
-        return create_point2d_array(sampled_coords_tuples)
+        self.coords = coords_by_animal
+        return coords_by_animal
 
     def fetch_trajectory_weather(self, output_filename="weather_trajectory.csv") -> list[tuple]:
         """Fetch weather for pre-loaded trajectory coordinates and timestamps"""
