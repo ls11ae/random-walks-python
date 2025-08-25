@@ -5,7 +5,6 @@ import numpy as np
 from random_walk_package.bindings.brownian_walk import plot_combined_terrain
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
-from random_walk_package.bindings.data_processing.walk_json import walk_to_json
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 
 
@@ -75,6 +74,11 @@ class MixedWalker:
                 start_x, start_y = steps[i]
                 end_x, end_y = steps[i + 1]
                 print(start_x, start_y, end_x, end_y)
+
+                if start_x == end_x and start_y == end_y:
+                    full_path.extend([(start_x, start_y)])
+                    continue
+
                 print(self.serialization_path)
                 dp_dir = os.path.join(self.base_project_dir, 'resources', self.serialization_path,
                                       "DP_T" + str(self.T) + "_X" + str(start_x) + "_Y" + str(start_y))
@@ -102,13 +106,14 @@ class MixedWalker:
                     serialize_path=self.serialization_path,
                     dp_dir=dp_dir
                 )
-                segment = get_walk_points(walk_ptr)
-
+                if walk_ptr.contents:
+                    segment = get_walk_points(walk_ptr)
+                else:
+                    segment = [(start_x, start_y), (end_x, end_y)]
                 # Cleanup C memory
                 if not serialized:
                     dll.tensor4D_free(dp_matrix_step, self.T)
                 dll.point2d_array_free(walk_ptr)
-
 
                 # Concatenate paths (skip duplicate point)
                 full_path.extend(segment[:-1])
@@ -116,6 +121,7 @@ class MixedWalker:
             print(
                 f"Finished walking {animal_id} from {steps[0]} to {steps[-1]} with {len(steps)} steps."
             )
+            kernels_map3d_free(self.tensor_map)
             # Add final point
             full_path.append(steps[-1])
             walk = np.array(full_path)

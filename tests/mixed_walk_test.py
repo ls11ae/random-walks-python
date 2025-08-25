@@ -1,5 +1,6 @@
 from memory_profiler import profile
 
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_landmark_mapping
 from random_walk_package.core.MixedTimeWalker import MixedTimeWalker
 from random_walk_package.core.MixedWalker import *
 
@@ -7,8 +8,16 @@ from random_walk_package.core.MixedWalker import *
 def mixed_walk_test():
     T = 10
 
-    study = "Boars_Austria/"
-    walker = MixedWalker(T=T, resolution=400, animal_type=MEDIUM, S=3, study_folder=study)
+    study = "catharus_bicknelly/"
+    kernel_mapping = create_mixed_kernel_parameters(animal_type=AIRBORNE, base_step_size=3)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=3, directions=4, diffusity=1, max_bias_x=0,
+                         max_bias_y=0)
+    set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
+                         step_size=3,
+                         directions=1,
+                         diffusity=1.6,
+                         max_bias_x=0, max_bias_y=0)
+    walker = MixedWalker(T=T, resolution=600, animal_type=AIRBORNE, kernel_mapping=kernel_mapping, S=3, study_folder=study)
     #steps = [(166, 166), (422, 300)]
     walker.generate_walk(serialized=False)
 

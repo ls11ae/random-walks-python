@@ -21,11 +21,14 @@ def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.05) -> di
     result: dict[str, tuple[float, float, float, float]] = {}
 
     if 'tag-local-identifier' not in df.columns:
+        print("No tag-local-identifier column found in DataFrame")
         return result  # No animal IDs available
 
     for animal_id, group in df.groupby('tag-local-identifier'):
+        print(f"Processing animal {animal_id}")
         coords = group[['location-long', 'location-lat']].dropna()
         if coords.empty:
+            print(f"No valid coordinates found for animal {animal_id}")
             continue
 
         min_lon_raw = coords['location-long'].min()
@@ -33,15 +36,20 @@ def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.05) -> di
         min_lat_raw = coords['location-lat'].min()
         max_lat_raw = coords['location-lat'].max()
 
+        print(
+            f"Raw bounds for {animal_id}: lon={min_lon_raw:.6f} to {max_lon_raw:.6f}, lat={min_lat_raw:.6f} to {max_lat_raw:.6f}")
+
         lon_range = max(max_lon_raw - min_lon_raw, 0.0)
         lat_range = max(max_lat_raw - min_lat_raw, 0.0)
 
         # Handle degenerate cases by inflating a tiny range (avoids division by zero later)
         if lon_range == 0.0:
+            print(f"Zero longitude range found for animal {animal_id}, inflating")
             lon_range = 1e-6
             min_lon_raw -= lon_range / 2.0
             max_lon_raw += lon_range / 2.0
         if lat_range == 0.0:
+            print(f"Zero latitude range found for animal {animal_id}, inflating")
             lat_range = 1e-6
             min_lat_raw -= lat_range / 2.0
             max_lat_raw += lat_range / 2.0
@@ -60,8 +68,11 @@ def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.05) -> di
         min_lat = max(min_lat, -90.0)
         max_lat = min(max_lat, 90.0)
 
+        print(f"Final bounds for {animal_id}: lon={min_lon:.6f} to {max_lon:.6f}, lat={min_lat:.6f} to {max_lat:.6f}")
+
         result[str(animal_id)] = (min_lon, min_lat, max_lon, max_lat)
 
+    print(f"Processed {len(result)} animals")
     return result
 
 
