@@ -1,4 +1,10 @@
+import os
+from typing import Any
+
 import rasterio
+
+from random_walk_package.data_sources.geo_fetcher import lonlat_bbox_to_utm, utm_bbox_to_lonlat
+from pyproj import Transformer
 
 landcover_classes = {
     10: "Tree cover",
@@ -15,15 +21,30 @@ landcover_classes = {
 }
 
 
-def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, output="terrain.txt") -> str:
+def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, output="terrain.txt") -> \
+        tuple[int, tuple[float, float, float, float]] | None:
+    if os.path.exists(output):
+        print(f"Output file {output} already exists, skipping generation")
     try:
+        # BBox in Lon/Lat
+        bbox_lonlat = (min_lon, min_lat, max_lon, max_lat)
+
         with rasterio.open(file_path) as src:
+            crs_epsg = src.crs.to_epsg()
+            if crs_epsg is None:
+                raise ValueError("Raster CRS has no valid EPSG code")
+
+            # Transform BBox to CRS of grid (eg. UTM)
+            min_x, min_y, max_x, max_y = lonlat_bbox_to_utm(
+                *bbox_lonlat, crs_epsg
+            )
+
             landcover_array = src.read(1)
             array_height, array_width = landcover_array.shape
 
             # Calculate raster indices for the bounding box coordinates
-            row_start, col_start = src.index(min_lon, max_lat)
-            row_stop, col_stop = src.index(max_lon, min_lat)
+            row_start, col_start = src.index(min_x, max_y)
+            row_stop, col_stop = src.index(max_x, min_y)
 
             # Ensure start <= stop for rows and columns
             if row_start > row_stop:
@@ -75,6 +96,15 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
                     f.write(' '.join(row_values) + '\n')
 
             print(f"Landcover grid written to {output}")
-            return output
+            print(f"UTM Bounds: {min_x}, {min_y}, {max_x}, {max_y}")  # Debug output
+            # Innerhalb von landcover_to_discrete_txt, direkt nach dem Schreiben der TXT-Datei:
+            lon_min, lat_min, lon_max, lat_max = utm_bbox_to_lonlat(min_x, min_y, max_x, max_y, crs_epsg)
+            print(f"Debug: UTM Bounds zurück transformiert in Lon/Lat: ({lon_min}, {lat_min}, {lon_max}, {lat_max})")
+
+            return crs_epsg, (min_x, min_y, max_x, max_y)
     except rasterio.RasterioIOError as e:
         print(f"Error opening the file: {e}")
+
+
+
+

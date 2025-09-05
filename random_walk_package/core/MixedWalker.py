@@ -2,10 +2,12 @@ from pathlib import Path
 
 import numpy as np
 
+from random_walk_package import walk_to_json
 from random_walk_package.bindings.brownian_walk import plot_combined_terrain
-from random_walk_package.bindings.data_structures.point2D import get_walk_points
+from random_walk_package.bindings.data_structures.point2D import get_walk_points, point2d_arr_free
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
+from random_walk_package.data_sources.walk_visualization import walk_to_osm
 
 
 class MixedWalker:
@@ -73,6 +75,7 @@ class MixedWalker:
             for i in range(len(steps) - 1):
                 start_x, start_y = steps[i]
                 end_x, end_y = steps[i + 1]
+                print("Start: " + str(start_x) + ", " + str(start_y))
                 print(start_x, start_y, end_x, end_y)
 
                 if start_x == end_x and start_y == end_y:
@@ -90,7 +93,7 @@ class MixedWalker:
                 dp_matrix_step = mix_walk(W=width, H=height, terrain_map=spatial_map, kernels_map=self.tensor_map,
                                           start_x=int(start_x), start_y=int(start_y), T=self.T, serialize=serialized,
                                           recompute=recmp,
-                                          serialize_path=self.serialization_path)
+                                          serialize_path=self.serialization_path, mapping=self.mapping)
                 if serialized:
                     print(dp_dir)
                 # Backtrace from the end point
@@ -104,7 +107,8 @@ class MixedWalker:
                     directory=0,
                     serialize=serialized,
                     serialize_path=self.serialization_path,
-                    dp_dir=dp_dir
+                    dp_dir=dp_dir,
+                    mapping=self.mapping
                 )
                 if walk_ptr.contents:
                     segment = get_walk_points(walk_ptr)
@@ -121,9 +125,15 @@ class MixedWalker:
             print(
                 f"Finished walking {animal_id} from {steps[0]} to {steps[-1]} with {len(steps)} steps."
             )
-            kernels_map3d_free(self.tensor_map)
             # Add final point
             full_path.append(steps[-1])
+
+            geodetic_path = self.movebank_processor.grid_coordinates_to_geodetic(full_path, animal_id)
+            walk_to_osm(geodetic_path, animal_id, self.walks_path)
+            kernels_map3d_free(self.tensor_map)
             walk = np.array(full_path)
-            plot_combined_terrain(pointer(spatial_map), walk, steps=steps, title=self.movebank_study)
-            #terrain_map_free(spatial_map)
+            steps_c = create_point2d_array(steps)
+            walk_c = create_point2d_array(walk)
+            walk_to_json(walk_c, json_file=os.path.join(self.walks_path, f"{animal_id}_{self.resolution}.json"), steps=steps_c, terrain_map=pointer(spatial_map))
+            #plot_combined_terrain(pointer(spatial_map), walk, steps=steps, title=self.movebank_study)
+

@@ -1,39 +1,58 @@
 import requests
 import pandas as pd
 from pystac_client import Client
+from pyproj import Transformer
 import planetary_computer
 import rioxarray
 
 from random_walk_package.bindings.data_processing.movebank_parser import Coordinate_array
 
-# --- Configuration ---
 
-# 1. Area of Interest (AOI)
-# Example Bounding Box around the study reference location (adjust as needed)
-AOI_BBOX_KAZAKHSTAN: tuple[float, float, float, float] = (75.0, 43.0, 77.0, 44.0)  # Wider example
-AOI_BBOX: tuple[float, float, float, float] = AOI_BBOX_KAZAKHSTAN
-min_lon, min_lat, max_lon, max_lat = AOI_BBOX
-AOI_CENTER_LAT: float = (min_lat + max_lat) / 2.0
-AOI_CENTER_LON: float = (min_lon + max_lon) / 2.0
+def reproject_to_utm(infile, outfile=None):
+    da = rioxarray.open_rasterio(infile)
 
-# 2. Time Period
-# For Movebank, use the entire study duration based on the provided info
-MB_TIMESTAMP_START_STR = "2018-07-08 02:40:08.000"
-MB_TIMESTAMP_END_STR = "2021-11-03 12:59:35.000"
+    # Get center coordinates
+    bounds = da.rio.bounds()
+    center_lon = (bounds[0] + bounds[2]) / 2
+    center_lat = (bounds[1] + bounds[3]) / 2
 
-OM_START_DATE = "2018-07-08"
-OM_END_DATE = "2021-11-03"
+    utm_zone = int((center_lon + 180) / 6) + 1
 
-# 3. Movebank Configuration
-MOVEBANK_STUDY_ID = 497138661
-MOVEBANK_SENSOR_TYPE_ID = 653  # GPS
-MOVEBANK_USERNAME = "omarc98"  # Keep your username
-MOVEBANK_PASSWORD = "Sgtb3942"  # Keep your password
+    epsg_code = 32600 + utm_zone if center_lat >= 0 else 32700 + utm_zone
 
-# 4. Output files
-LANDCOVER_OUTPUT_FILE = "../landcover_aoi.tif"
-WEATHER_OUTPUT_FILE = "../weather_aoi.csv"
-MOVEBANK_OUTPUT_FILE = "../movebank_aoi.csv"
+    print(f"Reprojecting to EPSG:{epsg_code} for center coordinates: {center_lon}, {center_lat}")
+
+    # Reprojection
+    da_utm = da.rio.reproject(f"EPSG:{epsg_code}")
+
+    if outfile:
+        da_utm.rio.to_raster(outfile, compress="LZW")
+
+    return outfile if outfile else da_utm, epsg_code
+
+def lonlat_bbox_to_utm(min_lon, min_lat, max_lon, max_lat, epsg_code):
+    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg_code}", always_xy=True)
+    minx, miny = transformer.transform(min_lon, min_lat)
+    maxx, maxy = transformer.transform(max_lon, max_lat)
+    return minx, miny, maxx, maxy
+
+
+def utm_bbox_to_lonlat(min_x, min_y, max_x, max_y, epsg_code):
+    transformer = Transformer.from_crs(f"EPSG:{epsg_code}", "EPSG:4326", always_xy=True)
+    min_lon, min_lat = transformer.transform(min_x, min_y)
+    max_lon, max_lat = transformer.transform(max_x, max_y)
+    return min_lon, min_lat, max_lon, max_lat
+
+def utm_to_lonlat(x, y, epsg_code):
+    transformer = Transformer.from_crs(f"EPSG:{epsg_code}", "EPSG:4326", always_xy=True)
+    lon, lat = transformer.transform(x, y)
+    return lon, lat
+
+
+def geodetic_to_utm(lon, lat, epsg_code):
+    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg_code}", always_xy=True)
+    x, y = transformer.transform(lon, lat)
+    return x, y
 
 
 # --- 1. Fetch Landcover Data (ESA WorldCover via Planetary Computer) ---
@@ -85,9 +104,9 @@ def fetch_landcover_data(bbox, output_filename="landcover_aoi.tif"):
         clipped_xds.rio.to_raster(output_filename, compress='LZW', dtype='uint8')
         print(f"Landcover data saved to {output_filename}")
 
-        # For further processing in Python, you can return the xarray.DataArray
-        # print("Landcover data snippet (shape):", clipped_xds.shape)
-        # print(clipped_xds)
+        # project to equiareal grid
+        print("Reprojecting to UTM zone...")
+        reproject_to_utm(output_filename, output_filename)
         return output_filename
 
     except Exception as e:
@@ -281,60 +300,6 @@ def fetch_movebank_data_events(study_id, sensor_type_id,
     except Exception as e:
         print(f"An unexpected error occurred with Movebank event data: {e}")
     return None
-
-
-# --- Main Execution ---
-if __name__ == "__main__":
-    print("--- Starting Data Fetching Script ---")
-
-    # 1. Landcover Data
-    # Note: This step requires internet and can take a moment.
-    # Ensure the AOI is not excessively large for a quick test.
-    landcover_file = fetch_landcover_data(AOI_BBOX, LANDCOVER_OUTPUT_FILE)
-    if landcover_file:
-        print(f"Successfully fetched landcover. Check: {landcover_file}")
-        # You can add code here to open and inspect with rasterio if needed
-        # e.g., src = rasterio.open(landcover_file)
-        # print("Landcover CRS:", src.crs)
-        # print("Landcover bounds:", src.bounds)
-        # data_sample = src.read(1, window=((0,10),(0,10))) # read a small window
-        # print("Landcover data sample (top-left 10x10 pixels):\n", data_sample)
-    else:
-        print("Landcover fetching failed.")
-
-    # 2. Weather Data
-    weather_file = fetch_weather_data(AOI_CENTER_LAT, AOI_CENTER_LON,
-                                      OM_START_DATE, OM_END_DATE, WEATHER_OUTPUT_FILE)
-    if weather_file:
-        print(f"Successfully fetched weather data. Check: {weather_file}")
-        # df_weather = pd.read_csv(weather_file)
-        # print("Weather data sample:\n", df_weather.head())
-    else:
-        print("Weather fetching failed.")
-
-    # 3. Movebank Data
-    # Using public data, so no username/password needed for this specific study
-    movebank_file = fetch_movebank_data(MOVEBANK_STUDY_ID, MOVEBANK_SENSOR_TYPE_ID,
-                                        MB_TIMESTAMP_START_STR, MB_TIMESTAMP_END_STR,
-                                        AOI_BBOX, MOVEBANK_OUTPUT_FILE)
-    # username=MOVEBANK_USERNAME, password=MOVEBANK_PASSWORD) # Uncomment for your own data
-    if movebank_file:
-        MOVEBANK_STUDY_ID = 497138661
-        MOVEBANK_SENSOR_TYPE_ID = 653  # GPS (likely)
-        MB_TIMESTAMP_START_STR = "2018-07-08 02:40:08.000"
-        MB_TIMESTAMP_END_STR = "2021-11-03 12:59:35.000"
-        # Example Bounding Box (adjust as needed or set to None for the entire study area)
-        AOI_BBOX_KAZAKHSTAN = [70.0, 40.0, 80.0, 45.0]
-        # AOI_BBOX_KAZAKHSTAN = None # To get all data
-
-        fetched_file = fetch_movebank_data_events(MOVEBANK_STUDY_ID, MOVEBANK_SENSOR_TYPE_ID,
-                                                  MB_TIMESTAMP_START_STR, MB_TIMESTAMP_END_STR,
-                                                  bbox=AOI_BBOX_KAZAKHSTAN,
-                                                  username=MOVEBANK_USERNAME, password=MOVEBANK_PASSWORD)
-
-        if fetched_file:
-            print(f"\nEvent data successfully fetched and saved to: {fetched_file}")
-
 
 def fetch_weather_for_trajectory(coords: Coordinate_array, timestamps: list[str],
                                  output_filename: str = "weather_trajectory.csv") -> pd.DataFrame:

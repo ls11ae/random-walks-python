@@ -10,7 +10,7 @@ def landcover_test():
     df = pd.read_csv(file)
     (_min_lon, _min_lat, _max_lon, _max_lat) = get_bounding_box(df)
     bb = (_min_lon, _min_lat, _max_lon, _max_lat)
-    db = [_, _, res_x, res_y] = bbox_to_discrete_space((_min_lon, _min_lat, _max_lon, _max_lat), 200)
+    db = [_, _, res_x, res_y] = bbox_to_discrete_space((_min_lon, _min_lat, _max_lon, _max_lat))
     print(db)
     print(map_lon_to_x(20.422875, _min_lon, _max_lon, res_x))
     print(map_lon_to_x(-34.467708, _min_lat, _max_lat, res_y))

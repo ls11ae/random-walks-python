@@ -5,6 +5,7 @@ import pandas as pd
 
 from random_walk_package import dll
 from random_walk_package.bindings.data_processing.movebank_parser import Coordinate_array, Coordinate
+from random_walk_package.data_sources.geo_fetcher import lonlat_bbox_to_utm
 
 
 def get_unique_animal_ids(df: pd.DataFrame) -> list:
@@ -12,7 +13,7 @@ def get_unique_animal_ids(df: pd.DataFrame) -> list:
     return df['tag-local-identifier'].unique().tolist()
 
 
-def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.05) -> dict[
+def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.1) -> dict[
     str, tuple[float, float, float, float]]:
     """Return per-animal padded bounding boxes as a dict:
     { animal_id: (min_lon, min_lat, max_lon, max_lat) }.
@@ -121,6 +122,7 @@ def bbox_dict_to_discrete_space(
         bbox_dict: { animal_id: (min_lon, min_lat, max_lon, max_lat) }
         samples: Target resolution along the longer ground-distance dimension.
 
+
     Returns:
         { animal_id: (0, 0, x_res, y_res) }
     """
@@ -148,32 +150,60 @@ def map_lat_to_y(lat, min_lat, max_lat, y_res):
     return int((max_lat - lat) / (max_lat - min_lat) * y_res)
 
 
-def get_animal_coordinates(df: pd.DataFrame, animal_id: str, samples: int = None,
-                           width=100, height=100, bbox: tuple[float, float, float, float] | None = None):
-    """Return coordinates and timestamps for a specific animal.
-    If samples is provided, returns equidistant samples.
-    If bbox is provided, map using that bbox (must match terrain bbox) for consistent alignment.
+def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
+                           samples: int = None, width=100, height=100,
+                           bbox_utm: tuple[float, float, float, float] | None = None):
     """
-    # Filter and clean data
+    Return mapped grid coordinates for a specific animal.
+    If samples is provided, returns equidistant samples.
+    If bbox_utm is provided, use it (must be in UTM!).
+    """
+    from pyproj import Transformer
+
+    # prepare transformer
+    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg_code}", always_xy=True)
+
+    # filter and clean
     animal_df = df[df['tag-local-identifier'] == animal_id]
     clean_df = animal_df[['timestamp', 'location-long', 'location-lat']].dropna()
 
-    # Handle sampling
+    # optional sampling
     if samples is not None and samples > 0:
         step = max(1, len(clean_df) // samples)
         clean_df = clean_df.iloc[::step].head(samples)
 
-    # Decide mapping extents: use provided bbox if given, else fallback to per-animal extents
-    if bbox is not None:
-        min_lon, min_lat, max_lon, max_lat = bbox
-    else:
-        min_lon, max_lon = clean_df['location-long'].min(), clean_df['location-long'].max()
-        min_lat, max_lat = clean_df['location-lat'].min(), clean_df['location-lat'].max()
+    # transform all coordinates to UTM
+    utm_coords = clean_df.apply(
+        lambda row: transformer.transform(row['location-long'], row['location-lat']), axis=1
+    )
+    clean_df['x'] = [pt[0] for pt in utm_coords]
+    clean_df['y'] = [pt[1] for pt in utm_coords]
 
+    # bounding box: either provided (in UTM) or computed from animal
+    if bbox_utm is not None:
+        min_x, min_y, max_x, max_y = bbox_utm
+    else:
+        print("bbox_utm not provided")
+        exit(1)
+
+    # map to discrete grid
     mapped_coords = []
     for _, row in clean_df.iterrows():
-        x = map_lon_to_x(row['location-long'], min_lon, max_lon, width)
-        y = map_lat_to_y(row['location-lat'], min_lat, max_lat, height)
-        mapped_coords.append((x, y))
+        # Ensure coordinates are within bounds
+        x_utm = max(min(row['x'], max_x), min_x)
+        y_utm = max(min(row['y'], max_y), min_y)
 
+        x = int((x_utm - min_x) / (max_x - min_x) * width)
+        y = int((max_y - y_utm) / (max_y - min_y) * height)
+
+        # Ensure grid coordinates are within [0, width-1] and [0, height-1]
+        x = max(0, min(width - 1, x))
+        y = max(0, min(height - 1, y))
+
+        # Rücktransformation: Grid -> UTM
+        utm_x_back = min_x + (x / (width - 1)) * (max_x - min_x)
+        utm_y_back = max_y - (y / (height - 1)) * (max_y - min_y)
+
+        mapped_coords.append((x, y))
+        print( f"Original UTM: ({x_utm:.2f}, {y_utm:.2f}) -> Grid: ({x}, {y}) -> Rück UTM: ({utm_x_back:.2f}, {utm_y_back:.2f})")
     return mapped_coords

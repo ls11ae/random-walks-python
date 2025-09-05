@@ -174,6 +174,8 @@ class AnimalMovementProcessor:
 
         self.df = None
         self.bbox:dict[str, tuple[float, float, float, float]] = {}
+        self.bbox_utm:dict[str, tuple[float, float, float, float]] = {}
+        self.aid_espg_map: dict[str, str] = {}
         self.discrete_params = None
         self.center_lat = None
         self.center_lon = None
@@ -205,8 +207,11 @@ class AnimalMovementProcessor:
         if self.discrete_params is None and self.bbox:
             self.discrete_params = bbox_dict_to_discrete_space(self.bbox, resolution)
 
-    def create_landcover_data_txt(self, resolution=200, out_directory=None,
-                                  input_file="landcover_baboons123.tif") -> dict[str, str]:
+    def bbox_utm_of(self, animal_id:str):
+        return self.bbox_utm.get(str(animal_id))
+
+
+    def create_landcover_data_txt(self, resolution=200, out_directory=None) -> dict[str, str]:
         """Generate per-animal landcover data (TIFF + TXT), named with animal_id and bbox.
 
         Returns:
@@ -255,17 +260,21 @@ class AnimalMovementProcessor:
             _, _, x_res, y_res = dp
 
             # Always (re)write TXT from TIFF for consistency
-            landcover_to_discrete_txt(
+
+            espg_code, bbox_utm = landcover_to_discrete_txt(
                 tif_path,
                 x_res,  # width_discrete
                 y_res,  # height_discrete
                 min_lon, max_lat, max_lon, min_lat,
                 txt_path
             )
+            self.aid_espg_map[str(animal_id)] = str(espg_code)
+            self.bbox_utm[str(animal_id)] = bbox_utm
             print(f"Wrote landcover TXT: {txt_path}")
             results[str(animal_id)] = txt_path
 
         return results
+
 
     def create_weather_tuples(self) -> list[tuple]:
         """Generate weather tuples grouped by movement steps"""
@@ -300,37 +309,81 @@ class AnimalMovementProcessor:
         animal_ids = get_unique_animal_ids(self.df)
 
         for aid in animal_ids:
-            # Resolve this animal's bbox
-            bbox = None
-            if isinstance(self.bbox, dict):
-                bbox = self.bbox.get(aid) or self.bbox.get(str(aid))
-            if bbox is None:
-                # Skip if no bbox available for this animal
+            # Resolve this animal's UTM bbox
+            bbox_utm = None
+            if isinstance(self.bbox_utm, dict):
+                bbox_utm = self.bbox_utm.get(aid) or self.bbox_utm.get(str(aid))
+            if bbox_utm is None:
+                print(f"No UTM bbox found for animal {aid}")
                 continue
 
-            # Resolve width/height from per-animal discrete params (fallback to provided width/height or defaults)
-            x_res = 0
-            y_res = 0
+            # Resolve width/height from per-animal discrete params
+            x_res = 100
+            y_res = 100
             if isinstance(self.discrete_params, dict):
                 dp = self.discrete_params.get(aid) or self.discrete_params.get(str(aid))
                 if dp and len(dp) == 4:
-                    _, _, x_res_dp, y_res_dp = dp
-                    x_res = x_res_dp
-                    y_res = y_res_dp
+                    _, _, x_res, y_res = dp
 
-            if x_res is None:
-                x_res = 100
-            if y_res is None:
-                y_res = 100
-
-            # Get coordinates for current animal ID using its own bbox and per-animal resolution
+            # Get coordinates for current animal ID using its UTM bbox
             coords_data = get_animal_coordinates(
-                self.df, aid, samples, x_res, y_res, bbox
+                df=self.df,
+                animal_id=aid,
+                epsg_code=self.aid_espg_map[str(aid)],
+                samples=samples,
+                width=x_res,
+                height=y_res,
+                bbox_utm=bbox_utm
             )
             coords_by_animal[str(aid)] = coords_data
 
         self.coords = coords_by_animal
         return coords_by_animal
+
+    def grid_coordinates_to_geodetic(self, coord: list[tuple[int, int]], animal_id: str) -> list[tuple[float, float]]:
+        """
+        Convert grid coordinates (x, y) back to lon/lat (WGS84).
+
+        Parameters
+        ----------
+        coord : list of (int, int)
+            Grid coordinates (x, y).
+        animal_id : str
+            Animal identifier.
+
+        Returns
+        -------
+        list of (lon, lat)
+            Geographic coordinates (WGS84).
+        """
+        from pyproj import Transformer
+
+        result: list[tuple[float, float]] = []
+
+        epsg_code = self.aid_espg_map.get(str(animal_id))
+        if epsg_code is None:
+            raise ValueError(f"No EPSG code for animal {animal_id}")
+
+        bbox_utm = self.bbox_utm.get(str(animal_id))
+        if bbox_utm is None:
+            raise ValueError(f"No bbox_utm for animal {animal_id}")
+
+        _, _, width, height = self.discrete_params.get(str(animal_id))
+        if width is None or height is None:
+            raise ValueError(f"No discrete params for animal {animal_id}")
+
+        min_x, min_y, max_x, max_y = bbox_utm
+
+        for x, y in coord:
+            # Grid → UTM
+            utm_x = min_x + (x / (width - 1)) * (max_x - min_x)
+            utm_y = max_y - (y / (height - 1)) * (max_y - min_y)
+
+            # UTM → Geodetic
+            lon, lat = utm_to_lonlat(utm_x, utm_y, epsg_code)
+            result.append((lat, lon))
+
+        return result
 
     def fetch_trajectory_weather(self, output_filename="weather_trajectory.csv") -> list[tuple]:
         """Fetch weather for pre-loaded trajectory coordinates and timestamps"""
