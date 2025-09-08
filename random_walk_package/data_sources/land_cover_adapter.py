@@ -22,7 +22,7 @@ landcover_classes = {
 
 
 def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, output="terrain.txt") -> \
-        tuple[int, tuple[float, float, float, float]] | None:
+        tuple[int, tuple[float, float, float, float], float] | None:
     if os.path.exists(output):
         print(f"Output file {output} already exists, skipping generation")
     try:
@@ -97,11 +97,14 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
 
             print(f"Landcover grid written to {output}")
             print(f"UTM Bounds: {min_x}, {min_y}, {max_x}, {max_y}")  # Debug output
-            # Innerhalb von landcover_to_discrete_txt, direkt nach dem Schreiben der TXT-Datei:
-            lon_min, lat_min, lon_max, lat_max = utm_bbox_to_lonlat(min_x, min_y, max_x, max_y, crs_epsg)
-            print(f"Debug: UTM Bounds zurück transformiert in Lon/Lat: ({lon_min}, {lat_min}, {lon_max}, {lat_max})")
+            cell_size_x = (max_x - min_x) / res_x
+            print(f"Cell size x: {cell_size_x}")
+            cell_size_y = (max_y - min_y) / res_y
+            print(f"Cell size y: {cell_size_y}")
+            cell_size = (cell_size_x + cell_size_y) / 2
+            print(f"Cell size: {cell_size}")
 
-            return crs_epsg, (min_x, min_y, max_x, max_y)
+            return crs_epsg, (min_x, min_y, max_x, max_y), cell_size
     except rasterio.RasterioIOError as e:
         print(f"Error opening the file: {e}")
 

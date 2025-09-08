@@ -8,9 +8,10 @@ from random_walk_package.core.MixedWalker import *
 def mixed_walk_test():
     T = 10
 
-    study = "leap_of_the_cat/"
+    study = "Boars_Austria/"
     kernel_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=4)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=4, diffusity=1, max_bias_x=0,
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=4, diffusity=1,
+                         max_bias_x=0,
                          max_bias_y=0)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=5,
@@ -21,8 +22,9 @@ def mixed_walk_test():
                          max_bias_y=0)
 
     walker = MixedWalker(T=T, resolution=400, animal_type=MEDIUM, kernel_mapping=kernel_mapping, study_folder=study)
-    #steps = [(166, 166), (422, 300)]
+    # steps = [(166, 166), (422, 300)]
     walker.generate_walk(serialized=False)
+
 
 # @profile
 def test_time_walk():

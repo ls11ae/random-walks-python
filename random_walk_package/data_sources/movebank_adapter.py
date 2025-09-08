@@ -199,11 +199,5 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
         # Ensure grid coordinates are within [0, width-1] and [0, height-1]
         x = max(0, min(width - 1, x))
         y = max(0, min(height - 1, y))
-
-        # Rücktransformation: Grid -> UTM
-        utm_x_back = min_x + (x / (width - 1)) * (max_x - min_x)
-        utm_y_back = max_y - (y / (height - 1)) * (max_y - min_y)
-
         mapped_coords.append((x, y))
-        print( f"Original UTM: ({x_utm:.2f}, {y_utm:.2f}) -> Grid: ({x}, {y}) -> Rück UTM: ({utm_x_back:.2f}, {utm_y_back:.2f})")
-    return mapped_coords
+    return mapped_coords, utm_coords
