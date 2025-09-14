@@ -1,14 +1,15 @@
-from random_walk_package.bindings.brownian_walk import plot_terrain_from_json
+import os
 
+import numpy as np
+
+from random_walk_package.bindings.brownian_walk import plot_walk_from_json
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
-import numpy as np
-import os
 
 
 class MixedTimeWalker:
-    def __init__(self, resolution = 200, T=30, grid_points_per_edge = 5, duration_in_days=7, study_folder=None):
+    def __init__(self, resolution=200, T=30, grid_points_per_edge=5, duration_in_days=7, study_folder=None):
         self.T = T
         self.resolution = resolution
         self.grid_points_per_edge = grid_points_per_edge
@@ -41,17 +42,20 @@ class MixedTimeWalker:
         self.walks_path = os.path.join(self.study_folder, 'walks')
         if not os.path.exists(self.walks_path):
             os.makedirs(self.walks_path)
-        
+
         self.terrain_path = self.study_folder
         self.duration_in_days = duration_in_days
 
     def preprocess(self):
         self.movebank_processor = AnimalMovementProcessor(self.movebank_study)
-        self.terrain_path = self.movebank_processor.create_landcover_data_txt(self.resolution, out_directory=self.study_folder)
-        self.csv_path = self.movebank_processor.fetch_gridded_weather_data(self.csv_path, days_to_fetch=self.duration_in_days, grid_points_per_edge=self.grid_points_per_edge)
-        
+        self.terrain_path = self.movebank_processor.create_landcover_data_txt(self.resolution,
+                                                                              out_directory=self.study_folder)
+        self.csv_path = self.movebank_processor.fetch_gridded_weather_data(self.csv_path,
+                                                                           days_to_fetch=self.duration_in_days,
+                                                                           grid_points_per_edge=self.grid_points_per_edge)
 
-    def generate_walk(self, start:tuple[int,int], end:tuple[int,int], output_file='time_walk.json', serialized=True):
+    def generate_walk(self, start: tuple[int, int], end: tuple[int, int], output_file='time_walk.json',
+                      serialized=True):
         """
         Generates a time-dependent walk using the C function time_walk_geo.
         Args:
@@ -77,7 +81,7 @@ class MixedTimeWalker:
         )
         walk_np = get_walk_points(walk_ptr)
         dll.point2d_array_free(walk_ptr)
-        plot_terrain_from_json(walk_path, title=os.path.basename(self.movebank_study))
+        plot_walk_from_json(walk_path, title=os.path.basename(self.movebank_study))
         return walk_np
 
     def generate_walk_multi(self, steps, output_file='time_walk.json', serialized=True):
@@ -104,6 +108,6 @@ class MixedTimeWalker:
         )
         walk_np = get_walk_points(walk_ptr)
         dll.point2d_array_free(walk_ptr)
-        plot_terrain_from_json(walk_path, title=os.path.basename(self.movebank_study))
-        
+        plot_walk_from_json(walk_path, title=os.path.basename(self.movebank_study))
+
         return walk_np

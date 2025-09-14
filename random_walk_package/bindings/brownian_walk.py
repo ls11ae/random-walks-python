@@ -1,12 +1,12 @@
 import json
-
-import matplotlib.colors as mcolors
 import sys
 
+import matplotlib.colors as mcolors
+
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters
 from random_walk_package.bindings.data_structures.matrix import *
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array
 from random_walk_package.bindings.data_structures.terrain import *
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters
 
 # Add package directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -35,14 +35,14 @@ dll.brownian_walk_init.argtypes = [
 dll.brownian_walk_init.restype = ctypes.POINTER(Tensor)
 
 dll.brownian_walk_terrain_init.argtypes = [
-    ctypes.c_ssize_t,           # T
-    ctypes.c_ssize_t,           # W
-    ctypes.c_ssize_t,           # H
-    ctypes.c_ssize_t,           # start_x
-    ctypes.c_ssize_t,           # start_y
-    ctypes.POINTER(Matrix),     # kernel
-    ctypes.POINTER(TerrainMap), # terrain_map
-    KernelsMapPtr               # kernels_map
+    ctypes.c_ssize_t,  # T
+    ctypes.c_ssize_t,  # W
+    ctypes.c_ssize_t,  # H
+    ctypes.c_ssize_t,  # start_x
+    ctypes.c_ssize_t,  # start_y
+    ctypes.POINTER(Matrix),  # kernel
+    ctypes.POINTER(TerrainMap),  # terrain_map
+    KernelsMapPtr  # kernels_map
 ]
 dll.brownian_walk_terrain_init.restype = ctypes.POINTER(Tensor)
 
@@ -255,7 +255,7 @@ def plot_combined_terrain(terrain, walk_points, terrain_width=None, terrain_heig
     plt.show()
 
 
-def plot_terrain_from_json(json_path, title=None):
+def plot_walk_from_json(json_path, title=None):
     # Lade JSON-Daten
     with open(json_path, 'r') as f:
         data = json.load(f)

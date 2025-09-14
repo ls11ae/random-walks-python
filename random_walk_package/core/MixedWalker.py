@@ -1,17 +1,13 @@
 from pathlib import Path
 
-import numpy as np
-
-from random_walk_package import walk_to_json
-from random_walk_package.bindings.brownian_walk import plot_combined_terrain
-from random_walk_package.bindings.data_structures.point2D import get_walk_points, point2d_arr_free
+from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 from random_walk_package.data_sources.walk_visualization import walk_to_osm
 
 
 class MixedWalker:
-    def __init__(self, T=30, S=9, animal_type = MEDIUM, resolution=100, kernel_mapping=None,study_folder=None):
+    def __init__(self, T=30, S=9, animal_type=MEDIUM, resolution=100, kernel_mapping=None, study_folder=None):
         self.T = T
         self.resolution = resolution
         self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(animal_type, S)
@@ -51,16 +47,18 @@ class MixedWalker:
                                                                                      out_directory=self.study_folder)
 
     def generate_walk(self, serialized=False):
-        steps_dict = self.movebank_processor.create_movement_data(samples=-1)
+        grid_steps_dict, geo_steps_dict = self.movebank_processor.create_movement_data(samples=-1)
 
         recmp: bool = True
         serialization_dir = Path(self.base_project_dir) / 'resources' / self.serialization_path / 'tensors'
 
+        geodetic_walks: dict[str, list[tuple[float, float]]] = {}
+
         if serialization_dir.exists() and any(serialization_dir.iterdir()):
             recmp = False
-
-        for animal_id, steps in steps_dict.items():
+        for animal_id, steps in grid_steps_dict.items():
             spatial_map = parse_terrain(file=self.aid_to_terrain_path[animal_id], delim=' ')
+            print(f"Loaded terrain from {self.aid_to_terrain_path[animal_id]}")
             if serialized and recmp:
                 tensor_map_terrain_serialize(spatial_map, self.mapping, self.serialization_path)
                 print(f"Serialized terrain map to {self.serialization_path}")
@@ -73,6 +71,7 @@ class MixedWalker:
             height = spatial_map.height
             full_path = []
             for i in range(len(steps) - 1):
+                if i > 21: continue
                 start_x, start_y = steps[i]
                 end_x, end_y = steps[i + 1]
                 print("Start: " + str(start_x) + ", " + str(start_y))
@@ -110,7 +109,7 @@ class MixedWalker:
                     dp_dir=dp_dir,
                     mapping=self.mapping
                 )
-                if walk_ptr.contents:
+                if walk_ptr is not None and walk_ptr.contents:
                     segment = get_walk_points(walk_ptr)
                 else:
                     segment = [(start_x, start_y), (end_x, end_y)]
@@ -127,13 +126,14 @@ class MixedWalker:
             )
             # Add final point
             full_path.append(steps[-1])
-
+            grid_steps_dict[animal_id] = self.movebank_processor.grid_coordinates_to_geodetic(steps, animal_id)
             geodetic_path = self.movebank_processor.grid_coordinates_to_geodetic(full_path, animal_id)
-            walk_to_osm(geodetic_path, animal_id, self.walks_path)
+            geodetic_walks[animal_id] = geodetic_path
+            walk_to_osm(walk_coords_or_dict=geodetic_path, original_coords=geo_steps_dict[animal_id],
+                        step_annotations=grid_steps_dict,
+                        animal_id=animal_id, walk_path=self.walks_path, annotated=True)
             kernels_map3d_free(self.tensor_map)
-            walk = np.array(full_path)
-            steps_c = create_point2d_array(steps)
-            walk_c = create_point2d_array(walk)
-            walk_to_json(walk_c, json_file=os.path.join(self.walks_path, f"{animal_id}_{self.resolution}.json"), steps=steps_c, terrain_map=pointer(spatial_map))
-            #plot_combined_terrain(pointer(spatial_map), walk, steps=steps, title=self.movebank_study)
-
+            # TODO: geo walk as json
+            # plot_combined_terrain(pointer(spatial_map), walk, steps=steps, title=self.movebank_study)
+        map_path = os.path.join(self.walks_path, "entire_study.html")
+        walk_to_osm(geodetic_walks, None, "entire study", self.walks_path, grid_steps_dict, map_path)

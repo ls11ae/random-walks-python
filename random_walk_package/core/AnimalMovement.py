@@ -4,15 +4,13 @@ import time
 import numpy as np
 
 # Assuming these imports are correctly resolved from your project structure
-from random_walk_package import landcover_to_discrete_ptr, create_point2d_array
 from random_walk_package.bindings.data_processing.movebank_parser import *
 from random_walk_package.bindings.data_processing.weather_parser import weather_entry_new, \
     weather_timeline
-from random_walk_package.bindings.data_structures.types import TerrainMapPtr
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import get_start_end_dates, \
-    bbox_to_discrete_space, get_unique_animal_ids, get_animal_coordinates, get_bounding_boxes_per_animal, \
+    get_unique_animal_ids, get_animal_coordinates, get_bounding_boxes_per_animal, \
     bbox_dict_to_discrete_space
 
 
@@ -173,14 +171,15 @@ class AnimalMovementProcessor:
             self.data_file = data_file
 
         self.df = None
-        self.bbox:dict[str, tuple[float, float, float, float]] = {}
-        self.bbox_utm:dict[str, tuple[float, float, float, float]] = {}
+        self.bbox: dict[str, tuple[float, float, float, float]] = {}
+        self.bbox_utm: dict[str, tuple[float, float, float, float]] = {}
         self.aid_espg_map: dict[str, str] = {}
         self.discrete_params = None
         self.center_lat = None
         self.center_lon = None
         self.timeline = None
-        self.coords = None
+        self.grid_coords = None
+        self.geo_coords = None
         self._weather_data = None  # For trajectory weather
         # self._gridded_weather_data = None # Optionally store gridded weather if needed
 
@@ -207,9 +206,8 @@ class AnimalMovementProcessor:
         if self.discrete_params is None and self.bbox:
             self.discrete_params = bbox_dict_to_discrete_space(self.bbox, resolution)
 
-    def bbox_utm_of(self, animal_id:str):
+    def bbox_utm_of(self, animal_id: str):
         return self.bbox_utm.get(str(animal_id))
-
 
     def create_landcover_data_txt(self, resolution=200, out_directory=None) -> dict[str, str]:
         """Generate per-animal landcover data (TIFF + TXT), named with animal_id and bbox.
@@ -275,7 +273,6 @@ class AnimalMovementProcessor:
 
         return results
 
-
     def create_weather_tuples(self) -> list[tuple]:
         """Generate weather tuples grouped by movement steps"""
         if not self._weather_data:  # Check if it's None or empty
@@ -301,11 +298,13 @@ class AnimalMovementProcessor:
             ))
         return sampled_weather
 
-    def create_movement_data(self, samples=10) -> dict[str, list[tuple[int, int]]]:
+    def create_movement_data(self, samples=10) -> tuple[
+        dict[str, list[tuple[int, int]]], dict[str, list[tuple[int, int]]]]:
         if self.df is None:
             self._load_data()
 
-        coords_by_animal: dict[str, list[tuple[int, int]]] = {}
+        utm_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
+        geo_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
         animal_ids = get_unique_animal_ids(self.df)
 
         for aid in animal_ids:
@@ -326,7 +325,7 @@ class AnimalMovementProcessor:
                     _, _, x_res, y_res = dp
 
             # Get coordinates for current animal ID using its UTM bbox
-            coords_data = get_animal_coordinates(
+            coords_data, geo_coords = get_animal_coordinates(
                 df=self.df,
                 animal_id=aid,
                 epsg_code=self.aid_espg_map[str(aid)],
@@ -335,10 +334,12 @@ class AnimalMovementProcessor:
                 height=y_res,
                 bbox_utm=bbox_utm
             )
-            coords_by_animal[str(aid)] = coords_data
+            utm_coords_by_animal[str(aid)] = coords_data
+            geo_coords_by_animal[str(aid)] = geo_coords
 
-        self.coords = coords_by_animal
-        return coords_by_animal
+        self.grid_coords = utm_coords_by_animal
+        self.geo_coords = geo_coords_by_animal
+        return utm_coords_by_animal, geo_coords_by_animal
 
     def grid_coordinates_to_geodetic(self, coord: list[tuple[int, int]], animal_id: str) -> list[tuple[float, float]]:
         """
@@ -356,7 +357,6 @@ class AnimalMovementProcessor:
         list of (lon, lat)
             Geographic coordinates (WGS84).
         """
-        from pyproj import Transformer
 
         result: list[tuple[float, float]] = []
 
@@ -387,16 +387,17 @@ class AnimalMovementProcessor:
 
     def fetch_trajectory_weather(self, output_filename="weather_trajectory.csv") -> list[tuple]:
         """Fetch weather for pre-loaded trajectory coordinates and timestamps"""
-        if not self.coords or not self.timeline:
+        if not self.grid_coords or not self.timeline:
             raise ValueError("Call create_movement_data() first to generate coordinates and timeline.")
 
-        # Assuming self.coords has a .points list/array and .length or similar
+        # Assuming self.grid_coords has a .points list/array and .length or similar
         # And self.timeline is a list of timestamp strings
         num_points = 0
-        if hasattr(self.coords, 'points') and self.coords.points is not None:  # For Point2DArray from C
-            num_points = self.coords.length if hasattr(self.coords, 'length') else len(self.coords.points)
-        elif hasattr(self.coords, 'coordinates'):  # For a simple list of point objects
-            num_points = len(self.coords.coordinates)
+        if hasattr(self.grid_coords, 'points') and self.grid_coords.points is not None:  # For Point2DArray from C
+            num_points = self.grid_coords.length if hasattr(self.grid_coords, 'length') else len(
+                self.grid_coords.points)
+        elif hasattr(self.grid_coords, 'coordinates'):  # For a simple list of point objects
+            num_points = len(self.grid_coords.coordinates)
 
         if num_points != len(self.timeline):
             raise ValueError(
@@ -406,15 +407,15 @@ class AnimalMovementProcessor:
 
         for i in range(num_points):
             print(f"Fetching trajectory weather {i + 1}/{num_points}")
-            # Adjust access to lat/lon based on self.coords structure
-            if hasattr(self.coords, 'points') and self.coords.points is not None:  # C-style Point2DArray
-                lat = self.coords.points[i].y
-                lon = self.coords.points[i].x
-            elif hasattr(self.coords, 'coordinates'):  # Python list of point objects
-                lat = self.coords.coordinates[i].y  # Assuming .y attribute
-                lon = self.coords.coordinates[i].x  # Assuming .x attribute
+            # Adjust access to lat/lon based on self.grid_coords structure
+            if hasattr(self.grid_coords, 'points') and self.grid_coords.points is not None:  # C-style Point2DArray
+                lat = self.grid_coords.points[i].y
+                lon = self.grid_coords.points[i].x
+            elif hasattr(self.grid_coords, 'coordinates'):  # Python list of point objects
+                lat = self.grid_coords.coordinates[i].y  # Assuming .y attribute
+                lon = self.grid_coords.coordinates[i].x  # Assuming .x attribute
             else:
-                raise AttributeError("Coordinates structure not recognized in self.coords")
+                raise AttributeError("Coordinates structure not recognized in self.grid_coords")
 
             timestamp_str = self.timeline[i]
             entry_dict = _fetch_single_weather(lat, lon, timestamp_str)
@@ -498,11 +499,11 @@ class AnimalMovementProcessor:
         Note: This might be confusing. fetch_trajectory_weather fetches for specific points.
         This method name suggests creating a weather dataset, perhaps gridded or for the whole timeframe.
         The original implementation calls fetch_trajectory_weather.
-        This will fetch weather for the *currently loaded trajectory* in self.coords and self.timeline.
+        This will fetch weather for the *currently loaded trajectory* in self.grid_coords and self.timeline.
         """
         if self.df is None or self.df.empty:
             raise ValueError("DataFrame not loaded. Cannot determine date range.")
-        if self.coords is None or self.timeline is None:
+        if self.grid_coords is None or self.timeline is None:
             raise ValueError("Movement data (coords and timeline) not created. Call create_movement_data() first.")
 
         start_date_df, end_date_df = get_start_end_dates(self.df)  # These are from the whole dataset
@@ -520,7 +521,8 @@ class AnimalMovementProcessor:
     def create_weather_tuples_ctypes(self) -> POINTER(WeatherTimeline):  # type: ignore
         """Convert trajectory weather data to C-compatible WeatherTimeline structure"""
         if not self._weather_data:  # Check if it's None or empty
-            raise ValueError("Weather data not available. Call fetch_trajectory_weather() or load_weather_data() first.")
+            raise ValueError(
+                "Weather data not available. Call fetch_trajectory_weather() or load_weather_data() first.")
 
         num_entries = len(self._weather_data)
         if num_entries == 0:

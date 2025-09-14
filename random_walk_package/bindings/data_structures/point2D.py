@@ -1,4 +1,5 @@
 import numpy as np
+
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 
@@ -98,7 +99,6 @@ def get_walk_points(walk):
     # (Optional) Disable free temporarily to test
     # dll.point2d_array_free(walk)
     result = np.array(points, dtype=np.int64)
-    print(result)
     return result
 
 

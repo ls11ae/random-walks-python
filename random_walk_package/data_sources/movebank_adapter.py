@@ -1,11 +1,6 @@
-import ctypes
 import math
 
 import pandas as pd
-
-from random_walk_package import dll
-from random_walk_package.bindings.data_processing.movebank_parser import Coordinate_array, Coordinate
-from random_walk_package.data_sources.geo_fetcher import lonlat_bbox_to_utm
 
 
 def get_unique_animal_ids(df: pd.DataFrame) -> list:
@@ -13,7 +8,7 @@ def get_unique_animal_ids(df: pd.DataFrame) -> list:
     return df['tag-local-identifier'].unique().tolist()
 
 
-def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.1) -> dict[
+def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.2) -> dict[
     str, tuple[float, float, float, float]]:
     """Return per-animal padded bounding boxes as a dict:
     { animal_id: (min_lon, min_lat, max_lon, max_lat) }.
@@ -173,6 +168,11 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
         clean_df = clean_df.iloc[::step].head(samples)
 
     # transform all coordinates to UTM
+    geo_coords = clean_df.apply(
+        lambda row: [row['location-long'], row['location-lat']], axis=1
+    )
+
+    # transform all coordinates to UTM
     utm_coords = clean_df.apply(
         lambda row: transformer.transform(row['location-long'], row['location-lat']), axis=1
     )
@@ -200,10 +200,6 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
         x = max(0, min(width - 1, x))
         y = max(0, min(height - 1, y))
 
-        # Rücktransformation: Grid -> UTM
-        utm_x_back = min_x + (x / (width - 1)) * (max_x - min_x)
-        utm_y_back = max_y - (y / (height - 1)) * (max_y - min_y)
-
         mapped_coords.append((x, y))
-        print( f"Original UTM: ({x_utm:.2f}, {y_utm:.2f}) -> Grid: ({x}, {y}) -> Rück UTM: ({utm_x_back:.2f}, {utm_y_back:.2f})")
-    return mapped_coords
+
+    return mapped_coords, geo_coords
