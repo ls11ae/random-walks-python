@@ -559,26 +559,28 @@ class AnimalMovementProcessor:
 
     def fetch_gridded_weather_data(self, output_folder: str,
                                    start_date_override: str = None, days_to_fetch: int = 7,
-                                   grid_points_per_edge: int = 10) -> str:
+                                   grid_points_per_edge: int = 10) -> dict[str, str]:
         """
-        Fetches and saves hourly weather data for a grid of equidistant points within the bounding box.
-        If the output_folder exists and contains the expected number of CSVs, does nothing.
-        Otherwise, fetches and saves the data as CSVs in output_folder.
+        Fetches and saves hourly weather data for a grid of equidistant points within the bounding box
+        of each animal. For each animal, per-grid-point CSVs are written into a dedicated subfolder,
+        and a merged CSV (weather_grid_all.csv) is created that aggregates all grid points.
 
         Args:
-            output_folder (str): Folder where the grid CSVs should be stored.
+            output_folder (str): Root folder where per-animal grid CSVs should be stored.
             start_date_override (str, optional): 'YYYY-MM-DD' string to override the start date.
             days_to_fetch (int): Number of days for hourly weather data.
             grid_points_per_edge (int): Number of points along each edge of the bounding box.
 
         Returns:
-            str: Path to the folder where the grid CSVs are stored.
+            dict[str, str]: Mapping {animal_id: path_to_merged_csv} for each processed animal.
         """
-        if self.bbox is None:
+        # Ensure bounding boxes are available
+        if not self.bbox:
             self._compute_bbox()
-            if self.bbox is None:
-                raise ValueError("Bounding box (self.bbox) is not set. Load data first.")
+            if not self.bbox:
+                raise ValueError("Bounding boxes are not set. Load data first.")
 
+        # Determine date range
         if self.df is None or self.df.empty:
             if not start_date_override:
                 raise ValueError(
@@ -600,55 +602,128 @@ class AnimalMovementProcessor:
         end_date = start_date + pd.Timedelta(days=days_to_fetch - 1)
         print(f"Fetching gridded weather from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.")
 
-        min_lon, min_lat, max_lon, max_lat = self.bbox
+        # Prepare root output directory
+        base_output_dir = output_folder
+        os.makedirs(base_output_dir, exist_ok=True)
 
-        output_dir = output_folder
-        os.makedirs(output_dir, exist_ok=True)
         expected_csv_count = grid_points_per_edge * grid_points_per_edge
-        existing_csvs = [f for f in os.listdir(output_dir) if f.endswith('.csv')]
-        if len(existing_csvs) >= expected_csv_count:
-            print(f"Grid CSV folder {output_dir} exists and contains {len(existing_csvs)} CSVs. Skipping fetch.")
-            return output_dir
+        results_map: dict[str, str] = {}
 
-        # Otherwise, fetch and save as before
-        if max_lon == min_lon or max_lat == min_lat:
-            lon_coords = np.array([min_lon])
-            lat_coords = np.array([min_lat])
-            if grid_points_per_edge > 1:
-                print("Warning: BBox is point/line. Using 1 grid point.")
-        else:
-            lon_coords = np.linspace(min_lon + (max_lon - min_lon) / (2 * grid_points_per_edge),
-                                     max_lon - (max_lon - min_lon) / (2 * grid_points_per_edge),
-                                     num=grid_points_per_edge, endpoint=True)
-            lat_coords = np.linspace(min_lat + (max_lat - min_lat) / (2 * grid_points_per_edge),
-                                     max_lat - (max_lat - min_lat) / (2 * grid_points_per_edge),
-                                     num=grid_points_per_edge, endpoint=True)
-        grid_points_to_query = []
-        for lat_val in lat_coords:
-            for lon_val in lon_coords:
-                grid_points_to_query.append((lat_val, lon_val))
-        print(f"Generated {len(grid_points_to_query)} grid points for weather fetching.")
+        # Iterate over each animal's bounding box
+        for animal_id, bbox in self.bbox.items():
+            min_lon, min_lat, max_lon, max_lat = bbox
 
-        total_points_to_fetch = len(grid_points_to_query)
-        for i, (lat, lon) in enumerate(grid_points_to_query):
-            print(f"Fetching weather for grid point {i + 1}/{total_points_to_fetch} (Lat: {lat:.4f}, Lon: {lon:.4f})")
-            point_weather_data_list = _fetch_hourly_data_for_period_at_point(
-                lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
-            )
-            # Save per-grid-point CSV
-            y_idx = i // grid_points_per_edge
-            x_idx = i % grid_points_per_edge
-            csv_name = f"weather_grid_y{y_idx}_x{x_idx}.csv"
-            csv_path = os.path.join(output_dir, csv_name)
-            df_point = pd.DataFrame(point_weather_data_list)
-            columns_order = ['latitude', 'longitude', 'timestamp', 'temperature_2m', 'relative_humidity_2m',
-                             'precipitation', 'wind_speed_10m', 'wind_direction_10m', 'snowfall', 'weather_code',
-                             'cloud_cover']
-            df_point = df_point.reindex(columns=columns_order)
-            df_point.to_csv(csv_path, index=False)
-            print(f"Saved grid point CSV: {csv_path}")
-            if i < total_points_to_fetch - 1:
-                time.sleep(0.2)
+            animal_dir = os.path.join(base_output_dir, str(animal_id))
+            os.makedirs(animal_dir, exist_ok=True)
+            merged_csv_path = animal_dir
 
-        print(f"Gridded weather data saved to folder: {output_dir}")
-        return output_dir
+            # Check if per-grid CSVs already exist
+            existing_point_csvs = [f for f in os.listdir(animal_dir)
+                                   if f.endswith('.csv') and f.startswith('weather_grid_y')]
+            if len(existing_point_csvs) >= expected_csv_count:
+                print(
+                    f"Grid CSV folder {animal_dir} exists and contains {len(existing_point_csvs)} CSVs. Skipping fetch.")
+                # Ensure merged CSV exists; if not, build it from existing point CSVs
+                if not os.path.exists(merged_csv_path):
+                    all_frames = []
+                    for fname in sorted(existing_point_csvs):
+                        fpath = os.path.join(animal_dir, fname)
+                        df_point = pd.read_csv(fpath)
+                        # Parse grid indices from filename: weather_grid_y{y}_x{x}.csv
+                        try:
+                            base = os.path.splitext(fname)[0]
+                            parts = base.split('_')
+                            y_part = next(p for p in parts if p.startswith('y'))
+                            x_part = next(p for p in parts if p.startswith('x'))
+                            grid_y = int(y_part[1:])
+                            grid_x = int(x_part[1:])
+                        except Exception:
+                            grid_y = None
+                            grid_x = None
+                        df_point['grid_y'] = grid_y
+                        df_point['grid_x'] = grid_x
+                        all_frames.append(df_point)
+                    if all_frames:
+                        df_all = pd.concat(all_frames, ignore_index=True)
+                        # Order columns with grid indices at the front
+                        col_order = ['grid_y', 'grid_x', 'latitude', 'longitude', 'timestamp', 'temperature_2m',
+                                     'relative_humidity_2m', 'precipitation', 'wind_speed_10m', 'wind_direction_10m',
+                                     'snowfall', 'weather_code', 'cloud_cover']
+                        df_all = df_all.reindex(columns=col_order)
+                        df_all.to_csv(merged_csv_path, index=False)
+                        print(f"Created merged CSV: {merged_csv_path}")
+                results_map[str(animal_id)] = merged_csv_path
+                continue
+
+            # Otherwise, generate grid coordinates and fetch
+            if max_lon == min_lon or max_lat == min_lat:
+                lon_coords = np.array([min_lon])
+                lat_coords = np.array([min_lat])
+                if grid_points_per_edge > 1:
+                    print(f"Warning: BBox for animal {animal_id} is point/line. Using 1 grid point.")
+            else:
+                lon_coords = np.linspace(min_lon + (max_lon - min_lon) / (2 * grid_points_per_edge),
+                                         max_lon - (max_lon - min_lon) / (2 * grid_points_per_edge),
+                                         num=grid_points_per_edge, endpoint=True)
+                lat_coords = np.linspace(min_lat + (max_lat - min_lat) / (2 * grid_points_per_edge),
+                                         max_lat - (max_lat - min_lat) / (2 * grid_points_per_edge),
+                                         num=grid_points_per_edge, endpoint=True)
+
+            grid_points_to_query = []
+            for lat_val in lat_coords:
+                for lon_val in lon_coords:
+                    grid_points_to_query.append((lat_val, lon_val))
+            print(f"[{animal_id}] Generated {len(grid_points_to_query)} grid points for weather fetching.")
+
+            total_points_to_fetch = len(grid_points_to_query)
+            all_rows = []
+            for i, (lat, lon) in enumerate(grid_points_to_query):
+                print(
+                    f"[{animal_id}] Fetching weather for grid point {i + 1}/{total_points_to_fetch} (Lat: {lat:.4f}, Lon: {lon:.4f})")
+                point_weather_data_list = _fetch_hourly_data_for_period_at_point(
+                    lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
+                )
+                # Save per-grid-point CSV
+                y_idx = i // grid_points_per_edge
+                x_idx = i % grid_points_per_edge
+                csv_name = f"weather_grid_y{y_idx}_x{x_idx}.csv"
+                csv_path = os.path.join(animal_dir, csv_name)
+                df_point = pd.DataFrame(point_weather_data_list)
+                columns_order = ['latitude', 'longitude', 'timestamp', 'temperature_2m', 'relative_humidity_2m',
+                                 'precipitation', 'wind_speed_10m', 'wind_direction_10m', 'snowfall', 'weather_code',
+                                 'cloud_cover']
+                df_point = df_point.reindex(columns=columns_order)
+                df_point.to_csv(csv_path, index=False)
+                print(f"[{animal_id}] Saved grid point CSV: {csv_path}")
+
+                # Accumulate for merged CSV, add grid indices
+                if not df_point.empty:
+                    df_point_merged = df_point.copy()
+                    df_point_merged['grid_y'] = y_idx
+                    df_point_merged['grid_x'] = x_idx
+                    all_rows.append(df_point_merged)
+
+                if i < total_points_to_fetch - 1:
+                    time.sleep(0.2)
+
+            # Write merged CSV per animal
+            if all_rows:
+                df_all = pd.concat(all_rows, ignore_index=True)
+                # Place grid indices at the front
+                col_order = ['grid_y', 'grid_x', 'latitude', 'longitude', 'timestamp', 'temperature_2m',
+                             'relative_humidity_2m', 'precipitation', 'wind_speed_10m', 'wind_direction_10m',
+                             'snowfall', 'weather_code', 'cloud_cover']
+                df_all = df_all.reindex(columns=col_order)
+                df_all.to_csv(merged_csv_path, index=False)
+                print(f"[{animal_id}] Merged grid weather CSV saved: {merged_csv_path}")
+            else:
+                # Ensure an empty merged file exists for consistency
+                pd.DataFrame(columns=['grid_y', 'grid_x', 'latitude', 'longitude', 'timestamp', 'temperature_2m',
+                                      'relative_humidity_2m', 'precipitation', 'wind_speed_10m', 'wind_direction_10m',
+                                      'snowfall', 'weather_code', 'cloud_cover']).to_csv(merged_csv_path, index=False)
+                print(f"[{animal_id}] No data fetched; created empty merged CSV: {merged_csv_path}")
+
+            results_map[str(animal_id)] = merged_csv_path
+
+        print(f"Gridded weather data stored under: {base_output_dir}")
+        return results_map

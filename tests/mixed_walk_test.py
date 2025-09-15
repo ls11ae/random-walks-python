@@ -1,5 +1,4 @@
-from memory_profiler import profile
-
+from random_walk_package import plot_combined_terrain
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_landmark_mapping
 from random_walk_package.core.MixedTimeWalker import MixedTimeWalker
 from random_walk_package.core.MixedWalker import *
@@ -8,21 +7,24 @@ from random_walk_package.core.MixedWalker import *
 def mixed_walk_test():
     T = 10
 
-    study = "leap_of_the_cat/"
-    kernel_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=4)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=4, diffusity=1, max_bias_x=0,
+    study = "forest_elephant_AFR/"
+    kernel_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=5)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=6, diffusity=1,
+                         max_bias_x=0,
                          max_bias_y=0)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=5,
                          directions=1,
                          diffusity=1.6,
                          max_bias_x=0, max_bias_y=0)
+    """
     set_landmark_mapping(kernel_mapping, WATER, is_brownian=False, step_size=4, directions=4, diffusity=1, max_bias_x=0,
-                         max_bias_y=0)
+                         max_bias_y=0)"""
 
-    walker = MixedWalker(T=T, resolution=400, animal_type=MEDIUM, kernel_mapping=kernel_mapping, study_folder=study)
-    #steps = [(166, 166), (422, 300)]
+    walker = MixedWalker(T=T, resolution=600, kernel_mapping=kernel_mapping, study_folder=study)
+    # steps = [(166, 166), (422, 300)]
     walker.generate_walk(serialized=False)
+
 
 # @profile
 def test_time_walk():
@@ -51,19 +53,14 @@ def test_time_walk():
                           title="Time-Aware Mixed Walk")
 
 
-@profile
 def test_time_walker():
-    start = (50, 70)
-    end = (10, 10)
-
     walker = MixedTimeWalker(
         T=50,
         resolution=100,
         duration_in_days=3,
         study_folder="elephant_study/"
     )
-    walker.preprocess()
-    walker.generate_walk(start=start, end=end, output_file="time_walk3.json")
+    walker.generate_walk_from_movebank(serialized=False)
 
 
 def test_time_walker_multi():

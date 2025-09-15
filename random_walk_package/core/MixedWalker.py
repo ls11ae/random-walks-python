@@ -71,7 +71,6 @@ class MixedWalker:
             height = spatial_map.height
             full_path = []
             for i in range(len(steps) - 1):
-                if i > 21: continue
                 start_x, start_y = steps[i]
                 end_x, end_y = steps[i + 1]
                 print("Start: " + str(start_x) + ", " + str(start_y))

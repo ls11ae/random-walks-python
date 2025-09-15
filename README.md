@@ -1,5 +1,19 @@
-python -m venv myenv 
+~~~bash
+python -m venv myenv
+~~~
+
+~~~bash
 source myenv/bin/activate
+~~~
+
+~~~bash
 pip install .
-cp build/lib/librandomwalk.so random_walk_package/
+~~~
+
+~~~bash
+cp build/lib/librandom_walk.so random_walk_package/
+~~~
+
+~~~bash
 python -m tests.test
+~~~
