@@ -285,27 +285,29 @@ def plot_walk_from_json(json_path, title=None):
     sorted_landmark_values = sorted(landmark_colors_map.keys())
     cmap_colors_list = [landmark_colors_map[val] for val in sorted_landmark_values]
 
+    PADDING = 0.5
+
     # Erzeuge Boundaries und Farbzuordnung
     plot_bounds = []
     if not sorted_landmark_values:
         cmap = mcolors.ListedColormap([(0, 0, 0, 0)])
         norm = mcolors.BoundaryNorm([0, 1], cmap.N)
     elif len(sorted_landmark_values) == 1:
-        plot_bounds = [sorted_landmark_values[0] - 0.5, sorted_landmark_values[0] + 0.5]
+        plot_bounds = [sorted_landmark_values[0] - PADDING, sorted_landmark_values[0] + PADDING]
         cmap = mcolors.ListedColormap([cmap_colors_list[0]])
         norm = mcolors.BoundaryNorm(plot_bounds, cmap.N)
     else:
-        plot_bounds.append(sorted_landmark_values[0] - 0.5)
+        plot_bounds.append(sorted_landmark_values[0] - PADDING)
         for i in range(len(sorted_landmark_values) - 1):
             plot_bounds.append((sorted_landmark_values[i] + sorted_landmark_values[i + 1]) / 2.0)
-        plot_bounds.append(sorted_landmark_values[-1] + 0.5)
+        plot_bounds.append(sorted_landmark_values[-1] + PADDING)
         cmap = mcolors.ListedColormap(cmap_colors_list)
         norm = mcolors.BoundaryNorm(plot_bounds, cmap.N)
 
     # Plot
     plt.figure(figsize=(10, 10))
     plt.imshow(terrain_array, cmap=cmap, norm=norm, origin='lower',
-               extent=(-0.5, terrain_width - 0.5, -0.5, terrain_height - 0.5),
+               extent=(-PADDING, terrain_width - PADDING, -PADDING, terrain_height - PADDING),
                interpolation='nearest')
 
     if walk_points.size > 0:

@@ -1,28 +1,22 @@
 from random_walk_package import plot_combined_terrain
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_landmark_mapping
 from random_walk_package.core.MixedTimeWalker import MixedTimeWalker
 from random_walk_package.core.MixedWalker import *
+
+studies = ["elephant_study/", "baboon_SA_study/", "leap_of_the_cat/", "Boars_Austria/", "Cranes Kazakhstan/"]
 
 
 def mixed_walk_test():
     T = 10
-
-    study = "forest_elephant_AFR/"
-    kernel_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=5)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=6, diffusity=1,
-                         max_bias_x=0,
-                         max_bias_y=0)
+    # todo: dynamic resolution based on bounding box size
+    study = studies[4]
+    kernel_mapping = create_mixed_kernel_parameters(animal_type=AIRBORNE, base_step_size=5)
+    """set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=6, diffusity=1)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=5,
                          directions=1,
-                         diffusity=1.6,
-                         max_bias_x=0, max_bias_y=0)
-    """
-    set_landmark_mapping(kernel_mapping, WATER, is_brownian=False, step_size=4, directions=4, diffusity=1, max_bias_x=0,
-                         max_bias_y=0)"""
+                         diffusity=2.6)"""
 
-    walker = MixedWalker(T=T, resolution=600, kernel_mapping=kernel_mapping, study_folder=study)
-    # steps = [(166, 166), (422, 300)]
+    walker = MixedWalker(T=T, resolution=500, kernel_mapping=kernel_mapping, study_folder=study)
     walker.generate_walk(serialized=False)
 
 

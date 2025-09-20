@@ -1,5 +1,7 @@
+import subprocess
 from pathlib import Path
 
+from random_walk_package.bindings.cuda.mixed_gpu import preprocess_mixed_gpu, mixed_walk_gpu, free_kernel_pool
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
@@ -46,7 +48,16 @@ class MixedWalker:
         self.aid_to_terrain_path = self.movebank_processor.create_landcover_data_txt(self.resolution,
                                                                                      out_directory=self.study_folder)
 
+    @staticmethod
+    def has_cuda():
+        try:
+            out = subprocess.check_output(["nvidia-smi"], stderr=subprocess.STDOUT)
+            return b"CUDA" in out or b"NVIDIA" in out
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
     def generate_walk(self, serialized=False):
+        use_cuda = self.has_cuda()
         grid_steps_dict, geo_steps_dict = self.movebank_processor.create_movement_data(samples=-1)
 
         recmp: bool = True
@@ -66,6 +77,8 @@ class MixedWalker:
                 print("create kernels")
                 self.tensor_map = get_tensor_map_terrain(spatial_map, self.mapping)
                 print("create tensor map")
+
+            kernel_pool = preprocess_mixed_gpu(self.tensor_map, spatial_map) if use_cuda else None
 
             width = spatial_map.width
             height = spatial_map.height
@@ -88,32 +101,37 @@ class MixedWalker:
                 t = abs(start_x - end_x) + abs(start_y - end_y)
                 self.T = 5 if t < 5 else t
                 print(f"Setting T to {self.T}")
-                dp_matrix_step = mix_walk(W=width, H=height, terrain_map=spatial_map, kernels_map=self.tensor_map,
-                                          start_x=int(start_x), start_y=int(start_y), T=self.T, serialize=serialized,
-                                          recompute=recmp,
-                                          serialize_path=self.serialization_path, mapping=self.mapping)
-                if serialized:
-                    print(dp_dir)
-                # Backtrace from the end point
-                walk_ptr = mix_backtrace(
-                    DP_Matrix=dp_matrix_step,
-                    T=self.T,
-                    tensor_map=self.tensor_map,
-                    terrain=spatial_map,
-                    end_x=int(end_x),
-                    end_y=int(end_y),
-                    directory=0,
-                    serialize=serialized,
-                    serialize_path=self.serialization_path,
-                    dp_dir=dp_dir,
-                    mapping=self.mapping
-                )
+                if use_cuda:
+                    walk_ptr = mixed_walk_gpu(self.T, width, height, start_x, start_y, end_x, end_y, self.tensor_map,
+                                              self.mapping, spatial_map, False, "", kernel_pool)
+                else:
+                    dp_matrix_step = mix_walk(W=width, H=height, terrain_map=spatial_map, kernels_map=self.tensor_map,
+                                              start_x=int(start_x), start_y=int(start_y), T=self.T,
+                                              serialize=serialized,
+                                              recompute=recmp,
+                                              serialize_path=self.serialization_path, mapping=self.mapping)
+                    if serialized:
+                        print(dp_dir)
+                    # Backtrace from the end point
+                    walk_ptr = mix_backtrace(
+                        DP_Matrix=dp_matrix_step,
+                        T=self.T,
+                        tensor_map=self.tensor_map,
+                        terrain=spatial_map,
+                        end_x=int(end_x),
+                        end_y=int(end_y),
+                        directory=0,
+                        serialize=serialized,
+                        serialize_path=self.serialization_path,
+                        dp_dir=dp_dir,
+                        mapping=self.mapping
+                    )
                 if walk_ptr is not None and walk_ptr.contents:
                     segment = get_walk_points(walk_ptr)
                 else:
                     segment = [(start_x, start_y), (end_x, end_y)]
                 # Cleanup C memory
-                if not serialized:
+                if not serialized and not use_cuda:
                     dll.tensor4D_free(dp_matrix_step, self.T)
                 dll.point2d_array_free(walk_ptr)
 
@@ -123,6 +141,7 @@ class MixedWalker:
             print(
                 f"Finished walking {animal_id} from {steps[0]} to {steps[-1]} with {len(steps)} steps."
             )
+            free_kernel_pool(kernel_pool)
             # Add final point
             full_path.append(steps[-1])
             grid_steps_dict[animal_id] = self.movebank_processor.grid_coordinates_to_geodetic(steps, animal_id)
