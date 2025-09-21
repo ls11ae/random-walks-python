@@ -1,12 +1,11 @@
-from tests.mixed_walk_test import test_time_walker
+from tests.mixed_walk_test import mixed_walk_test
 
 # debugging: gdb --args python -m tests.test
 
 if __name__ == "__main__":
-    test_time_walker()
     # plot_walk_from_json(
     #   "/home/omar/PycharmProjects/random-walk-python/random_walk_package/resources/Boars_Austria/walks/C30FFD Solar_600.json")
-    # mixed_walk_test()
+    mixed_walk_test()
     # test_time_walker_multi()
     # corr(7, 16, 300)
     # benchmark_brownian(200)
