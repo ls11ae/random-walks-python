@@ -7,7 +7,7 @@ studies = ["elephant_study/", "baboon_SA_study/", "leap_of_the_cat/", "Boars_Aus
 def mixed_walk_test():
     T = 10
     # todo: dynamic resolution based on bounding box size
-    study = studies[2]
+    study = studies[3]
     kernel_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=4)
     """set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=6, diffusity=1)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
