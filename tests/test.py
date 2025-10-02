@@ -1,42 +1,8 @@
 # debugging: gdb --args python -m tests.test
-from tests.brownian_test import *
 from tests.mixed_walk_test import *
-from tests.correlated_test import *
-
 
 if __name__ == "__main__":
-    #test_time_walker()
-    #test_brownian_wrapper()
-    #corr(7, 8, 150)
-    #test_biased_walk()
+    # test_time_walker()
+    # test_brownian_wrapper()
+    # test_biased_walk()
     mixed_walk_test()
-    # plot_walk_from_json(f"/home/omar/CLionProjects/random-walks/cmake-build-release/bin/timewalk_mixed.json")
-    # benchmark_brownian(200)
-    # mixed_walk()
-    # test_time_walk()
-    # corr(7, 16, 300)
-    # print("Running tests...")
-    """
-        test_time_walker()
-        test_time_walker_multi()
-        test_brownian_wrapper()
-        test()
-        test_mixed_walk_time()
-        # move_bank_test()
-        landcover_test()
-        movebank_test()
-        test_terrain_correlated()
-        test_mixed_walk_time()
-        corr_simple(12)
-        corr_simple(16)
-        corr_simple(20)
-        corr_simple(24)
-        test_terrain()
-        mixed_walk()
-        test_terrain_correlated()
-        corr()
-        corr_movebank_test()
-        movebank_test()
-        test_brownian_wrapper()
-        """
-# benchmark_brownian(200)
