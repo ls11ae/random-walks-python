@@ -23,7 +23,8 @@ dependencies = [
     "planetary_computer",
     "rioxarray",
     "xarray",
-    "memory_profiler"
+    "memory_profiler",
+    "folium"
 ]
 
 [tool.scikit-build]
