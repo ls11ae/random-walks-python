@@ -1,6 +1,6 @@
 from random_walk_package import create_point2d_array
-from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_correlated_kernel_parameters
+from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.wrapper import dll
 
 
@@ -65,22 +65,6 @@ dll.generate_kernels.argtypes = [
     ctypes.c_ssize_t,  # w
 ]
 dll.generate_kernels.restype = ctypes.POINTER(Tensor)
-
-# Assign Sectors Matrix
-dll.assign_sectors_matrix.argtypes = [
-    ctypes.c_ssize_t,  # width
-    ctypes.c_ssize_t,  # height
-    ctypes.c_ssize_t  # D
-]
-dll.assign_sectors_matrix.restype = ctypes.POINTER(Matrix)
-
-# Assign Sectors Tensor
-dll.assign_sectors_tensor.argtypes = [
-    ctypes.c_ssize_t,  # width
-    ctypes.c_ssize_t,  # height
-    ctypes.c_int  # D
-]
-dll.assign_sectors_tensor.restype = ctypes.POINTER(Tensor)
 
 # DP Calculation
 dll.c_walk_init_terrain.argtypes = [
@@ -152,7 +136,8 @@ def dp_calculation_low_ram(width, height, kernel, time, start_x, start_y, output
     dll.dp_calculation_low_ram(width, height, kernel, time, start_x, start_y, output_folder_bytes)
 
 
-def dp_calculation_terrain_low_ram(W, H, kernel, terrain_map, kernels_map, T, start_x, start_y, output_folder, mapping=None):
+def dp_calculation_terrain_low_ram(W, H, kernel, terrain_map, kernels_map, T, start_x, start_y, output_folder,
+                                   mapping=None):
     output_folder_bytes = output_folder.encode('utf-8')
 
     if kernels_map is None:
@@ -160,7 +145,8 @@ def dp_calculation_terrain_low_ram(W, H, kernel, terrain_map, kernels_map, T, st
             mapping = create_correlated_kernel_parameters(MEDIUM, 7)
         kernels_map = get_tensor_map(terrain_map, mapping, kernel)
 
-    dll.c_walk_init_terrain_low_ram(W, H, kernel, terrain_map, mapping, kernels_map, T, start_x, start_y, output_folder_bytes)
+    dll.c_walk_init_terrain_low_ram(W, H, kernel, terrain_map, mapping, kernels_map, T, start_x, start_y,
+                                    output_folder_bytes)
 
 
 def correlated_dp_matrix(kernel, width, height, time, start_x=None, start_y=None):
@@ -178,7 +164,8 @@ def correlated_dp_matrix_terrain(width, height, kernel, terrain, tensor_map, tim
             mapping = create_correlated_kernel_parameters(MEDIUM, 7)
         tensor_map = get_tensor_map(terrain, mapping, kernel)
 
-    dp_matrix_tensor = dll.c_walk_init_terrain(width, height, kernel, terrain, mapping, tensor_map, time, start_x, start_y)
+    dp_matrix_tensor = dll.c_walk_init_terrain(width, height, kernel, terrain, mapping, tensor_map, time, start_x,
+                                               start_y)
     return dp_matrix_tensor
 
 

@@ -3,7 +3,6 @@ import ctypes
 from random_walk_package.bindings.data_structures.point2D import *
 from random_walk_package.bindings.data_structures.types import *
 
-
 dll.weather_entry_new.argtypes = [ctypes.c_float, ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.c_float,
                                   ctypes.c_float, ctypes.c_int, ctypes.c_int]
 dll.weather_entry_new.restype = ctypes.POINTER(WeatherEntry)
@@ -27,18 +26,11 @@ dll.weather_entry_free.argtypes = [WeatherEntryPtr]
 dll.weather_entry_free.restype = None
 
 
-dll.weather_entry_to_bias.argtypes = [WeatherEntryPtr]
-dll.weather_entry_to_bias.restype = Point2DPtr
-
-def weather_entry_to_bias(entry: WeatherEntryPtr) -> Point2DPtr: # type: ignore
-    return dll.weather_entry_to_bias(entry)
-
-
 def weather_timeline(length):
     return dll.weather_timeline_new(length)
 
 
-def weather_entry_free(entry: WeatherEntryPtr): # type: ignore
+def weather_entry_free(entry: WeatherEntryPtr):  # type: ignore
     return dll.weather_entry_free(entry)
 
 
@@ -54,3 +46,15 @@ def weather_entry_new(temperature, humidity, precipitation, wind_speed, wind_dir
 
 def weather_grid_print(grid):
     return dll.weather_grid_print(grid)
+
+
+from datetime import datetime
+
+
+def timed_location_of(x, y, time_stamp):
+    dt_s = datetime.strptime(time_stamp, "%Y-%m-%d %H:%M:%S.%f")
+    t_loc = TimedLocation(
+        time=DateTime(dt_s.year, dt_s.month, dt_s.day, dt_s.hour),
+        location=Point2D(x, y)
+    )
+    return t_loc

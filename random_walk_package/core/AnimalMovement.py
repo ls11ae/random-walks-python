@@ -1,12 +1,10 @@
 import os
+import os
 import time
 
 import numpy as np
 
 # Assuming these imports are correctly resolved from your project structure
-from random_walk_package.bindings.data_processing.movebank_parser import *
-from random_walk_package.bindings.data_processing.weather_parser import weather_entry_new, \
-    weather_timeline
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import get_start_end_dates, \
@@ -73,20 +71,33 @@ def _fetch_single_weather(lat: float, lon: float, timestamp_str: str) -> dict | 
     return None
 
 
-def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_str: str, end_date_str: str) -> \
-        list[dict]:
+def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_str: str, end_date_str: str,
+                                           fetch_hourly=False) -> list[dict]:
     """
     Helper for fetching all hourly weather data for a date range at a specific lat/lon.
     Returns a list of dictionaries, each dictionary representing one hourly record.
     """
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "start_date": start_date_str,
-        "end_date": end_date_str,
-        "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,snowfall,weather_code,cloud_cover",
-        "timezone": "UTC"
-    }
+
+    if fetch_hourly:
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "start_date": start_date_str,
+            "end_date": end_date_str,
+            "hourly": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m,snowfall,weather_code,cloud_cover",
+            "timezone": "UTC"
+        }
+    else:
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "start_date": start_date_str,
+            "end_date": end_date_str,
+            "daily": "weather_code,temperature_2m_mean,relative_humidity_2m_mean,precipitation_sum,snowfall_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean",
+            # Fixed: consistent variable names
+            "timezone": "UTC"
+        }
+
     weather_records_for_point = []
 
     for attempt in range(3):  # Retry logic
@@ -95,18 +106,25 @@ def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_st
             response.raise_for_status()
             data = response.json()
 
-            hourly_data = data.get("hourly", {})
+            hourly_data = data.get("hourly" if fetch_hourly else "daily", {})
             times = hourly_data.get("time", [])
 
             if not times:
                 print(
-                    f"Warning: No hourly data returned for Lat: {lat:.4f}, Lon: {lon:.4f} between {start_date_str} and {end_date_str}. API Response: {data.get('reason', '')}")
+                    f"Warning: No data returned for Lat: {lat:.4f}, Lon: {lon:.4f} between {start_date_str} and {end_date_str}. API Response: {data.get('reason', '')}")
                 return []  # Return empty list if no time entries
 
             # Prepare series data, ensuring all expected keys exist and have correct length
             series_data = {}
-            expected_vars = ['temperature_2m', 'relative_humidity_2m', 'precipitation', 'wind_speed_10m',
-                             'wind_direction_10m', 'snowfall', 'weather_code', 'cloud_cover']
+            if fetch_hourly:
+                expected_vars = ['temperature_2m', 'relative_humidity_2m', 'precipitation', 'wind_speed_10m',
+                                 'wind_direction_10m', 'snowfall', 'weather_code', 'cloud_cover']
+            else:
+                # Fixed: Use the same variable names as in the API request
+                expected_vars = ['weather_code', 'temperature_2m_mean', 'relative_humidity_2m_mean',
+                                 'precipitation_sum', 'snowfall_sum', 'wind_speed_10m_max',
+                                 'wind_direction_10m_dominant', 'cloud_cover_mean']
+
             num_timestamps = len(times)
 
             for var_name in expected_vars:
@@ -122,19 +140,34 @@ def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_st
                 series_data[var_name] = raw_var_data
 
             for i, time_str in enumerate(times):
-                record = {
-                    "latitude": lat,
-                    "longitude": lon,
-                    "timestamp": time_str,
-                    "temperature_2m": series_data['temperature_2m'][i],
-                    "relative_humidity_2m": series_data['relative_humidity_2m'][i],
-                    "precipitation": series_data['precipitation'][i],
-                    "wind_speed_10m": series_data['wind_speed_10m'][i],
-                    "wind_direction_10m": series_data['wind_direction_10m'][i],
-                    "snowfall": series_data['snowfall'][i],
-                    "weather_code": series_data['weather_code'][i],
-                    "cloud_cover": series_data['cloud_cover'][i],
-                }
+                if fetch_hourly:
+                    record = {
+                        "latitude": lat,
+                        "longitude": lon,
+                        "timestamp": time_str,
+                        "temperature_2m": series_data['temperature_2m'][i],
+                        "relative_humidity_2m": series_data['relative_humidity_2m'][i],
+                        "precipitation": series_data['precipitation'][i],
+                        "wind_speed_10m": series_data['wind_speed_10m'][i],
+                        "wind_direction_10m": series_data['wind_direction_10m'][i],
+                        "snowfall": series_data['snowfall'][i],
+                        "weather_code": series_data['weather_code'][i],
+                        "cloud_cover": series_data['cloud_cover'][i],
+                    }
+                else:
+                    record = {
+                        "latitude": lat,
+                        "longitude": lon,
+                        "timestamp": time_str,
+                        "weather_code": series_data['weather_code'][i],
+                        "temperature_2m_mean": series_data['temperature_2m_mean'][i],
+                        "relative_humidity_2m_mean": series_data['relative_humidity_2m_mean'][i],
+                        "precipitation_sum": series_data['precipitation_sum'][i],
+                        "snowfall_sum": series_data['snowfall_sum'][i],
+                        "wind_direction_10m_dominant": series_data['wind_direction_10m_dominant'][i],
+                        "wind_speed_10m_max": series_data['wind_speed_10m_max'][i],  # Fixed: use max instead of mean
+                        "cloud_cover_mean": series_data['cloud_cover_mean'][i],
+                    }
                 weather_records_for_point.append(record)
             return weather_records_for_point  # Success
 
@@ -298,13 +331,14 @@ class AnimalMovementProcessor:
             ))
         return sampled_weather
 
-    def create_movement_data(self, samples=10) -> tuple[
-        dict[str, list[tuple[int, int]]], dict[str, list[tuple[int, int]]]]:
+    def create_movement_data(self, samples=10, time_stamped=False) -> tuple[
+        dict[str, list[tuple[int, int]]], dict[str, list[tuple[int, int]]], dict[str, str] | None]:
         if self.df is None:
             self._load_data()
 
         utm_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
         geo_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
+        time_stamps: dict[str, str] = {}
         animal_ids = get_unique_animal_ids(self.df)
 
         for aid in animal_ids:
@@ -323,23 +357,25 @@ class AnimalMovementProcessor:
                 dp = self.discrete_params.get(aid) or self.discrete_params.get(str(aid))
                 if dp and len(dp) == 4:
                     _, _, x_res, y_res = dp
-
             # Get coordinates for current animal ID using its UTM bbox
-            coords_data, geo_coords = get_animal_coordinates(
+            coords_data, geo_coords, times = get_animal_coordinates(
                 df=self.df,
                 animal_id=aid,
                 epsg_code=self.aid_espg_map[str(aid)],
                 samples=samples,
                 width=x_res,
                 height=y_res,
-                bbox_utm=bbox_utm
+                bbox_utm=bbox_utm,
+                time_stamped=time_stamped
             )
             utm_coords_by_animal[str(aid)] = coords_data
             geo_coords_by_animal[str(aid)] = geo_coords
+            if time_stamped:
+                time_stamps[str(aid)] = times
 
         self.grid_coords = utm_coords_by_animal
         self.geo_coords = geo_coords_by_animal
-        return utm_coords_by_animal, geo_coords_by_animal
+        return utm_coords_by_animal, geo_coords_by_animal, time_stamps
 
     def grid_coordinates_to_geodetic(self, coord: list[tuple[int, int]], animal_id: str) -> list[tuple[float, float]]:
         """
@@ -385,178 +421,6 @@ class AnimalMovementProcessor:
 
         return result
 
-    def fetch_trajectory_weather(self, output_filename="weather_trajectory.csv") -> list[tuple]:
-        """Fetch weather for pre-loaded trajectory coordinates and timestamps"""
-        if not self.grid_coords or not self.timeline:
-            raise ValueError("Call create_movement_data() first to generate coordinates and timeline.")
-
-        # Assuming self.grid_coords has a .points list/array and .length or similar
-        # And self.timeline is a list of timestamp strings
-        num_points = 0
-        if hasattr(self.grid_coords, 'points') and self.grid_coords.points is not None:  # For Point2DArray from C
-            num_points = self.grid_coords.length if hasattr(self.grid_coords, 'length') else len(
-                self.grid_coords.points)
-        elif hasattr(self.grid_coords, 'coordinates'):  # For a simple list of point objects
-            num_points = len(self.grid_coords.coordinates)
-
-        if num_points != len(self.timeline):
-            raise ValueError(
-                f"Mismatch between number of coordinates ({num_points}) and timeline entries ({len(self.timeline)}).")
-
-        weather_data_collected = []  # Stores dicts first
-
-        for i in range(num_points):
-            print(f"Fetching trajectory weather {i + 1}/{num_points}")
-            # Adjust access to lat/lon based on self.grid_coords structure
-            if hasattr(self.grid_coords, 'points') and self.grid_coords.points is not None:  # C-style Point2DArray
-                lat = self.grid_coords.points[i].y
-                lon = self.grid_coords.points[i].x
-            elif hasattr(self.grid_coords, 'coordinates'):  # Python list of point objects
-                lat = self.grid_coords.coordinates[i].y  # Assuming .y attribute
-                lon = self.grid_coords.coordinates[i].x  # Assuming .x attribute
-            else:
-                raise AttributeError("Coordinates structure not recognized in self.grid_coords")
-
-            timestamp_str = self.timeline[i]
-            entry_dict = _fetch_single_weather(lat, lon, timestamp_str)
-            if entry_dict:
-                weather_data_collected.append(entry_dict)
-            time.sleep(0.15)
-
-        if not weather_data_collected:
-            print("No trajectory weather data was fetched.")
-            self._weather_data = []  # Ensure it's an empty list
-            return []
-
-        # Convert list of dicts to list of tuples for self._weather_data and DataFrame
-        weather_data_tuples = []
-        for entry in weather_data_collected:
-            weather_data_tuples.append((
-                entry['timestamp'],
-                entry['latitude'],
-                entry['longitude'],
-                entry.get('temperature_2m'),
-                entry.get('relative_humidity_2m'),
-                entry.get('precipitation'),
-                entry.get('wind_speed_10m'),
-                entry.get('wind_direction_10m'),
-                entry.get('snowfall'),
-                entry.get('weather_code'),
-                entry.get('cloud_cover')
-            ))
-
-        self._weather_data = weather_data_tuples
-
-        df_columns = [
-            'timestamp', 'latitude', 'longitude', 'temperature_2m',
-            'relative_humidity_2m', 'precipitation', 'wind_speed_10m',
-            'wind_direction_10m', 'snowfall', 'weather_code', 'cloud_cover'
-        ]
-        pd.DataFrame(weather_data_tuples, columns=df_columns).to_csv(output_filename, index=False)
-        print(f"Trajectory weather data saved to {output_filename}")
-        return weather_data_tuples
-
-    def load_weather_data(self, input_filename="weather_trajectory.csv") -> None:
-        """Load previously fetched weather data from CSV"""
-        filepath = input_filename
-        if not os.path.isabs(input_filename):
-            # Assuming it might be in resources or current dir.
-            # For consistency with how data_file is handled, or how output_filename in fetch_trajectory_weather is handled.
-            # Let's assume it's a direct path or relative to CWD for now.
-            pass
-
-        try:
-            df = pd.read_csv(filepath)
-            # Convert DataFrame to list of tuples in expected order
-            self._weather_data = [
-                (
-                    row['timestamp'],
-                    float(row['latitude']),
-                    float(row['longitude']),
-                    float(row['temperature_2m']) if pd.notna(row['temperature_2m']) else None,
-                    int(row['relative_humidity_2m']) if pd.notna(row['relative_humidity_2m']) else None,
-                    float(row['precipitation']) if pd.notna(row['precipitation']) else None,
-                    float(row['wind_speed_10m']) if pd.notna(row['wind_speed_10m']) else None,
-                    int(row['wind_direction_10m']) if pd.notna(row['wind_direction_10m']) else None,
-                    float(row['snowfall']) if pd.notna(row['snowfall']) else None,
-                    int(row['weather_code']) if pd.notna(row['weather_code']) else None,
-                    int(row['cloud_cover']) if pd.notna(row['cloud_cover']) else None
-                ) for _, row in df.iterrows()
-            ]
-            print(f"Loaded {len(self._weather_data)} weather records from {filepath}")
-        except FileNotFoundError:
-            print(f"Warning: Weather file {filepath} not found. No data loaded.")
-            self._weather_data = None  # Or []
-        except KeyError as e:
-            print(f"Error: Missing required column in weather file {filepath} - {str(e)}")
-            self._weather_data = None  # Or []
-        except Exception as e:
-            print(f"Error loading weather data from {filepath}: {str(e)}")
-            self._weather_data = None  # Or []
-
-    def create_weather_data(self, output_file="weather_baboons.csv"):
-        """Fetches trajectory weather using start/end dates from the entire dataset.
-        Note: This might be confusing. fetch_trajectory_weather fetches for specific points.
-        This method name suggests creating a weather dataset, perhaps gridded or for the whole timeframe.
-        The original implementation calls fetch_trajectory_weather.
-        This will fetch weather for the *currently loaded trajectory* in self.grid_coords and self.timeline.
-        """
-        if self.df is None or self.df.empty:
-            raise ValueError("DataFrame not loaded. Cannot determine date range.")
-        if self.grid_coords is None or self.timeline is None:
-            raise ValueError("Movement data (coords and timeline) not created. Call create_movement_data() first.")
-
-        start_date_df, end_date_df = get_start_end_dates(self.df)  # These are from the whole dataset
-        print(f"Dataset date range: OM_START_DATE = {start_date_df}, OM_END_DATE = {end_date_df}")
-        print(f"Fetching weather for the current trajectory within this general timeframe.")
-
-        # output_file path handling
-        output_path = output_file
-        if not os.path.isabs(output_file):
-            output_path = os.path.join(self.resources_dir, output_file)
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-        return self.fetch_trajectory_weather(output_path)
-
-    def create_weather_tuples_ctypes(self) -> POINTER(WeatherTimeline):  # type: ignore
-        """Convert trajectory weather data to C-compatible WeatherTimeline structure"""
-        if not self._weather_data:  # Check if it's None or empty
-            raise ValueError(
-                "Weather data not available. Call fetch_trajectory_weather() or load_weather_data() first.")
-
-        num_entries = len(self._weather_data)
-        if num_entries == 0:
-            # Return an empty or minimally initialized WeatherTimeline
-            # Assuming weather_timeline can handle num_entries = 0
-            return weather_timeline(0)
-
-        # Create array of WeatherEntry structures
-        # Assuming weather_timeline creates the timeline structure and allocates memory for entries
-        c_timeline = weather_timeline(num_entries)  # capacity, size
-
-        for i, data_tuple in enumerate(self._weather_data):
-            # data_tuple: (timestamp, lat, lon, temp, hum, precip, wind_s, wind_d, snow, code, cloud)
-            # weather_entry_new expects: temp, hum, precip, wind_s, wind_d, snow, code, cloud
-            # Need to handle None values if C structure cannot take them (e.g. use a default like -9999 or 0)
-
-            def nan_to_default(val, default=0):
-                return default if val is None or pd.isna(val) else val
-
-            entry = weather_entry_new(
-                float(nan_to_default(data_tuple[3], -9999)),  # temperature_2m
-                int(nan_to_default(data_tuple[4], -1)),  # relative_humidity_2m
-                float(nan_to_default(data_tuple[5], -1)),  # precipitation
-                float(nan_to_default(data_tuple[6], -1)),  # wind_speed_10m
-                int(nan_to_default(data_tuple[7], -1)),  # wind_direction_10m
-                float(nan_to_default(data_tuple[8], -1)),  # snowfall
-                int(nan_to_default(data_tuple[9], -1)),  # weather_code
-                int(nan_to_default(data_tuple[10], -1))  # cloud_cover
-            )
-            c_timeline.contents.entries[i] = entry
-        return c_timeline
-
-    # --- New methods for gridded weather data ---
-
     def fetch_gridded_weather_data(self, output_folder: str,
                                    start_date_override: str = None, days_to_fetch: int = 7,
                                    grid_points_per_edge: int = 10) -> dict[str, str]:
@@ -580,28 +444,6 @@ class AnimalMovementProcessor:
             if not self.bbox:
                 raise ValueError("Bounding boxes are not set. Load data first.")
 
-        # Determine date range
-        if self.df is None or self.df.empty:
-            if not start_date_override:
-                raise ValueError(
-                    "Animal movement data (self.df) is not loaded. Needed to determine start date, or provide 'start_date_override'.")
-        if start_date_override:
-            try:
-                start_date = pd.to_datetime(start_date_override)
-            except ValueError:
-                raise ValueError("Invalid format for 'start_date_override'. Please use 'YYYY-MM-DD'.")
-        elif self.df is not None and not self.df.empty:
-            min_date_str, _ = get_start_end_dates(self.df)
-            if not min_date_str:
-                raise ValueError(
-                    "Could not determine start date from animal movement data. Provide 'start_date_override'.")
-            start_date = pd.to_datetime(min_date_str)
-        else:
-            raise ValueError(
-                "Cannot determine start date: no animal data loaded and no 'start_date_override' provided.")
-        end_date = start_date + pd.Timedelta(days=days_to_fetch - 1)
-        print(f"Fetching gridded weather from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.")
-
         # Prepare root output directory
         base_output_dir = output_folder
         os.makedirs(base_output_dir, exist_ok=True)
@@ -615,6 +457,17 @@ class AnimalMovementProcessor:
 
             animal_dir = os.path.join(base_output_dir, str(animal_id))
             os.makedirs(animal_dir, exist_ok=True)
+
+            min_date_str, end_date_str = get_start_end_dates(self.df, animal_id)
+            if not min_date_str:
+                raise ValueError(
+                    "Could not determine start date from animal movement data. Provide 'start_date_override'.")
+            start_date = pd.to_datetime(min_date_str)
+            end_date = pd.to_datetime(end_date_str)
+            delta = end_date - start_date
+            days = delta.days  # integer days
+            exact_days = delta / pd.Timedelta(days=1)
+            fetch_hourly: bool = exact_days < 20
             merged_csv_path = animal_dir
 
             # Check if per-grid CSVs already exist
@@ -623,35 +476,6 @@ class AnimalMovementProcessor:
             if len(existing_point_csvs) >= expected_csv_count:
                 print(
                     f"Grid CSV folder {animal_dir} exists and contains {len(existing_point_csvs)} CSVs. Skipping fetch.")
-                # Ensure merged CSV exists; if not, build it from existing point CSVs
-                if not os.path.exists(merged_csv_path):
-                    all_frames = []
-                    for fname in sorted(existing_point_csvs):
-                        fpath = os.path.join(animal_dir, fname)
-                        df_point = pd.read_csv(fpath)
-                        # Parse grid indices from filename: weather_grid_y{y}_x{x}.csv
-                        try:
-                            base = os.path.splitext(fname)[0]
-                            parts = base.split('_')
-                            y_part = next(p for p in parts if p.startswith('y'))
-                            x_part = next(p for p in parts if p.startswith('x'))
-                            grid_y = int(y_part[1:])
-                            grid_x = int(x_part[1:])
-                        except Exception:
-                            grid_y = None
-                            grid_x = None
-                        df_point['grid_y'] = grid_y
-                        df_point['grid_x'] = grid_x
-                        all_frames.append(df_point)
-                    if all_frames:
-                        df_all = pd.concat(all_frames, ignore_index=True)
-                        # Order columns with grid indices at the front
-                        col_order = ['grid_y', 'grid_x', 'latitude', 'longitude', 'timestamp', 'temperature_2m',
-                                     'relative_humidity_2m', 'precipitation', 'wind_speed_10m', 'wind_direction_10m',
-                                     'snowfall', 'weather_code', 'cloud_cover']
-                        df_all = df_all.reindex(columns=col_order)
-                        df_all.to_csv(merged_csv_path, index=False)
-                        print(f"Created merged CSV: {merged_csv_path}")
                 results_map[str(animal_id)] = merged_csv_path
                 continue
 
@@ -681,7 +505,7 @@ class AnimalMovementProcessor:
                 print(
                     f"[{animal_id}] Fetching weather for grid point {i + 1}/{total_points_to_fetch} (Lat: {lat:.4f}, Lon: {lon:.4f})")
                 point_weather_data_list = _fetch_hourly_data_for_period_at_point(
-                    lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
+                    lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"), fetch_hourly
                 )
                 # Save per-grid-point CSV
                 y_idx = i // grid_points_per_edge
@@ -689,39 +513,22 @@ class AnimalMovementProcessor:
                 csv_name = f"weather_grid_y{y_idx}_x{x_idx}.csv"
                 csv_path = os.path.join(animal_dir, csv_name)
                 df_point = pd.DataFrame(point_weather_data_list)
-                columns_order = ['latitude', 'longitude', 'timestamp', 'temperature_2m', 'relative_humidity_2m',
-                                 'precipitation', 'wind_speed_10m', 'wind_direction_10m', 'snowfall', 'weather_code',
-                                 'cloud_cover']
+                columns_order = (['latitude', 'longitude', 'timestamp', 'temperature_2m', 'relative_humidity_2m',
+                                  'precipitation', 'wind_speed_10m', 'wind_direction_10m', 'snowfall', 'weather_code',
+                                  'cloud_cover'] if fetch_hourly else
+                                 ['latitude', 'longitude', 'timestamp', 'temperature_2m_mean',
+                                  'relative_humidity_2m_mean',
+                                  'precipitation_sum', 'wind_speed_10m_max', 'wind_direction_10m_dominant',
+                                  'snowfall_sum',
+                                  'weather_code', 'cloud_cover_mean'])
+
                 df_point = df_point.reindex(columns=columns_order)
                 df_point.to_csv(csv_path, index=False)
                 print(f"[{animal_id}] Saved grid point CSV: {csv_path}")
-
-                # Accumulate for merged CSV, add grid indices
-                if not df_point.empty:
-                    df_point_merged = df_point.copy()
-                    df_point_merged['grid_y'] = y_idx
-                    df_point_merged['grid_x'] = x_idx
-                    all_rows.append(df_point_merged)
+                results_map[str(animal_id)] = animal_dir
 
                 if i < total_points_to_fetch - 1:
                     time.sleep(0.2)
-
-            # Write merged CSV per animal
-            if all_rows:
-                df_all = pd.concat(all_rows, ignore_index=True)
-                # Place grid indices at the front
-                col_order = ['grid_y', 'grid_x', 'latitude', 'longitude', 'timestamp', 'temperature_2m',
-                             'relative_humidity_2m', 'precipitation', 'wind_speed_10m', 'wind_direction_10m',
-                             'snowfall', 'weather_code', 'cloud_cover']
-                df_all = df_all.reindex(columns=col_order)
-                df_all.to_csv(merged_csv_path, index=False)
-                print(f"[{animal_id}] Merged grid weather CSV saved: {merged_csv_path}")
-            else:
-                # Ensure an empty merged file exists for consistency
-                pd.DataFrame(columns=['grid_y', 'grid_x', 'latitude', 'longitude', 'timestamp', 'temperature_2m',
-                                      'relative_humidity_2m', 'precipitation', 'wind_speed_10m', 'wind_direction_10m',
-                                      'snowfall', 'weather_code', 'cloud_cover']).to_csv(merged_csv_path, index=False)
-                print(f"[{animal_id}] No data fetched; created empty merged CSV: {merged_csv_path}")
 
             results_map[str(animal_id)] = merged_csv_path
 

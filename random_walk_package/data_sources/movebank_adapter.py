@@ -127,12 +127,15 @@ def bbox_dict_to_discrete_space(
     return result
 
 
-def get_start_end_dates(df):
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
+def get_start_end_dates(df, animal_id: str):
+    # Filter the DataFrame first
+    mask = df['tag-local-identifier'] == animal_id
+    filtered_timestamps = df.loc[mask, 'timestamp']
 
-    # Get the minimum (start) and maximum (end) dates
-    start_date = df['timestamp'].min().strftime('%Y-%m-%d')
-    end_date = df['timestamp'].max().strftime('%Y-%m-%d')
+    # Convert to datetime and get min/max
+    timestamps = pd.to_datetime(filtered_timestamps)
+    start_date = timestamps.min().strftime('%Y-%m-%d')
+    end_date = timestamps.max().strftime('%Y-%m-%d')
 
     return start_date, end_date
 
@@ -147,7 +150,7 @@ def map_lat_to_y(lat, min_lat, max_lat, y_res):
 
 def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
                            samples: int = None, width=100, height=100,
-                           bbox_utm: tuple[float, float, float, float] | None = None):
+                           bbox_utm: tuple[float, float, float, float] | None = None, time_stamped=False):
     """
     Return mapped grid coordinates for a specific animal.
     If samples is provided, returns equidistant samples.
@@ -188,6 +191,7 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
 
     # map to discrete grid
     mapped_coords = []
+    time_stamps = []
     for _, row in clean_df.iterrows():
         # Ensure coordinates are within bounds
         x_utm = max(min(row['x'], max_x), min_x)
@@ -201,5 +205,9 @@ def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
         y = max(0, min(height - 1, y))
 
         mapped_coords.append((x, y))
+        time_stamps.append(row['timestamp'])
 
-    return mapped_coords, geo_coords
+    if time_stamped:
+        return mapped_coords, geo_coords, time_stamps
+    else:
+        return mapped_coords, geo_coords, None

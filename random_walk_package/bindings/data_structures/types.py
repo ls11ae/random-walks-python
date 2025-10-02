@@ -1,5 +1,5 @@
-from _ctypes import _Pointer
 from ctypes import *
+
 
 class Matrix(Structure):
     _fields_ = [
@@ -8,6 +8,7 @@ class Matrix(Structure):
         ("len", c_ssize_t),
         ("data", POINTER(c_double))
     ]
+
 
 MatrixPtr = POINTER(Matrix)
 
@@ -18,17 +19,32 @@ class Tensor(Structure):
         ("data", POINTER(POINTER(Matrix)))
     ]
 
+
 class Point2D(Structure):
     _fields_ = [("x", c_ssize_t),
                 ("y", c_ssize_t)]
+
+
+class DateTime(Structure):
+    _fields_ = [("year", c_int),
+                ("month", c_int),
+                ("day", c_int),
+                ("hour", c_int)]
+
+
+class TimedLocation(Structure):
+    _fields_ = [("time", DateTime),
+                ("location", Point2D)]
 
 
 class Point2DArray(Structure):
     _fields_ = [("points", POINTER(Point2D)),
                 ("length", c_size_t)]
 
+
 Point2DArrayPtr = POINTER(Point2DArray)
 Point2DPtr = POINTER(Point2D)
+
 
 class Vector2D(Structure):
     _fields_ = [
@@ -49,6 +65,7 @@ class TensorSet(Structure):
 
 TensorPtr = POINTER(Tensor)
 TensorSetPtr = POINTER(TensorSet)
+
 
 class TerrainMap(Structure):
     _fields_ = [
@@ -113,11 +130,13 @@ class KernelsMap4D(Structure):
         ("cache", POINTER(Cache))
     ]
 
+
 TerrainMapPtr = POINTER(TerrainMap)
 KernelsMapPtr = POINTER(KernelsMap)
 TensorMapPtr = POINTER(KernelsMap3D)
 KernelsMap4DPtr = POINTER(KernelsMap4D)
 KernelsMap3DPtr = POINTER(KernelsMap3D)
+
 
 class Coordinate(Structure):
     _fields_ = [("x", c_double),
@@ -128,7 +147,9 @@ class Coordinate_array(Structure):
     _fields_ = [("points", POINTER(Coordinate)),
                 ("length", c_size_t)]
 
+
 CoordArray = POINTER(Coordinate_array)
+
 
 class KernelParameters(Structure):
     _fields_ = [("is_brownian", c_bool),
@@ -137,16 +158,19 @@ class KernelParameters(Structure):
                 ("diffusity", c_float),
                 ("bias_x", c_ssize_t),
                 ("bias_y", c_ssize_t)]
-    
+
+
 class KernelParametersMapping(Structure):
     _fields_ = [
-        ("forbidden_landmarks", c_int * 12),   # enum -> c_int
-        ("has_forbidden_landmarks", c_bool),   # bool -> c_bool
+        ("forbidden_landmarks", c_int * 12),  # enum -> c_int
+        ("has_forbidden_landmarks", c_bool),  # bool -> c_bool
         ("forbidden_landmarks_count", c_int),  # int -> c_int
         ("parameters", KernelParameters * 12)  # fixed-size Array
     ]
 
+
 KernelParametersMappingPtr = POINTER(KernelParametersMapping)
+
 
 class WeatherEntry(Structure):
     _fields_ = [
@@ -175,10 +199,12 @@ class WeatherGrid(Structure):
         ("entries", POINTER(POINTER(POINTER(WeatherTimeline)))),
     ]
 
+
 KernelParametersPtr = POINTER(KernelParameters)
 WeatherTimelinePtr = POINTER(WeatherTimeline)
 WeatherGridPtr = POINTER(WeatherGrid)
 WeatherEntryPtr = POINTER(WeatherEntry)
+
 
 class Point2DArrayGrid(Structure):
     _fields_ = [("data", POINTER(POINTER(POINTER(Point2DArray)))),
@@ -187,5 +213,5 @@ class Point2DArrayGrid(Structure):
                 ("times", c_size_t)
                 ]
 
-Point2DArrayGridPtr = POINTER(Point2DArrayGrid)
 
+Point2DArrayGridPtr = POINTER(Point2DArrayGrid)

@@ -1,5 +1,6 @@
 import numpy as np
 
+from random_walk_package import timed_location_of
 from random_walk_package.bindings.brownian_walk import plot_walk_from_json
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
@@ -86,34 +87,6 @@ class MixedTimeWalker:
         plot_walk_from_json(walk_path, title=os.path.basename(self.movebank_study))
         return walk_np
 
-    def generate_walk_multi(self, steps, output_file='time_walk.json', serialized=True):
-        """
-        Generates a time-dependent walk using the C function time_walk_geo.
-        Args:
-            steps (list of tuples): List of (x, y) points the walk should pass through.
-            output_file (str): Name of the output file.
-            serialized (bool): Whether to use serialized data.
-        Returns:
-            np.ndarray: Array of points representing the walk.
-        """
-        walk_path = os.path.join(self.walks_path, output_file)
-        walk_ptr = time_walk_geo_multi(
-            T=self.T,
-            csv_path=self.csv_path,
-            terrain_path=self.terrain_path,
-            walk_path=walk_path,
-            grid_x=self.grid_points_per_edge,
-            grid_y=self.grid_points_per_edge,
-            steps=steps,
-            use_serialized=serialized,
-            serialization_path=self.serialization_path
-        )
-        walk_np = get_walk_points(walk_ptr)
-        dll.point2d_array_free(walk_ptr)
-        plot_walk_from_json(walk_path, title=os.path.basename(self.movebank_study))
-
-        return walk_np
-
     def generate_walk_from_movebank(self, serialized=True, output_prefix='time_walk'):
         """
         Generate time-dependent walks for each animal using Movebank steps.
@@ -134,8 +107,9 @@ class MixedTimeWalker:
                 self.resolution, out_directory=self.study_folder
             )
 
-        # Steps from Movebank (grid and geo if needed)
-        grid_steps_dict, geo_steps_dict = self.movebank_processor.create_movement_data(samples=-1)
+        # Steps from Movebank
+        grid_steps_dict, geo_steps_dict, time_stamps_dict = self.movebank_processor.create_movement_data(samples=-1,
+                                                                                                         time_stamped=True)
 
         animal_paths: dict[str, list[tuple[int, int]]] = {}
 
@@ -155,6 +129,11 @@ class MixedTimeWalker:
             for i in range(len(steps) - 1):
                 start_x, start_y = steps[i]
                 end_x, end_y = steps[i + 1]
+                start_time = time_stamps_dict[animal_id][i]
+                end_time = time_stamps_dict[animal_id][i + 1]
+
+                start_t_loc = timed_location_of(start_x, start_y, start_time)
+                end_t_loc = timed_location_of(end_x, end_y, end_time)
 
                 sx, sy = int(start_x), int(start_y)
                 ex, ey = int(end_x), int(end_y)
@@ -179,8 +158,8 @@ class MixedTimeWalker:
                     serialization_path=self.serialization_path,
                     grid_x=self.grid_points_per_edge,
                     grid_y=self.grid_points_per_edge,
-                    start=(sx, sy),
-                    goal=(ex, ey),
+                    start=start_t_loc,
+                    goal=end_t_loc,
                     use_serialized=serialized
                 )
 

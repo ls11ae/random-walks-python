@@ -1,30 +1,26 @@
-from tests.mixed_walk_test import test_time_walker
-
 # debugging: gdb --args python -m tests.test
+from tests.brownian_test import test_brownian_wrapper
 
 if __name__ == "__main__":
-    test_time_walker()
-    # plot_walk_from_json(
-    #   "/home/omar/PycharmProjects/random-walk-python/random_walk_package/resources/Boars_Austria/walks/C30FFD Solar_600.json")
+    # test_time_walker()
+    test_brownian_wrapper()
+    # corr(7, 16, 150)
+    # test_biased_walk()
     # mixed_walk_test()
-    # test_time_walker_multi()
-    # corr(7, 16, 300)
+    # plot_walk_from_json(f"/home/omar/CLionProjects/random-walks/cmake-build-release/bin/timewalk_mixed.json")
     # benchmark_brownian(200)
     # mixed_walk()
     # test_time_walk()
-    # test_weather()
     # corr(7, 16, 300)
     # print("Running tests...")
     """
         test_time_walker()
         test_time_walker_multi()
-        test_biased_walk()
         test_brownian_wrapper()
         test()
         test_mixed_walk_time()
         # move_bank_test()
         landcover_test()
-        test_brownian_wrapper()
         movebank_test()
         test_terrain_correlated()
         test_mixed_walk_time()

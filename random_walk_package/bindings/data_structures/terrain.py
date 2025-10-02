@@ -1,10 +1,11 @@
+import ctypes
 import os
+
 import rasterio
 
-from .kernel_terrain_mapping import create_mixed_kernel_parameters
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll, script_dir
-import ctypes
+from .kernel_terrain_mapping import create_mixed_kernel_parameters
 
 # landcover types
 TREE_COVER = 10
@@ -97,7 +98,8 @@ dll.terrain_map_free.restype = None
 dll.create_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
 dll.create_terrain_map.restype = TerrainMapPtr
 
-dll.tensor_map_terrain_serialize_time.argtypes = [ctypes.c_void_p, TerrainMapPtr, KernelParametersMappingPtr, ctypes.c_char_p]
+dll.tensor_map_terrain_serialize_time.argtypes = [ctypes.c_void_p, TerrainMapPtr, KernelParametersMappingPtr,
+                                                  ctypes.c_char_p]
 dll.tensor_map_terrain_serialize_time.restype = None
 
 dll.terrain_single_value.argtypes = [ctypes.c_int, ctypes.c_ssize_t, ctypes.c_ssize_t]
@@ -107,8 +109,10 @@ dll.terrain_single_value.restype = TerrainMapPtr
 def terrain_single_value(land_type: int, width: int, height: int):
     return dll.terrain_single_value(land_type, width, height)
 
+
 def kernels_map3d_free(kernels_map3d: KernelsMap3DPtr):
     dll.kernels_map3d_free(kernels_map3d)
+
 
 def kernels_map4d_free(kernels_map4d: KernelsMap4DPtr):
     dll.kernels_map4d_free(kernels_map4d)
@@ -116,6 +120,7 @@ def kernels_map4d_free(kernels_map4d: KernelsMap4DPtr):
 
 def terrain_map_free(terrain_map: TerrainMapPtr):
     dll.terrain_map_free(terrain_map)
+
 
 def create_terrain_map(file: str, delim: str) -> TerrainMapPtr:
     file = os.path.join(script_dir, 'resources', file)
@@ -142,30 +147,39 @@ def load_tensor_at(file, x, y):
     if not os.path.exists(file):
         raise FileNotFoundError(f"File '{file}' does not exist.")
     c_file = file.encode('ascii')
-    return dll.tensor_at(c_file,x, y)
+    return dll.tensor_at(c_file, x, y)
+
 
 def load_tensor_at_xyt(file, x, y, t):
     file = os.path.join(script_dir, 'resources', file)
     if not os.path.exists(file):
         raise FileNotFoundError(f"File '{file}' does not exist.")
     c_file = file.encode('ascii')
-    return dll.tensor_at_xyt(c_file,x, y, t)
+    return dll.tensor_at_xyt(c_file, x, y, t)
+
 
 def tensor_map_terrain_serialize(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr, output_path: str) -> None:
     dll.tensor_map_terrain_serialize(terrain, mapping, output_path.encode('utf-8'))
+
 
 def tensor_map_terrain_time_serialize(terrain: TerrainMapPtr, grid: Point2DArrayGridPtr, output_path: str):
     file = os.path.join(script_dir, 'resources', output_path)
     c_file = file.encode('ascii')
     return dll.tensor_map_terrain_time_serialized(terrain, grid, c_file)
 
-def tensor_map_terrain_biased(terrain: TerrainMapPtr, biases: Point2DArrayPtr, mapping: KernelParametersMappingPtr) -> KernelsMap4DPtr:  # type: ignore
+
+def tensor_map_terrain_biased(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr,
+                              biases: Point2DArrayPtr) -> KernelsMap4DPtr:  # type: ignore
     return dll.tensor_map_terrain_biased(terrain, biases, mapping)
 
-def tensor_map_terrain_biased_grid(terrain: TerrainMapPtr, biases: Point2DArrayGridPtr, mapping: KernelParametersMappingPtr) -> KernelsMap4DPtr:  # type: ignore
+
+def tensor_map_terrain_biased_grid(terrain: TerrainMapPtr, biases: Point2DArrayGridPtr,
+                                   mapping: KernelParametersMappingPtr) -> KernelsMap4DPtr:  # type: ignore
     return dll.tensor_map_terrain_biased_grid(terrain, biases, mapping)
 
-def tensor_map_terrain_biased_grid_serialized(terrain: TerrainMapPtr, biases: Point2DArrayGridPtr, mapping: KernelParametersMappingPtr, output_path: str) -> None:
+
+def tensor_map_terrain_biased_grid_serialized(terrain: TerrainMapPtr, biases: Point2DArrayGridPtr,
+                                              mapping: KernelParametersMappingPtr, output_path: str) -> None:
     dll.tensor_map_terrain_biased_grid_serialized(terrain, biases, mapping, output_path.encode('utf-8'))
 
 
@@ -190,25 +204,28 @@ def parse_terrain(file: str, delim: str) -> TerrainMap:
     return terrain
 
 
-def tensor_map_terrain_biased(terrain, bias_array) -> KernelsMap4DPtr: # type: ignore
-    return dll.tensor_map_terrain_biased(terrain, bias_array)
+def tensor_map_terrain_biased(terrain, bias_array, kernel_mapping) -> KernelsMap4DPtr:  # type: ignore
+    return dll.tensor_map_terrain_biased(terrain, kernel_mapping, bias_array)
 
 
-def get_kernels_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr, kernel: MatrixPtr) -> KernelsMapPtr:  # type: ignore
+def get_kernels_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr,
+                    kernel: MatrixPtr) -> KernelsMapPtr:  # type: ignore
     return dll.kernels_map_new(terrain, mapping, kernel)
 
 
-def get_tensor_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr, kernels: TensorPtr) -> KernelsMap3DPtr:  # type: ignore
+def get_tensor_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr,
+                   kernels: TensorPtr) -> KernelsMap3DPtr:  # type: ignore
     return dll.tensor_map_new(terrain, mapping, kernels)
 
 
-def get_tensor_map_mixed(terrain, tensors) -> TensorMapPtr: # type: ignore
+def get_tensor_map_mixed(terrain, tensors) -> TensorMapPtr:  # type: ignore
     if not tensors:
         raise MemoryError("Failed to create TensorSet in C.")
     return dll.tensor_map_mixed(terrain, tensors)
 
 
-def get_tensor_map_terrain(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr) -> KernelsMap3DPtr:  # type: ignore
+def get_tensor_map_terrain(terrain: TerrainMapPtr,
+                           mapping: KernelParametersMappingPtr) -> KernelsMap3DPtr:  # type: ignore
     return dll.tensor_map_terrain(terrain, mapping)
 
 
@@ -220,7 +237,7 @@ def kernels_map_free(kernels_map):
     dll.kernels_map_free(kernels_map)
 
 
-def get_terrain_map(file, delim) -> TerrainMapPtr: # type: ignore
+def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
     file = os.path.join(script_dir, 'resources', file)
     if not file:
         raise FileNotFoundError
@@ -239,7 +256,8 @@ def terrain_at(terrain, x, y):
     return dll.terrain_at(x, y, terrain_ptr)
 
 
-def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, txt_output_path="terrain_movebank.txt") -> TerrainMapPtr | None:  # type: ignore
+def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat,
+                              txt_output_path="terrain_movebank.txt") -> TerrainMapPtr | None:  # type: ignore
     try:
         with rasterio.open(file_path) as src:
             landcover_array = src.read(1)

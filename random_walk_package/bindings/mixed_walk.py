@@ -1,9 +1,7 @@
 # mixed_walk.py
 
 from random_walk_package.bindings.data_structures.terrain import *
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_mixed_kernel_parameters
 from random_walk_package.wrapper import dll
-from ctypes import *
 
 dll.mixed_walk.argtypes = [
     c_ssize_t,  # W
@@ -49,30 +47,30 @@ dll.m_walk_backtrace.argtypes = [
 dll.m_walk_backtrace.restype = Point2DArrayPtr
 
 dll.mixed_walk_time.argtypes = [
-    c_ssize_t,          # W
-    c_ssize_t,          # H
-    TerrainMapPtr,      # terrain
+    c_ssize_t,  # W
+    c_ssize_t,  # H
+    TerrainMapPtr,  # terrain
     KernelParametersMappingPtr,  # mapping
-    KernelsMap4DPtr,    # tensormap
-    c_ssize_t,          # T
-    c_ssize_t,          # start:x
-    c_ssize_t,          # start:y
-    c_bool,             # use_serialized
-    c_char_p            # serialized_path
+    KernelsMap4DPtr,  # tensormap
+    c_ssize_t,  # T
+    c_ssize_t,  # start:x
+    c_ssize_t,  # start:y
+    c_bool,  # use_serialized
+    c_char_p  # serialized_path
 ]
 dll.mixed_walk_time.restype = POINTER(TensorPtr)
 
 dll.backtrace_time_walk.argtypes = [
     POINTER(TensorPtr),  # dp
-    c_ssize_t,           # T
-    TerrainMapPtr,       # terrain
+    c_ssize_t,  # T
+    TerrainMapPtr,  # terrain
     KernelParametersMappingPtr,  # mapping
-    KernelsMap4DPtr,     # kernels_map
-    c_ssize_t,           # end_x
-    c_ssize_t,           # end_y
-    c_ssize_t,           # dir
-    c_bool,              # use_serialized
-    c_char_p             # serialized_path
+    KernelsMap4DPtr,  # kernels_map
+    c_ssize_t,  # end_x
+    c_ssize_t,  # end_y
+    c_ssize_t,  # dir
+    c_bool,  # use_serialized
+    c_char_p  # serialized_path
 ]
 dll.backtrace_time_walk.restype = Point2DArrayPtr
 
@@ -88,14 +86,18 @@ dll.time_walk_geo.argtypes = [
     KernelParametersMappingPtr,  # mapping
     c_int,  # grid_x
     c_int,  # grid_y
+    TimedLocation,
+    TimedLocation,
     Point2D,  # start
     Point2D,  # goal
-    c_bool # use_serialized
+    c_bool,  # use_serialized
+    c_bool  # full weather influence
 ]
 dll.time_walk_geo.restype = Point2DArrayPtr
 
 
-def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, goal, serialization_path, use_serialized=True, mapping=None):
+def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, goal, serialization_path,
+                  use_serialized=True, mapping=None, full_weather_influence=False):
     """
     Calls the C function time_walk_geo to perform a time-dependent walk with geospatial data.
 
@@ -111,7 +113,7 @@ def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, g
         serialization_path (str): Serialization directory.
         use_serialized (bool): Whether to use serialized data.
         mapping: Optional KernelParametersMapping; if None, defaults to create_mixed_kernel_parameters(MEDIUM, 7).
-
+        full_weather_influence (bool): Whether to use full weather influence.
     Returns:
         Point2DArrayPtr: Pointer to the resulting walk.
     """
@@ -128,8 +130,6 @@ def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, g
         raise ValueError("start must be a tuple or list of length 2")
     if not (isinstance(goal, (tuple, list)) and len(goal) == 2):
         raise ValueError("goal must be a tuple or list of length 2")
-    start_pt = Point2D(start[0], start[1])
-    goal_pt = Point2D(goal[0], goal[1])
 
     if mapping is None:
         mapping = create_mixed_kernel_parameters(MEDIUM, 7)
@@ -143,64 +143,10 @@ def time_walk_geo(T, csv_path, terrain_path, walk_path, grid_x, grid_y, start, g
         mapping,
         c_int(grid_x),
         c_int(grid_y),
-        start_pt,
-        goal_pt,
-        c_bool(use_serialized)
-    )
-
-
-# Wrap time_walk_geo_multi
-
-dll.time_walk_geo_multi.argtypes = [
-    c_ssize_t,    # T
-    c_char_p,     # csv_path
-    c_char_p,     # terrain_path
-    c_char_p,     # walk_path
-    KernelParametersMappingPtr,  # mapping
-    c_int,        # grid_x
-    c_int,        # grid_y
-    Point2DArrayPtr,  # steps
-    c_bool,       # use_serialized
-    c_char_p      # serialization_path
-]
-dll.time_walk_geo_multi.restype = Point2DArrayPtr
-
-from random_walk_package.bindings.data_structures.point2D import create_point2d_array
-
-
-def time_walk_geo_multi(T, csv_path, terrain_path, walk_path, grid_x, grid_y, steps, use_serialized=False, serialization_path='', mapping=None):
-    """
-    Calls the C function time_walk_geo_multi to perform a time-dependent walk with multiple steps.
-    Args:
-        T (int): Number of time steps
-        csv_path (str): Path to CSV file
-        terrain_path (str): Path to terrain file
-        walk_path (str): Path to output walk file
-        grid_x (int): Grid width
-        grid_y (int): Grid height
-        steps (list of tuple): List of (x, y) tuples
-        use_serialized (bool): Whether to use serialized data
-        serialization_path (str): Serialization directory
-        mapping: Optional KernelParametersMapping; if None, defaults to create_mixed_kernel_parameters(MEDIUM, 7)
-    Returns:
-        Point2DArrayPtr: Pointer to the resulting walk
-    """
-    steps_array = create_point2d_array(steps)
-
-    if mapping is None:
-        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-
-    return dll.time_walk_geo_multi(
-        c_ssize_t(T),
-        csv_path.encode('utf-8'),
-        terrain_path.encode('utf-8'),
-        walk_path.encode('utf-8'),
-        mapping,
-        c_int(grid_x),
-        c_int(grid_y),
-        steps_array,
+        start,
+        goal,
         c_bool(use_serialized),
-        serialization_path.encode('utf-8')
+        c_bool(full_weather_influence)
     )
 
 
@@ -250,7 +196,8 @@ def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, directory, se
                                 serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
 
 
-def time_walk_init(W, H, terrain, tensormap, T, start_x, start_y, use_serialized=False, serialization_path='', mapping=None):
+def time_walk_init(W, H, terrain, tensormap, T, start_x, start_y, use_serialized=False, serialization_path='',
+                   mapping=None):
     if mapping is None:
         mapping = create_mixed_kernel_parameters(MEDIUM, 7)
     return dll.mixed_walk_time(
@@ -266,7 +213,8 @@ def time_walk_init(W, H, terrain, tensormap, T, start_x, start_y, use_serialized
     )
 
 
-def time_walk_backtrace(dp, T, terrain, kernels_map, end_x, end_y, init_dir, use_serialized=False, serialization_path='', mapping=None):
+def time_walk_backtrace(dp, T, terrain, kernels_map, end_x, end_y, init_dir, use_serialized=False,
+                        serialization_path='', mapping=None):
     if mapping is None:
         mapping = create_mixed_kernel_parameters(MEDIUM, 7)
     return dll.backtrace_time_walk(

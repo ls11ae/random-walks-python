@@ -19,9 +19,6 @@ dll.point2d_array_print.restype = None
 dll.point2d_array_free.argtypes = [Point2DArrayPtr]
 dll.point2d_array_free.restype = None
 
-dll.point_2d_array_grid_new.argtypes = [c_size_t, c_size_t, c_size_t]
-dll.point_2d_array_grid_new.restype = Point2DArrayGridPtr
-
 dll.point_2d_array_grid_free.argtypes = [Point2DArrayGridPtr]
 dll.point_2d_array_grid_free.restype = None
 
@@ -39,10 +36,6 @@ def point2d_array_new(length):
 
 def point2d_arr_free(array_ptr):
     dll.point2d_array_free(array_ptr)
-
-
-def point2d_array_grid(width, height, times):
-    return dll.point_2d_array_grid_new(width, height, times)
 
 
 def load_weather_grid(filename_base: str, grid_y: int, grid_x: int, times: int):

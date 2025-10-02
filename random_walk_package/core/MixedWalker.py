@@ -57,8 +57,8 @@ class MixedWalker:
             return False
 
     def generate_walk(self, serialized=False):
-        use_cuda = self.has_cuda()
-        grid_steps_dict, geo_steps_dict = self.movebank_processor.create_movement_data(samples=-1)
+        use_cuda = False  # self.has_cuda()
+        grid_steps_dict, geo_steps_dict, times = self.movebank_processor.create_movement_data(samples=-1)
 
         recmp: bool = True
         serialization_dir = Path(self.base_project_dir) / 'resources' / self.serialization_path / 'tensors'
