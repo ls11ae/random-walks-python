@@ -1,10 +1,8 @@
 import os
-from typing import Any
 
 import rasterio
 
 from random_walk_package.data_sources.geo_fetcher import lonlat_bbox_to_utm, utm_bbox_to_lonlat
-from pyproj import Transformer
 
 landcover_classes = {
     10: "Tree cover",
@@ -38,6 +36,8 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
             min_x, min_y, max_x, max_y = lonlat_bbox_to_utm(
                 *bbox_lonlat, crs_epsg
             )
+
+            print(f"BBox transformed to UTM: {min_x}, {min_y}, {max_x}, {max_y}")
 
             landcover_array = src.read(1)
             array_height, array_width = landcover_array.shape
@@ -104,7 +104,3 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
             return crs_epsg, (min_x, min_y, max_x, max_y)
     except rasterio.RasterioIOError as e:
         print(f"Error opening the file: {e}")
-
-
-
-
