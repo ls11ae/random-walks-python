@@ -422,7 +422,6 @@ class AnimalMovementProcessor:
         return result
 
     def fetch_gridded_weather_data(self, output_folder: str,
-                                   start_date_override: str = None, days_to_fetch: int = 7,
                                    grid_points_per_edge: int = 10) -> dict[str, str]:
         """
         Fetches and saves hourly weather data for a grid of equidistant points within the bounding box
@@ -431,8 +430,6 @@ class AnimalMovementProcessor:
 
         Args:
             output_folder (str): Root folder where per-animal grid CSVs should be stored.
-            start_date_override (str, optional): 'YYYY-MM-DD' string to override the start date.
-            days_to_fetch (int): Number of days for hourly weather data.
             grid_points_per_edge (int): Number of points along each edge of the bounding box.
 
         Returns:

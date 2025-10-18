@@ -1,3 +1,5 @@
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark, \
+    set_landmark_mapping
 from random_walk_package.core.MixedTimeWalker import MixedTimeWalker
 from random_walk_package.core.MixedWalker import *
 
@@ -9,11 +11,12 @@ def mixed_walk_test():
     # todo: dynamic resolution based on bounding box size
     study = studies[3]
     kernel_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=4)
-    """set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=6, diffusity=1)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=6, diffusity=1)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=5,
                          directions=1,
-                         diffusity=2.6)"""
+                         diffusity=2.6)
+    set_forbidden_landmark(kernel_mapping, WATER)
 
     walker = MixedWalker(T=T, resolution=300, kernel_mapping=kernel_mapping, study_folder=study)
     walker.generate_walk(serialized=False)
@@ -27,20 +30,3 @@ def test_time_walker():
         study_folder="elephant_study/"
     )
     walker.generate_walk_from_movebank(serialized=False)
-
-
-def test_time_walker_multi():
-    start = (100, 120)
-    mid = (60, 20)
-    end = (150, 120)
-
-    steps = [start, mid, end]
-
-    walker = MixedTimeWalker(
-        T=50,
-        resolution=200,
-        duration_in_days=5,
-        study_folder="baboon_SA_study/"
-    )
-    walker.preprocess()
-    walker.generate_walk_multi(steps=steps, output_file="time_walk3.json", serialized=True)

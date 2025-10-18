@@ -27,21 +27,6 @@ LIGHT = 2
 MEDIUM = 3
 HEAVY = 4
 
-dll.kernels_map_new.argtypes = [TerrainMapPtr, KernelParametersMappingPtr, MatrixPtr]
-dll.kernels_map_new.restype = KernelsMapPtr
-
-dll.tensor_map_new.argtypes = [TerrainMapPtr, KernelParametersMappingPtr, TensorPtr]
-dll.tensor_map_new.restype = KernelsMap3DPtr
-
-dll.kernel_at.argtypes = [KernelsMapPtr, ctypes.c_ssize_t, ctypes.c_ssize_t]
-dll.kernel_at.restype = Matrix
-
-dll.kernels_map_free.argtypes = [KernelsMapPtr]
-dll.kernels_map_free.restype = None
-
-dll.tensor_map_free.argtypes = [TensorMapPtr]
-dll.tensor_map_free.restype = None
-
 dll.get_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
 dll.get_terrain_map.restype = TerrainMapPtr
 
@@ -88,9 +73,6 @@ dll.kernels_map3d_free.restype = None
 
 dll.kernels_map4d_free.argtypes = [KernelsMap4DPtr]
 dll.kernels_map4d_free.restype = None
-
-dll.tensor_map_free.argtypes = [ctypes.POINTER(KernelsMap3DPtr), ctypes.c_size_t]
-dll.tensor_map_free.restype = None
 
 dll.terrain_map_free.argtypes = [TerrainMapPtr]
 dll.terrain_map_free.restype = None
@@ -208,33 +190,15 @@ def tensor_map_terrain_biased(terrain, bias_array, kernel_mapping) -> KernelsMap
     return dll.tensor_map_terrain_biased(terrain, kernel_mapping, bias_array)
 
 
-def get_kernels_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr,
-                    kernel: MatrixPtr) -> KernelsMapPtr:  # type: ignore
-    return dll.kernels_map_new(terrain, mapping, kernel)
-
-
-def get_tensor_map(terrain: TerrainMapPtr, mapping: KernelParametersMappingPtr,
-                   kernels: TensorPtr) -> KernelsMap3DPtr:  # type: ignore
-    return dll.tensor_map_new(terrain, mapping, kernels)
-
-
-def get_tensor_map_mixed(terrain, tensors) -> TensorMapPtr:  # type: ignore
-    if not tensors:
+def get_tensor_map_mixed(terrain, tensor_mapping) -> TensorMapPtr:  # type: ignore
+    if not tensor_mapping:
         raise MemoryError("Failed to create TensorSet in C.")
-    return dll.tensor_map_mixed(terrain, tensors)
+    return dll.tensor_map_mixed(terrain, tensor_mapping)
 
 
 def get_tensor_map_terrain(terrain: TerrainMapPtr,
                            mapping: KernelParametersMappingPtr) -> KernelsMap3DPtr:  # type: ignore
     return dll.tensor_map_terrain(terrain, mapping)
-
-
-def free_tensor_map(tensor_map):
-    dll.tensor_map_free(tensor_map)
-
-
-def kernels_map_free(kernels_map):
-    dll.kernels_map_free(kernels_map)
 
 
 def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
@@ -252,8 +216,7 @@ def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
 
 
 def terrain_at(terrain, x, y):
-    terrain_ptr = ctypes.pointer(terrain)
-    return dll.terrain_at(x, y, terrain_ptr)
+    return dll.terrain_at(x, y, terrain)
 
 
 def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat,

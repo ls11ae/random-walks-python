@@ -6,21 +6,24 @@ from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 from random_walk_package.data_sources.walk_visualization import walk_to_osm
 
-
 try:
     from random_walk_package.bindings.cuda.mixed_gpu import preprocess_mixed_gpu, mixed_walk_gpu, free_kernel_pool
+
     CUDA_AVAILABLE = True
 except (AttributeError, ImportError, OSError) as e:
     print(f"CUDA not available: {e}")
     CUDA_AVAILABLE = False
-    
+
+
     def preprocess_mixed_gpu(*args, **kwargs):
         print("CUDA not available - using CPU fallback")
         return None
-    
+
+
     def mixed_walk_gpu(*args, **kwargs):
         raise RuntimeError("CUDA not available on this system")
-    
+
+
     def free_kernel_pool(*args, **kwargs):
         pass
 
@@ -137,7 +140,6 @@ class MixedWalker:
                         terrain=spatial_map,
                         end_x=int(end_x),
                         end_y=int(end_y),
-                        directory=0,
                         serialize=serialized,
                         serialize_path=self.serialization_path,
                         dp_dir=dp_dir,

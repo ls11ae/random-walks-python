@@ -2,8 +2,7 @@ import hashlib
 
 from random_walk_package.bindings.brownian_walk import *
 from random_walk_package.bindings.correlated_walk import *
-from random_walk_package.bindings.data_processing.movebank_parser import extract_steps_from_csv
-from random_walk_package.bindings.data_processing.walk_json import walk_to_json
+from random_walk_package.bindings.data_processing.utils import use_low_ram
 from random_walk_package.bindings.data_structures.point2D import get_walk_points
 
 
@@ -37,8 +36,9 @@ class CorrelatedWalker:
 
         if self.terrain is None:
             self.terrain = terrain
-        if self.kernel_mapping is None:
-            self.kernel_mapping = create_correlated_kernel_parameters(MEDIUM, 7)
+
+        self.kernel_mapping = create_correlated_kernel_parameters(MEDIUM,
+                                                                  7) if self.kernel_mapping is None else kernel_mapping
         if self.tensor_map is None:
             self.tensor_map = get_tensor_map_terrain(terrain, mapping=self.kernel_mapping)
         self.W = terrain.width
@@ -176,21 +176,3 @@ class CorrelatedWalker:
 
         full_path.append(steps[-1])
         return np.array(full_path)
-
-    def generate_movebank_walk(self, csv_file, step_count):
-        """
-        Static method to generate a Movebank walk from CSV data.
-        """
-        file = str(os.path.join(script_dir, 'resources', csv_file))
-        steps = extract_steps_from_csv(file, step_count, self.W, self.H)
-        steps_np = get_walk_points(steps)
-        if self.kernels is None:
-            self.generate()
-
-        walk = self.generate_multistep_walk(steps_np)
-        walk_arr = create_point2d_array(walk)
-        walk_to_json(walk=walk_arr, json_file="multistepwalk.json", steps=steps, terrain_map=None,
-                     W=ctypes.c_size_t(self.W),
-                     H=ctypes.c_size_t(self.H))
-        dll.point2d_array_free(steps)
-        return [walk, steps_np]

@@ -72,9 +72,6 @@ dll.matrix_load.argtypes = [c_char_p]
 dll.matrix_normalize.argtypes = [MatrixPtr, c_double]
 dll.matrix_normalize.restype = None
 
-dll.matrix_normalize_01.argtypes = [MatrixPtr]
-dll.matrix_normalize_01.restype = None
-
 dll.matrix_normalize_L1.argtypes = [MatrixPtr]
 dll.matrix_normalize_L1.restype = None
 
@@ -105,6 +102,10 @@ dll.matrix_generator_gaussian_pdf.argtypes = [
 ]
 
 
+def matrix_free(matrix_ptr):
+    dll.matrix_free(matrix_ptr)
+
+
 # Convert result to numpy array
 def matrix_to_numpy(matrix_ptr):
     mat = matrix_ptr.contents
@@ -117,7 +118,7 @@ def matrix_new(width, height) -> Matrix:
     return matrix
 
 
-def create_gaussian_kernel(width, height, sigma, scale, x_offset=0, y_offset=0) -> MatrixPtr:
+def create_gaussian_kernel(width, height, sigma, scale=1, x_offset=0, y_offset=0) -> MatrixPtr:
     kernel = dll.matrix_generator_gaussian_pdf(width, height, sigma, scale, x_offset, y_offset)
     return kernel
 

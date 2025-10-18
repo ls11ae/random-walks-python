@@ -33,3 +33,11 @@ dll.tensor4D_free.restype = None
 def tensor_new(width, height, depth):
     tensor = dll.tensor_new(width, height, depth)
     return tensor
+
+
+def tensor_free(tensor_ptr: TensorPtr):
+    dll.tensor_free(tensor_ptr)
+
+
+def tensor4D_free(tensor_ptrs: POINTER(TensorPtr), length: int):
+    dll.tensor4D_free(tensor_ptrs, length)

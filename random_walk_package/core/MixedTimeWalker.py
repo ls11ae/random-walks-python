@@ -8,11 +8,13 @@ from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 
 
 class MixedTimeWalker:
-    def __init__(self, resolution=200, T=30, grid_points_per_edge=5, duration_in_days=7, study_folder=None):
+    def __init__(self, resolution=200, T=30, grid_points_per_edge=5, duration_in_days=7, mapping=None,
+                 study_folder=None):
         self.T = T
         self.resolution = resolution
         self.grid_points_per_edge = grid_points_per_edge
         self.movebank_processor = None
+        self.mapping = mapping if mapping is not None else create_mixed_kernel_parameters(MEDIUM, 7)
 
         self.script_dir = os.path.dirname(os.path.realpath(__file__))
         base_project_dir = os.path.join(self.script_dir, '..')
@@ -54,7 +56,6 @@ class MixedTimeWalker:
         self.terrain_path = self.movebank_processor.create_landcover_data_txt(self.resolution,
                                                                               out_directory=self.study_folder)
         self.weather_data_dict = self.movebank_processor.fetch_gridded_weather_data(self.csv_path,
-                                                                                    days_to_fetch=self.duration_in_days,
                                                                                     grid_points_per_edge=self.grid_points_per_edge)
 
     def generate_walk(self, start: tuple[int, int], end: tuple[int, int], output_file='time_walk.json',
@@ -74,13 +75,11 @@ class MixedTimeWalker:
             T=self.T,
             csv_path=self.csv_path,
             terrain_path=self.terrain_path,
-            walk_path=walk_path,
-            serialization_path=self.serialization_path,
+            mapping=self.mapping,
             grid_x=self.grid_points_per_edge,
             grid_y=self.grid_points_per_edge,
             start=start,
-            goal=end,
-            use_serialized=serialized
+            goal=end
         )
         walk_np = get_walk_points(walk_ptr)
         dll.point2d_array_free(walk_ptr)
@@ -148,19 +147,16 @@ class MixedTimeWalker:
                 self.T = 5 if t < 5 else t
 
                 # Unique output per segment (keeps JSON artifacts for inspection)
-                walk_path = os.path.join(self.walks_path, f"{output_prefix}_{animal_id}_{i}.json")
                 print("Starting walk: " + str(sx) + ", " + str(sy) + " -> " + str(ex) + ", " + str(ey) + "")
                 walk_ptr = time_walk_geo(
                     T=self.T,
                     csv_path=self.weather_data_dict[animal_id],
                     terrain_path=terrain_for_animal,
-                    walk_path=walk_path,
-                    serialization_path=self.serialization_path,
+                    mapping=self.mapping,
                     grid_x=self.grid_points_per_edge,
                     grid_y=self.grid_points_per_edge,
                     start=start_t_loc,
                     goal=end_t_loc,
-                    use_serialized=serialized
                 )
 
                 segment = (

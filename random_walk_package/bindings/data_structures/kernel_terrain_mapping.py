@@ -26,6 +26,13 @@ dll.is_forbidden_landmark.restype = c_bool
 dll.get_parameters_of_terrain.argtypes = [KernelParametersMappingPtr, c_int]
 dll.get_parameters_of_terrain.restype = KernelParametersPtr
 
+dll.kernel_parameters_mapping_free.argtypes = [KernelParametersMappingPtr]
+dll.kernel_parameters_mapping_free.restype = None
+
+
+def kernel_mapping_free(kernel_parameters_map: KernelParametersMappingPtr):
+    dll.kernel_parameters_mapping_free(kernel_parameters_map)
+
 
 def create_mixed_kernel_parameters(animal_type: int, base_step_size: int) -> KernelParametersMappingPtr:
     return dll.create_default_mixed_mapping(animal_type, base_step_size)

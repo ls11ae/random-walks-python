@@ -52,24 +52,3 @@ def corr_simple(D):
 
     print(f"Generated walk in {end - start:.4f} seconds")
     plot_walk(walk, 401, 401)
-
-
-def corr_movebank_test():
-    D = 16
-    S = 10
-    T = 50
-    W = 2 * T + 1
-    H = 2 * T + 1
-
-    walker = CorrelatedWalker(D, S, W, H, T)
-    walker.generate_kernel()
-
-    # Time the execution
-    start = time.perf_counter()
-    csv_file = '1000 Cranes. Southern Kazakhstan.csv'
-    [walk, steps] = walker.generate_movebank_walk(
-        csv_file, 8)
-    end = time.perf_counter()
-
-    print(f"Generated walk in {end - start:.4f} seconds")
-    plot_walk_multistep(steps, walk, terrain_width=W, terrain_height=H)

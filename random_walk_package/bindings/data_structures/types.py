@@ -138,6 +138,17 @@ KernelsMap4DPtr = POINTER(KernelsMap4D)
 KernelsMap3DPtr = POINTER(KernelsMap3D)
 
 
+class DirKernelsMap(Structure):
+    _fields_ = [
+        ("max_D", c_ssize_t),
+        ("max_kernel_size", c_ssize_t),
+        ("data", POINTER(POINTER(POINTER(Vector2D))))
+    ]
+
+
+DirKernelsMapPtr = POINTER(DirKernelsMap)
+
+
 class Coordinate(Structure):
     _fields_ = [("x", c_double),
                 ("y", c_double)]
@@ -158,6 +169,19 @@ class KernelParameters(Structure):
                 ("diffusity", c_float),
                 ("bias_x", c_ssize_t),
                 ("bias_y", c_ssize_t)]
+
+
+class KernelParametersTerrainWeather(Structure):
+    _fields_ = [
+        ("width", c_size_t),
+        ("height", c_size_t),
+        ("time", c_size_t),
+        ("max_D", c_size_t),
+        ("data", POINTER(POINTER(POINTER(POINTER(KernelParameters)))))
+    ]
+
+
+KernelParametersTerrainWeatherPtr = POINTER(KernelParametersTerrainWeather)
 
 
 class KernelParametersMapping(Structure):
