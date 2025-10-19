@@ -223,3 +223,29 @@ def plot_walk_terrain(terrain, walk_points, terrain_width, terrain_height):
     plt.ylim(terrain_height, -1)
     plt.legend()
     plt.show()
+
+
+def plot_walk_multistep(steps, walk_points, terrain_width, terrain_height):
+    if walk_points is not None:
+        # Create the plot
+        plt.figure(figsize=(10, 10))
+        plt.ylim(-1, terrain_height)
+        plt.xlim(-1, terrain_width)
+
+        # Plot the path without dots
+        plt.plot(walk_points[:, 0], walk_points[:, 1], 'b-', label='Path')
+
+        # Plot the steps as squares with step indices
+        for i, (x, y) in enumerate(steps):
+            plt.scatter(x, y, s=200, marker='s', color='red', edgecolor='black')  # Square marker
+            plt.text(x, y, str(i), color='white', ha='center', va='center', fontsize=12)  # Step index
+
+        # Add labels and legend
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Correlated Walks with Steps')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+    else:
+        print("No path generated.")

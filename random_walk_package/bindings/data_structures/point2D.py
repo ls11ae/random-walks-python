@@ -71,7 +71,7 @@ def point2d_array_grid_new(height, width, times):
     return grid
 
 
-def get_walk_points(walk):
+def get_walk_points(walk) -> np.ndarray:
     if not walk:
         raise ValueError("NULL walk pointer")
 
@@ -100,15 +100,10 @@ def get_point2d(x, y):
     return ptr.contents
 
 
-def create_point2d_array(steps) -> Point2DArray:  # type: ignore
+def create_point2d_array(steps):
     point_array = (Point2D * len(steps))()
     for i, (x, y) in enumerate(steps):
-        point_array[i].x = x
-        point_array[i].y = y
-
-    array = Point2DArray()
-    array.points = point_array
-    array.length = len(steps)
-    # Retain reference to prevent garbage collection
-    array._buffer = point_array
-    return array
+        point_array[i].x = int(x)
+        point_array[i].y = int(y)
+    arr_ptr = dll.point_2d_array_new(point_array, len(steps))
+    return arr_ptr

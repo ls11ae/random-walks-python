@@ -1,5 +1,5 @@
 # mixed_walk.py
-
+from random_walk_package import point2d_arr_free, get_walk_points
 from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.wrapper import dll
 
@@ -103,12 +103,6 @@ def time_walk_geo(T, csv_path, terrain_path, grid_x, grid_y, start, goal, mappin
     )
 
 
-def mixed_walk(W, H, spatial_map, tensor_map, c_kernel, T, steps, mapping=None):
-    if mapping is None:
-        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-    return dll.mixed_walk(c_ssize_t(W), c_ssize_t(H), spatial_map, mapping, tensor_map, c_kernel, c_ssize_t(T), steps)
-
-
 def tensor_set_new(tensors):
     num_tensors = len(tensors)
     if num_tensors == 0:
@@ -136,7 +130,7 @@ def mix_walk(W, H, terrain_map, kernels_map, T, start_x, start_y, serialize: boo
         c_ssize_t(start_y),
         c_bool(serialize),
         c_bool(recompute),
-        serialize_path.encode('utf-8'))
+        serialize_path.encode('utf-8') if serialize else None)
 
     return result
 
@@ -145,8 +139,13 @@ def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bo
                   dp_dir: str = "", mapping=None):
     if mapping is None:
         mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-    return dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, 0, serialize,
-                                serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
+    walk_c = dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, 0, serialize,
+                                  serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
+    if walk_c is None:
+        raise ValueError("Walk failed to backtrace. Maybe try again with higher T?")
+    walk_np = get_walk_points(walk_c)
+    point2d_arr_free(walk_c)
+    return walk_np
 
 
 def time_walk_init(W, H, terrain, tensormap, T, start_x, start_y, use_serialized=False, serialization_path='',

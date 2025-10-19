@@ -4,14 +4,14 @@ from typing import Optional, Any
 
 import numpy as np
 
-from random_walk_package import tensor_free, get_walk_points, point2d_arr_free, matrix_free, create_gaussian_kernel, \
+from random_walk_package import tensor_free, matrix_free, create_gaussian_kernel, \
     tensor4D_free
 from random_walk_package.bindings import get_tensor_map_terrain, MEDIUM, terrain_map_free, kernels_map3d_free
 from random_walk_package.bindings.brownian_walk import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters, \
     kernel_mapping_free
 from random_walk_package.bindings.data_structures.kernels import kernel_from_array
-from random_walk_package.bindings.mixed_walk import mix_walk, mix_backtrace
+from random_walk_package.bindings.mixed_walk import mix_backtrace, mix_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain, plot_walk
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,8 @@ class BrownianWalker:
                         matrix_free(self.kernels)
                     elif resource == "dp_matrix":
                         tensor_free(self.dp_matrix)
+                    elif resource == "dp_matrix_terrain":
+                        tensor4D_free(self.dp_matrix_terrain, self.T)
                     elif resource == "kernel_mapping":
                         kernel_mapping_free(self.kernel_mapping)
                     elif resource == "terrain":
@@ -108,6 +110,129 @@ class BrownianWalker:
     def is_ready_for_backtrace(self) -> bool:
         """Check if walker is ready for the generation of a backtrace (walk array)."""
         return (self.dp_matrix is not None or self.dp_matrix_terrain is not None) and self.is_ready_for_walk
+
+    def set_kernel(self, kernel_np: Optional[np.ndarray] = None,
+                   sigma: float = 3.0, S: Optional[int] = None) -> None:
+        """Set the kernel for walk generation.
+
+        Args:
+            kernel_np: Custom kernel as numpy array
+            sigma: Sigma for Gaussian kernel
+            S: Step size (uses existing if None)
+        """
+        self.S = S if S is not None else self.S
+        kernel_width, kernel_height = kernel_np.shape if kernel_np is not None else (2 * self.S + 1, 2 * self.S + 1)
+
+        # Clean up the existing kernel
+        if self.kernels is not None:
+            matrix_free(self.kernels)
+            self.kernels = None
+
+        try:
+            if kernel_np is not None:
+                if kernel_width != 2 * self.S + 1 or kernel_height != 2 * self.S + 1:
+                    raise ValueError(
+                        "Custom kernel must have dimensions 2S+1x2S+1. Stepsize and passed Array are contradictory")
+                matrix_c = kernel_from_array(kernel_np, kernel_width, kernel_height)
+                self.kernels = matrix_c
+            else:
+                self.kernels = create_gaussian_kernel(
+                    kernel_width, kernel_height, sigma=sigma, scale=1, x_offset=0, y_offset=0
+                )
+
+            logger.info(f"Successfully set kernel with size {kernel_width}x{kernel_width}")
+
+        except Exception as e:
+            logger.error(f"Failed to set kernel: {e}")
+            raise
+
+    def generate(self, start_x: Optional[int] = None, start_y: Optional[int] = None) -> None:
+        """Generate walk using a simple kernel approach."""
+        if self.kernels is None:
+            self.set_kernel()
+
+        if start_x is None:
+            start_x = self.W // 2
+        if start_y is None:
+            start_y = self.H // 2
+
+        self._validate_parameters()
+
+        # Validate start position
+        if not (0 <= start_x < self.W and 0 <= start_y < self.H):
+            raise ValueError(f"Start position ({start_x}, {start_y}) out of bounds "
+                             f"for grid {self.W}x{self.H}")
+
+        # Clean up previous DP matrix
+        if self.dp_matrix is not None:
+            tensor_free(self.dp_matrix)
+
+        try:
+            self.dp_matrix = brownian_walk_init(self.kernels, self.W, self.H, self.T, start_x, start_y)
+            self._is_initialized = True
+            self._using_terrain = False
+            logger.info(f"Successfully generated walk, start=({start_x}, {start_y})")
+        except Exception as e:
+            self._is_initialized = False
+            logger.error(f"Failed to generate walk: {e}")
+            raise
+
+    def backtrace(self, end_x: int, end_y: int, plot=False, plot_title="Einfacher Gauß-Walk") -> np.ndarray:
+        """Backtrace walk using a simple kernel approach.
+
+        Args:
+            end_x: End X coordinate
+            end_y: End Y coordinate
+            plot: Whether to plot the walk
+            plot_title: Title of the plot
+
+        Returns:
+            numpy array of walk points
+        """
+        if not self.is_ready_for_backtrace:
+            raise ValueError('Initialize walk first before calling backtrace. Call generate first.')
+
+        # Validate end position
+        if not (0 <= end_x < self.W and 0 <= end_y < self.H):
+            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
+                             f"for grid {self.W}x{self.H}")
+
+        try:
+            walk_np = brownian_backtrace(self.dp_matrix, self.kernels, end_x, end_y)
+            if walk_np is None:
+                raise RuntimeError("Backtrace returned null path")
+
+            logger.info(f"Successfully backtraced walk to ({end_x}, {end_y})")
+            if plot:
+                plot_walk(walk_np, self.W, self.H, plot_title)
+            return walk_np
+
+        except Exception as e:
+            logger.error(f"Failed to backtrace walk: {e}")
+            raise
+
+    def generate_multistep_walk(self, steps: np.ndarray) -> np.ndarray:
+        """Generate multistep walk
+
+        Args:
+            steps: Array of step points
+
+        Returns:
+            Full path as numpy array
+        """
+        if not self.is_ready_for_walk:
+            raise ValueError("Walker not properly initialized for multistep walk")
+        try:
+            result = brownian_backtrace_multiple(self.kernels, steps, self.T, self.W, self.H)
+            print("dkfj")
+        except Exception as e:
+            logger.error(f"Failed to generate multistep walk: {e}")
+            raise
+        return result
+
+    ####################################################################################################################
+    ##################################### TERRAIN DEPENDANT BROWNIAN WALKS #############################################
+    ####################################################################################################################
 
     def generate_from_terrain(self, terrain: Optional[Any] = None,
                               start_x: Optional[int] = None,
@@ -196,16 +321,13 @@ class BrownianWalker:
                              f"for grid {self.W}x{self.H}")
 
         try:
-            walk = mix_backtrace(
+            walk_np = mix_backtrace(
                 self.dp_matrix_terrain, self.T, self.tensor_map, self.terrain,
                 end_x, end_y, False, "", "", self.kernel_mapping
             )
 
-            if walk is None:
+            if walk_np is None:
                 raise RuntimeError("Backtrace returned null path")
-
-            walk_np = get_walk_points(walk)
-            point2d_arr_free(walk)
 
             logger.info(f"Successfully backtraced walk to ({end_x}, {end_y})")
             if plot:
@@ -219,7 +341,7 @@ class BrownianWalker:
 
     def generate_from_terrain_multistep(self, terrain: Optional[Any] = None,
                                         steps: list[tuple[int, int]] = None,
-                                        plot=False, plot_title="Brownian Walk on terrain") -> list[Any]:
+                                        plot=False, plot_title="Brownian Walk on terrain") -> np.ndarray:
         """Generate a multistep walk from terrain data.
 
         Args:
@@ -231,140 +353,17 @@ class BrownianWalker:
             list of walk point tuples
         """
 
-        full_path = []
+        full_path = np.empty((0, 2))
         for i in range(len(steps) - 1):
             start_x, start_y = steps[i]
             end_x, end_y = steps[i + 1]
             self.generate_from_terrain(terrain, start_x, start_y)
-            segment = self.backtrace_from_terrain(end_x, end_x, terrain)
-            full_path.extend(segment[:-1])
+            segment = self.backtrace_from_terrain(end_x, end_y, terrain, plot=False)
+            full_path = np.vstack((full_path, segment[:-1]))
 
         if plot:
-            plot_combined_terrain(pointer(self.terrain), full_path, steps=steps, title=plot_title)
+            plot_combined_terrain(self.terrain, full_path, steps=steps, title=plot_title)
         return full_path
-
-    def generate(self, start_x: Optional[int] = None, start_y: Optional[int] = None) -> None:
-        """Generate walk using a simple kernel approach."""
-        if self.kernels is None:
-            self.set_kernel()
-
-        if start_x is None:
-            start_x = self.W // 2
-        if start_y is None:
-            start_y = self.H // 2
-
-        self._validate_parameters()
-
-        # Validate start position
-        if not (0 <= start_x < self.W and 0 <= start_y < self.H):
-            raise ValueError(f"Start position ({start_x}, {start_y}) out of bounds "
-                             f"for grid {self.W}x{self.H}")
-
-        # Clean up previous DP matrix
-        if self.dp_matrix is not None:
-            tensor_free(self.dp_matrix)
-
-        try:
-            self.dp_matrix = brownian_walk_init(self.kernels, self.W, self.H, self.T, start_x, start_y)
-            self._is_initialized = True
-            self._using_terrain = False
-            logger.info(f"Successfully generated walk, start=({start_x}, {start_y})")
-        except Exception as e:
-            self._is_initialized = False
-            logger.error(f"Failed to generate walk: {e}")
-            raise
-
-    def set_kernel(self, kernel_np: Optional[np.ndarray] = None,
-                   sigma: float = 3.0, S: Optional[int] = None) -> None:
-        """Set the kernel for walk generation.
-
-        Args:
-            kernel_np: Custom kernel as numpy array
-            sigma: Sigma for Gaussian kernel
-            S: Step size (uses existing if None)
-        """
-        self.S = S if S is not None else self.S
-        kernel_width, kernel_height = kernel_np.shape if kernel_np is not None else (2 * self.S + 1, 2 * self.S + 1)
-
-        # Clean up the existing kernel
-        if self.kernels is not None:
-            matrix_free(self.kernels)
-            self.kernels = None
-
-        try:
-            if kernel_np is not None:
-                if kernel_width != 2 * self.S + 1 or kernel_height != 2 * self.S + 1:
-                    raise ValueError(
-                        "Custom kernel must have dimensions 2S+1x2S+1. Stepsize and passed Array are contradictory")
-                matrix_c = kernel_from_array(kernel_np, kernel_width, kernel_height)
-                self.kernels = matrix_c
-            else:
-                self.kernels = create_gaussian_kernel(
-                    kernel_width, kernel_height, sigma=sigma, scale=1, x_offset=0, y_offset=0
-                )
-
-            logger.info(f"Successfully set kernel with size {kernel_width}x{kernel_width}")
-
-        except Exception as e:
-            logger.error(f"Failed to set kernel: {e}")
-            raise
-
-    def backtrace(self, end_x: int, end_y: int, plot=False, plot_title="Einfacher Gauß-Walk") -> np.ndarray:
-        """Backtrace walk using a simple kernel approach.
-
-        Args:
-            end_x: End X coordinate
-            end_y: End Y coordinate
-            plot: Whether to plot the walk
-            plot_title: Title of the plot
-
-        Returns:
-            numpy array of walk points
-        """
-        if not self.is_ready_for_backtrace:
-            raise ValueError('Initialize walk first before calling backtrace. Call generate first.')
-
-        # Validate end position
-        if not (0 <= end_x < self.W and 0 <= end_y < self.H):
-            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
-                             f"for grid {self.W}x{self.H}")
-
-        try:
-            walk = brownian_backtrace(self.dp_matrix, self.kernels, end_x, end_y)
-
-            if walk is None:
-                raise RuntimeError("Backtrace returned null path")
-
-            walk_np = get_walk_points(walk)
-            logger.info(f"Successfully backtraced walk to ({end_x}, {end_y})")
-            if plot:
-                plot_walk(walk_np, self.W, self.H, plot_title)
-            return walk_np
-
-        except Exception as e:
-            logger.error(f"Failed to backtrace walk: {e}")
-            raise
-
-    def generate_multistep_walk(self, steps: np.ndarray) -> np.ndarray:
-        """Generate multistep walk
-
-        Args:
-            steps: Array of step points
-
-        Returns:
-            Full path as numpy array
-        """
-        if not self.is_ready_for_walk:
-            raise ValueError("Walker not properly initialized for multistep walk")
-        try:
-            full_path = brownian_backtrace_multiple(self.kernels, steps, self.T, self.W, self.H)
-            print("dkfj")
-            result = get_walk_points(full_path)
-            point2d_arr_free(full_path)
-        except Exception as e:
-            logger.error(f"Failed to generate multistep walk: {e}")
-            raise
-        return result
 
     def __enter__(self):
         """Context manager support."""

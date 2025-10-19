@@ -1,96 +1,118 @@
-import time
-
-from random_walk_package.core.BiasedWalker import BiasedWalker
+from random_walk_package.bindings import create_terrain_map, GRASSLAND, TREE_COVER, \
+    WATER
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_landmark_mapping, \
+    set_forbidden_landmark
 from random_walk_package.core.BrownianWalker import *
 
 
-def test_terrain():
-    file = "landcover_142.txt"
-    terrain = get_terrain_map(file, " ")
+def test_brownian_walk():
+    terrain = create_terrain_map('terrain_baboons.txt', ' ')
+    print(terrain.contents.width, terrain.contents.height)
+    kernel_mapping = create_brownian_kernel_parameters(animal_type=MEDIUM, base_step_size=8)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=True, step_size=5, directions=1, diffusity=1)
+    set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True, step_size=5, directions=1, diffusity=2.6)
+    set_forbidden_landmark(kernel_mapping, WATER)
 
-    num_steps = 200
-    step_size = 7
-    brownian_walker = BrownianWalker.from_terrain_map(terrain=terrain, T=num_steps, S=step_size, sigma=0.5, start_x=200,
-                                                      start_y=200)
-    walk = brownian_walker.generate_walk(375, 375)
-    plot_walk_terrain(terrain=terrain, walk_points=walk, terrain_height=brownian_walker.H,
-                      terrain_width=brownian_walker.W)
-
-
-def benchmark_brownian(num_steps=100):
-    brownian_walker = BrownianWalker.from_parameters(T=num_steps, S=7, W=2 * num_steps + 1, H=2 * num_steps + 1)
-    start = time.perf_counter()
-    brownian_walker.generate_walk(175, 175)
-    end = time.perf_counter()
-    print(f"Generated walk in {end - start:.4f} seconds")
+    with BrownianWalker(T=150, terrain=terrain, k_mapping=kernel_mapping) as walker:
+        walker.generate_from_terrain(start_x=50, start_y=50)
+        path3 = walker.backtrace_from_terrain(end_x=150, end_y=150, plot=True)
+        print(f"   Terrain Walk: {len(path3)} Punkte")
+    # hier noch die dinger plotten also kernels und terrain
 
 
-def test_brownian_wrapper():
-    # Test 1: Initialize with parameters
-    num_steps = 100
-    step_size = 8
-    brownian_walker = BrownianWalker.from_parameters(T=num_steps, S=step_size, sigma=0.5, scale=2)
+def demonstrate_all_functionality():
+    # Sample Terrain erstellen
+    terrain = create_terrain_map('terrain_baboons.txt', ' ')
+    kernel_mapping = create_brownian_kernel_parameters(animal_type=MEDIUM, base_step_size=4)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=True, step_size=5, directions=1, diffusity=1)
+    set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
+                         step_size=5,
+                         directions=1,
+                         diffusity=2.6)
+    set_forbidden_landmark(kernel_mapping, WATER)
 
-    kernel_np = matrix_to_numpy(brownian_walker.kernel)
-    print(kernel_np)
+    with BrownianWalker(T=150, terrain=terrain, k_mapping=kernel_mapping) as walker:
+        walker.generate_from_terrain(start_x=50, start_y=50)
+        path3 = walker.backtrace_from_terrain(end_x=150, end_y=150, plot=True)
+        print(f"   Terrain Walk: {len(path3)} Punkte")
 
-    # Test 2: Initialize with existing kernel/tensor
-    brownian_walker2 = BrownianWalker.from_kernel_and_tensor(
-        kernel=brownian_walker.kernel,
-        dp_tensor=brownian_walker.dp_tensor,
-        T=num_steps,
-        W=brownian_walker.W,
-        H=brownian_walker.H
-    )
+    # 4. Multistep Walk
+    print("\n4. Multistep Walk Generierung")
+    with BrownianWalker(T=20, W=30, H=30) as walker:
+        walker.generate(start_x=15, start_y=15)
 
-    # Test 3: Save/load functionality
-    brownian_walker.save_tensor("test_tensor.bin")
-    brownian_walker3 = BrownianWalker.load_tensor(
-        filename="test_tensor.bin",
-        kernel=brownian_walker.kernel,
-        T=num_steps,
-        W=brownian_walker.W,
-        H=brownian_walker.H
-    )
+        # Mehrere Zielpunkte für multistep
+        steps = np.array([[10, 10], [20, 20], [5, 25], [25, 5]], dtype=np.int32)
+        full_path = walker.generate_multistep_walk(steps)
+        print(full_path)
 
-    # Test 4: Single walk generation
-    walk = brownian_walker.generate_walk(end_x=num_steps // 3, end_y=num_steps // 4)
-    plot_walk(walk_points=walk, terrain_height=brownian_walker.H, terrain_width=brownian_walker.W)
+    # 5. Verschiedene Kernel Parameter testen
+    print("\n5. Verschiedene Kernel Parameter")
 
-    walk2 = brownian_walker.generate_walk(end_x=num_steps // 2, end_y=num_steps)
-    plot_walk(walk_points=walk2, terrain_height=brownian_walker2.H, terrain_width=brownian_walker2.W)
+    kernels_to_test = [
+        ("Kleiner Kernel (S=1)", None, 1.0, 1),
+        ("Mittlerer Kernel (S=2)", None, 2.0, 2),
+        ("Großer Kernel (S=3)", None, 3.0, 3),
+    ]
 
-    walk3 = brownian_walker.generate_walk(end_x=num_steps // 5, end_y=num_steps // 2)
-    plot_walk(walk_points=walk3, terrain_height=brownian_walker3.H, terrain_width=brownian_walker3.W)
+    for name, kernel_np, sigma, S in kernels_to_test:
+        with BrownianWalker(T=15, W=25, H=25) as walker:
+            walker.set_kernel(kernel_np=kernel_np, sigma=sigma, S=S)
+            walker.generate(start_x=12, start_y=12)
+            path = walker.backtrace(end_x=18, end_y=18)
 
-    # Test 5: Multistep walk generation
-    points = [(num_steps, num_steps), (num_steps // 2, num_steps // 2), (num_steps + 10, num_steps - 10)]
-    multi_walk = brownian_walker.generate_multistep_walk(points)
+    # 6. Fehlerbehandlung demonstrieren
+    print("\n6. Fehlerbehandlung")
 
-    plot_walk_multistep(steps=points, walk_points=multi_walk, terrain_width=brownian_walker.W,
-                        terrain_height=brownian_walker.H)
+    try:
+        walker = BrownianWalker(W=10, H=10)
+        walker.backtrace(5, 5)  # Sollte fehlschlagen (noch nicht generiert)
+    except ValueError as e:
+        print(f"   Erwarteter Fehler: {e}")
+
+    try:
+        with BrownianWalker(W=10, H=10) as walker:
+            walker.generate(start_x=5, start_y=5)
+            walker.backtrace(15, 15)  # Ungültige Koordinaten
+    except ValueError as e:
+        print(f"   Erwarteter Fehler: {e}")
+
+    # 7. Komplexes Szenario: Terrain mit Custom Kernel
+    print("\n7. Komplexes Szenario: Terrain mit verschiedenen Einstellungen")
+
+    complex_terrain = create_terrain_map('terrain_baboons.txt', ' ')
+
+    with BrownianWalker(T=50, terrain=complex_terrain) as walker:
+        # Verschiedene Start/End-Paare testen
+        routes = [
+            ((20, 20), (60, 60)),
+            ((40, 10), (10, 40)),
+            ((70, 30), (30, 70))
+        ]
+
+        for i, (start, end) in enumerate(routes):
+            walker.generate_from_terrain(start_x=start[0], start_y=start[1])
+            path = walker.backtrace_from_terrain(end_x=end[0], end_y=end[1])
+            print(f"   Route {i + 1}: {start} -> {end}: {len(path)} Punkte")
+
+    test_brownian_walk()
 
 
-def movebank_test():
-    csv_file = "1000 Cranes. Southern Kazakhstan.csv"
-    [walk_csv, steps_csv] = BrownianWalker.generate_movebank_walk(csv_file, 10, 7, 100, 200, 200)
-    walk_plot_array_csv = get_walk_points(walk_csv)
-    plot_walk_multistep(steps_csv, walk_plot_array_csv, 200, 200)
+def performance_test():
+    """Performance-Test für große Walks."""
+    print("\n=== Performance Test ===")
 
+    import time
 
-def test_biased_walk():
-    terrain = parse_terrain("terrain2.txt", " ")
-    west_bias = [(-4, 0)] * 20
-    no_bias = [(0, 0)] * 20
-    east_bias = [(4, 0)] * 20
-    biases = west_bias + no_bias + east_bias
-    biased_walk = BiasedWalker(terrain=terrain, bias_array=biases)
-    biased_walk.generate(start_x=100, start_y=150)
-    walk = biased_walk.backtrace(end_x=100, end_y=45)
-    plot_combined_terrain(
-        terrain,
-        walk,
-        terrain.width,
-        terrain.height,
-        title="Time-Aware Mixed Walk"
-    )
+    # Großer Walk testen
+    sizes = [(100, 100, 50), (200, 200, 100), (300, 300, 150)]
+
+    for W, H, T in sizes:
+        start_time = time.time()
+
+        with BrownianWalker(W=W, H=H, T=T) as walker:
+            walker.generate(start_x=W // 2, start_y=H // 2)
+            path = walker.backtrace(end_x=W // 4, end_y=H // 4)
+
+        duration = time.time() - start_time
+        print(f"   Größe {W}x{W}, T={T}: {duration:.2f} Sekunden, {len(path)} Punkte")
