@@ -113,14 +113,13 @@ class CorrelatedWalker:
     def set_kernel(self, kernel_np: Optional[np.ndarray] = None,
                    d: int = None, S: Optional[int] = None) -> None:
         """Set the kernel for walk generation.
-
-        Args:
-            :param kernel_np: Custom kernel as numpy array
-            :param S: Step size (uses existing if None)
-            :param d: Number of directions
+            kernel_np: Custom kernel as numpy array
+            S: Step size (uses existing if None)
+            d: Number of directions
         """
         self.S = S if S is not None else self.S
         kernel_width, kernel_height = kernel_np.shape if kernel_np is not None else (2 * self.S + 1, 2 * self.S + 1)
+        self.S = kernel_width // 2
         self.D = d if d is not None else self.D
 
         # Clean up the existing kernel
@@ -172,6 +171,7 @@ class CorrelatedWalker:
                                       output_folder=dp_folder)
         # save path to serialized dp matrix
         self.dp_matrix = None if use_serialization else dp_mat
+        print(f"DP matrix serialized to: {dp_folder}")
         return dp_folder
 
     def backtrace(self, end_x, end_y, dp_folder=None, initial_direction=0, plot=False):
@@ -185,8 +185,8 @@ class CorrelatedWalker:
             plot_walk(walk, self.W, self.H, title="Correlated Walk")
         return walk
 
-    def generate_multistep_walk(self, steps, direction=0, use_serialization=False, dp_folder=None,
-                                plot=False) -> np.ndarray:
+    def multistep_walk(self, steps, direction=0, use_serialization=False, dp_folder=None,
+                       plot=False) -> np.ndarray:
         """Generate multistep walk
 
         Args:
@@ -194,6 +194,7 @@ class CorrelatedWalker:
             direction: Initial direction
             use_serialization: Whether to use serialized data
             dp_folder: Folder to save serialized data
+            plot: Whether to plot the walk or not
         Returns:
             Full path as a numpy array
         """
@@ -332,7 +333,8 @@ class CorrelatedWalker:
 
     def generate_from_terrain_multistep(self, terrain: Optional[Any] = None,
                                         steps: list[tuple[int, int]] = None,
-                                        plot=False, plot_title="Brownian Walk on terrain") -> np.ndarray:
+                                        plot=False,
+                                        plot_title="Correlated Walk on terrain with multiple steps") -> np.ndarray:
         """Generate a multistep walk from terrain data.
 
         Args:

@@ -27,7 +27,7 @@ def test_correlated_serialized():
 def test_correlated_multistep():
     with CorrelatedWalker(T=150, W=201, H=201, D=16, S=7) as walker:
         steps = np.array([[100, 100], [150, 150], [50, 50]], dtype=np.int32)
-        full_path = walker.generate_multistep_walk(steps=steps, use_serialization=True, plot=True)
+        full_path = walker.multistep_walk(steps=steps, use_serialization=True, plot=True)
         print(full_path)
 
 
@@ -52,7 +52,7 @@ def demonstrate_all_functionality():
     with CorrelatedWalker(T=100, S=7, D=8, W=200, H=200) as walker:
         # Mehrere Zielpunkte für multistep
         steps = np.array([[100, 100], [150, 150], [25, 25]], dtype=np.int32)
-        full_path = walker.generate_multistep_walk(steps)
+        full_path = walker.multistep_walk(steps)
         print(full_path)
 
     # 5. Verschiedene Kernel Parameter testen
