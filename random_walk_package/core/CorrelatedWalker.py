@@ -13,7 +13,7 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.data_structures.kernels import correlated_kernels_from_matrix, \
     generate_correlated_kernels
 from random_walk_package.bindings.mixed_walk import mix_walk, mix_backtrace
-from random_walk_package.bindings.plotter import plot_combined_terrain
+from random_walk_package.bindings.plotter import plot_combined_terrain, plot_walk, plot_walk_multistep
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ class CorrelatedWalker:
         return (self.dp_matrix is not None) and self.is_ready_for_walk
 
     def set_kernel(self, kernel_np: Optional[np.ndarray] = None,
-                   d: int = 4, S: Optional[int] = None) -> None:
+                   d: int = None, S: Optional[int] = None) -> None:
         """Set the kernel for walk generation.
 
         Args:
@@ -144,7 +144,7 @@ class CorrelatedWalker:
             logger.error(f"Failed to set kernel: {e}")
             raise
 
-    def generate(self, start_x=None, start_y=None):
+    def generate(self, start_x=None, start_y=None, use_serialization=False):
         if self.kernels is None:
             self.set_kernel()
         if start_x is None:
@@ -160,7 +160,7 @@ class CorrelatedWalker:
         if self.dp_matrix is not None:
             tensor4D_free(self.dp_matrix, self.T)
 
-        use_serialization = use_low_ram(self.D, self.W, self.H, self.T, False)
+        use_serialization = use_serialization or use_low_ram(self.D, self.W, self.H, self.T, False)
         dp_folder = _dp_folder_name(self.D, self.W, self.H, self.T, start_x, start_x, False)
         dp_mat = correlated_walk_init(kernel=self.kernels,
                                       width=self.W,
@@ -171,20 +171,22 @@ class CorrelatedWalker:
                                       use_serialization=use_serialization,
                                       output_folder=dp_folder)
         # save path to serialized dp matrix
-        self.dp_matrix = dp_folder if use_serialization else dp_mat
+        self.dp_matrix = None if use_serialization else dp_mat
         return dp_folder
 
-    def backtrace(self, end_x, end_y, use_serialized_dp=False, dp_folder=None, initial_direction=0):
-        walk = correlated_backtrace(dp_mat=self.dp_matrix,
+    def backtrace(self, end_x, end_y, dp_folder=None, initial_direction=0, plot=False):
+        walk = correlated_backtrace(dp_mat=self.dp_matrix if dp_folder is None else None,
                                     T=self.T, kernels=self.kernels,
                                     end_x=end_x, end_y=end_y,
                                     direction=initial_direction,
-                                    use_serialization=use_serialized_dp,
-                                    dp_folder=dp_folder if use_serialized_dp else None)
+                                    use_serialization=dp_folder is not None,
+                                    dp_folder=dp_folder)
+        if plot:
+            plot_walk(walk, self.W, self.H, title="Correlated Walk")
         return walk
 
-    def generate_multistep_walk(self, steps, direction=0, use_serialization=False,
-                                dp_folder=None) -> np.ndarray:
+    def generate_multistep_walk(self, steps, direction=0, use_serialization=False, dp_folder=None,
+                                plot=False) -> np.ndarray:
         """Generate multistep walk
 
         Args:
@@ -198,12 +200,16 @@ class CorrelatedWalker:
         if not self.is_ready_for_walk:
             raise ValueError("Walker not properly initialized for multistep walk")
         try:
+            if use_serialization and dp_folder is None:
+                dp_folder = _dp_folder_name(self.D, self.W, self.H, self.T, steps[0][0], steps[0][1], False)
             result = correlated_multi_step(W=self.W, H=self.H, T=self.T, kernels=self.kernels, steps=steps,
                                            direction=direction,
                                            use_serialization=use_serialization, dp_folder=dp_folder)
         except Exception as e:
             logger.error(f"Failed to generate multistep walk: {e}")
             raise
+        if plot:
+            plot_walk_multistep(steps, result, self.W, self.H)
         return result
 
     ####################################################################################################################

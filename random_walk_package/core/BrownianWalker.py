@@ -1,4 +1,5 @@
 import logging
+import typing
 import weakref
 from typing import Optional, Any
 
@@ -12,7 +13,7 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
     kernel_mapping_free
 from random_walk_package.bindings.data_structures.kernels import kernel_from_array
 from random_walk_package.bindings.mixed_walk import mix_backtrace, mix_walk
-from random_walk_package.bindings.plotter import plot_combined_terrain, plot_walk
+from random_walk_package.bindings.plotter import plot_combined_terrain, plot_walk, plot_walk_multistep
 
 logger = logging.getLogger(__name__)
 
@@ -211,11 +212,12 @@ class BrownianWalker:
             logger.error(f"Failed to backtrace walk: {e}")
             raise
 
-    def generate_multistep_walk(self, steps: np.ndarray) -> np.ndarray:
+    def multistep_walk(self, steps: typing.Union[np.ndarray, list[tuple[int, int]]], plot=False) -> np.ndarray:
         """Generate multistep walk
 
         Args:
             steps: Array of step points
+            plot: Whether to plot the walk
 
         Returns:
             Full path as numpy array
@@ -228,13 +230,15 @@ class BrownianWalker:
         except Exception as e:
             logger.error(f"Failed to generate multistep walk: {e}")
             raise
+        if plot:
+            plot_walk_multistep(steps, result, self.W, self.H)
         return result
 
     ####################################################################################################################
     ##################################### TERRAIN DEPENDANT BROWNIAN WALKS #############################################
     ####################################################################################################################
 
-    def generate_from_terrain(self, terrain: Optional[Any] = None,
+    def generate_with_terrain(self, terrain: Optional[Any] = None,
                               start_x: Optional[int] = None,
                               start_y: Optional[int] = None) -> None:
         """Generate walk from terrain data.
@@ -292,10 +296,10 @@ class BrownianWalker:
             logger.error(f"Failed to generate walk from terrain: {e}")
             raise
 
-    def backtrace_from_terrain(self, end_x: int, end_y: int,
-                               terrain: Optional[Any] = None,
-                               plot: bool = False,
-                               plot_title: str = "Terrain Walk") -> np.ndarray:
+    def backtrace_terrain(self, end_x: int, end_y: int,
+                          terrain: Optional[Any] = None,
+                          plot: bool = False,
+                          plot_title: str = "Terrain Walk") -> np.ndarray:
         """Backtrace walk from terrain data.
 
         Args:
@@ -339,9 +343,9 @@ class BrownianWalker:
             logger.error(f"Failed to backtrace walk: {e}")
             raise
 
-    def generate_from_terrain_multistep(self, terrain: Optional[Any] = None,
-                                        steps: list[tuple[int, int]] = None,
-                                        plot=False, plot_title="Brownian Walk on terrain") -> np.ndarray:
+    def terrain_multistep_walk(self, terrain: Optional[Any] = None,
+                               steps: typing.Union[np.ndarray, list[tuple[int, int]]] = None,
+                               plot=False, plot_title="Brownian Walk on terrain") -> np.ndarray:
         """Generate a multistep walk from terrain data.
 
         Args:
@@ -357,8 +361,8 @@ class BrownianWalker:
         for i in range(len(steps) - 1):
             start_x, start_y = steps[i]
             end_x, end_y = steps[i + 1]
-            self.generate_from_terrain(terrain, start_x, start_y)
-            segment = self.backtrace_from_terrain(end_x, end_y, terrain, plot=False)
+            self.generate_with_terrain(terrain, start_x, start_y)
+            segment = self.backtrace_terrain(end_x, end_y, terrain, plot=False)
             full_path = np.vstack((full_path, segment[:-1]))
 
         if plot:

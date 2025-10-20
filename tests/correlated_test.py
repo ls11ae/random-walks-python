@@ -18,6 +18,19 @@ def test_correlated_walk():
     # hier noch die dinger plotten also kernels und terrain
 
 
+def test_correlated_serialized():
+    with CorrelatedWalker(T=150, W=201, H=201, D=16, S=7) as walker:
+        dp_folder_path = walker.generate(start_x=100, start_y=100, use_serialization=True)
+        walker.backtrace(end_x=150, end_y=150, dp_folder=dp_folder_path, plot=True)
+
+
+def test_correlated_multistep():
+    with CorrelatedWalker(T=150, W=201, H=201, D=16, S=7) as walker:
+        steps = np.array([[100, 100], [150, 150], [50, 50]], dtype=np.int32)
+        full_path = walker.generate_multistep_walk(steps=steps, use_serialization=True, plot=True)
+        print(full_path)
+
+
 def demonstrate_all_functionality():
     # Sample Terrain erstellen
     terrain = create_terrain_map('terrain_baboons.txt', ' ')
@@ -26,13 +39,13 @@ def demonstrate_all_functionality():
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=False, step_size=5, directions=6, diffusity=2.6)
     set_forbidden_landmark(kernel_mapping, WATER)
 
-    """with CorrelatedWalker(T=150, terrain=terrain, kernel_mapping=kernel_mapping) as walker:
-           walker.generate_from_terrain(start_x=50
-          , start_y=50)
-           path3 = walker.backtrace_from_terrain(end_x=150
-          , end_y=150
-          , plot= True)
-           print(f "   Terrain Walk: {len(path3)} Punkte")"""
+    with CorrelatedWalker(T=150, terrain=terrain, kernel_mapping=kernel_mapping) as walker:
+        walker.generate_from_terrain(start_x=50
+                                     , start_y=50)
+        path3 = walker.backtrace_from_terrain(end_x=150
+                                              , end_y=150
+                                              , plot=True)
+        print(f"   Terrain Walk: {len(path3)} Punkte")
 
     # 4. Multistep Walk
     print("\n4. Multistep Walk Generierung")
@@ -52,10 +65,10 @@ def demonstrate_all_functionality():
     ]
 
     for name, kernel_np, sigma, S in kernels_to_test:
-        with CorrelatedWalker(T=15, W=25, H=25) as walker:
-            walker.set_kernel(kernel_np=kernel_np, d=8, S=S)
-            walker.generate(start_x=12, start_y=12)
-            path = walker.backtrace(end_x=18, end_y=18)
+        with CorrelatedWalker(T=15, W=25, H=25) as walker2:
+            walker2.set_kernel(kernel_np=kernel_np, d=8, S=S)
+            walker2.generate(start_x=12, start_y=12)
+            path = walker2.backtrace(end_x=18, end_y=18)
 
     # 6. Fehlerbehandlung demonstrieren
     print("\n6. Fehlerbehandlung")

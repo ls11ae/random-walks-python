@@ -48,7 +48,7 @@ def correlated_walk_init(kernel, width=100, height=100, time=50, start_x=None, s
 
 
 def correlated_backtrace(dp_mat, T, kernels, end_x, end_y, direction=0, use_serialization=False, dp_folder=None):
-    if dp_mat is None:
+    if dp_mat is None and use_serialization is False:
         raise ValueError("DP matrix is None.")
     if kernels is None:
         raise ValueError("Kernels are None.")

@@ -40,4 +40,5 @@ def tensor_free(tensor_ptr: TensorPtr):
 
 
 def tensor4D_free(tensor_ptrs: POINTER(TensorPtr), length: int):
-    dll.tensor4D_free(tensor_ptrs, length)
+    if tensor_ptrs is not None:
+        dll.tensor4D_free(tensor_ptrs, length)
