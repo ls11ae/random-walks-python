@@ -14,8 +14,8 @@ def test_brownian_walk():
     set_forbidden_landmark(kernel_mapping, WATER)
 
     with BrownianWalker(T=150, terrain=terrain, k_mapping=kernel_mapping) as walker:
-        walker.generate_from_terrain(start_x=50, start_y=50)
-        path3 = walker.backtrace_from_terrain(end_x=150, end_y=150, plot=True)
+        walker.generate_with_terrain(start_x=50, start_y=50)
+        path3 = walker.backtrace_terrain(end_x=150, end_y=150, plot=True)
         print(f"   Terrain Walk: {len(path3)} Punkte")
     # hier noch die dinger plotten also kernels und terrain
 
@@ -32,8 +32,8 @@ def demonstrate_all_functionality():
     set_forbidden_landmark(kernel_mapping, WATER)
 
     with BrownianWalker(T=150, terrain=terrain, k_mapping=kernel_mapping) as walker:
-        walker.generate_from_terrain(start_x=50, start_y=50)
-        path3 = walker.backtrace_from_terrain(end_x=150, end_y=150, plot=True)
+        walker.generate_with_terrain(start_x=50, start_y=50)
+        path3 = walker.backtrace_terrain(end_x=150, end_y=150, plot=True)
         print(f"   Terrain Walk: {len(path3)} Punkte")
 
     # 4. Multistep Walk
@@ -43,7 +43,7 @@ def demonstrate_all_functionality():
 
         # Mehrere Zielpunkte für multistep
         steps = np.array([[10, 10], [20, 20], [5, 25], [25, 5]], dtype=np.int32)
-        full_path = walker.generate_multistep_walk(steps)
+        full_path = walker.multistep_walk(steps)
         print(full_path)
 
     # 5. Verschiedene Kernel Parameter testen
@@ -91,8 +91,8 @@ def demonstrate_all_functionality():
         ]
 
         for i, (start, end) in enumerate(routes):
-            walker.generate_from_terrain(start_x=start[0], start_y=start[1])
-            path = walker.backtrace_from_terrain(end_x=end[0], end_y=end[1])
+            walker.generate_with_terrain(start_x=start[0], start_y=start[1])
+            path = walker.backtrace_terrain(end_x=end[0], end_y=end[1])
             print(f"   Route {i + 1}: {start} -> {end}: {len(path)} Punkte")
 
     test_brownian_walk()
