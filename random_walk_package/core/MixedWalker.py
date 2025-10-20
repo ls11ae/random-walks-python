@@ -1,9 +1,10 @@
 import subprocess
 from pathlib import Path
 
-from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
+from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
+from random_walk_package.core.WalkerHelper import WalkerHelper
 from random_walk_package.data_sources.walk_visualization import walk_to_osm
 
 try:
@@ -61,9 +62,9 @@ class MixedWalker:
             os.makedirs(self.walks_path)
 
         self.aid_to_terrain_path = self.study_folder
-        self._set_kernels()
+        self._process_movebank_data()
 
-    def _set_kernels(self):
+    def _process_movebank_data(self):
         self.movebank_processor = AnimalMovementProcessor(self.movebank_study)
         self.aid_to_terrain_path = self.movebank_processor.create_landcover_data_txt(self.resolution,
                                                                                      out_directory=self.study_folder)
@@ -76,7 +77,7 @@ class MixedWalker:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
-    def generate_walk(self, serialized=False):
+    def generate_movebank_walks(self, serialized=False):
         use_cuda = False  # self.has_cuda()
         grid_steps_dict, geo_steps_dict, times = self.movebank_processor.create_movement_data(samples=-1)
 
@@ -170,7 +171,14 @@ class MixedWalker:
                         step_annotations=grid_steps_dict,
                         animal_id=animal_id, walk_path=self.walks_path, annotated=True)
             kernels_map3d_free(self.tensor_map)
-            # TODO: geo walk as json
-            # plot_combined_terrain(pointer(spatial_map), walk, steps=steps, title=self.movebank_study)
         map_path = os.path.join(self.walks_path, "entire_study.html")
         walk_to_osm(geodetic_walks, None, "entire study", self.walks_path, grid_steps_dict, map_path)
+
+    @staticmethod
+    def generate_custom_walks(terrain, steps, T, kernel_mapping, plot=False, plot_title="Mixed Walk"):
+        tensor_map = get_tensor_map_terrain(terrain, kernel_mapping)
+        walk = WalkerHelper.generate_multistep_walk(terrain, steps, T, kernel_mapping, tensor_map)
+        kernels_map3d_free(tensor_map)
+        if plot:
+            plot_combined_terrain(terrain, walk, steps, title=plot_title)
+        return walk

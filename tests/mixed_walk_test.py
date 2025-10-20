@@ -19,7 +19,7 @@ def mixed_walk_test():
     set_forbidden_landmark(kernel_mapping, WATER)
 
     walker = MixedWalker(T=T, resolution=300, kernel_mapping=kernel_mapping, study_folder=study)
-    walker.generate_walk(serialized=False)
+    walker.generate_movebank_walks(serialized=False)
 
 
 def test_time_walker():

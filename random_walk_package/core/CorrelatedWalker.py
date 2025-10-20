@@ -1,9 +1,5 @@
 import hashlib
-import logging
 import weakref
-from typing import Optional, Any
-
-import numpy as np
 
 from random_walk_package import tensor_free, tensor4D_free
 from random_walk_package.bindings.correlated_walk import *
@@ -12,8 +8,8 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
     create_correlated_kernel_parameters
 from random_walk_package.bindings.data_structures.kernels import correlated_kernels_from_matrix, \
     generate_correlated_kernels
-from random_walk_package.bindings.mixed_walk import mix_walk, mix_backtrace
-from random_walk_package.bindings.plotter import plot_combined_terrain, plot_walk, plot_walk_multistep
+from random_walk_package.bindings.plotter import plot_walk, plot_walk_multistep
+from random_walk_package.core.WalkerHelper import *
 
 logger = logging.getLogger(__name__)
 
@@ -68,14 +64,7 @@ class CorrelatedWalker:
 
     def _validate_parameters(self) -> None:
         """Validate that all required parameters are set."""
-        if self.D <= 0:
-            raise ValueError(f"Invalid directions: {self.D}")
-        if self.W <= 0 or self.H <= 0:
-            raise ValueError(f"Invalid grid dimensions: {self.W}x{self.H}")
-        if self.T <= 0:
-            raise ValueError(f"Invalid time steps: {self.T}")
-        if self.S <= 0:
-            raise ValueError(f"Invalid step size: {self.S}")
+        WalkerHelper.validate_parameters(self.T, self.W, self.H, self.S, self.D)
 
     def _cleanup_resources(self) -> None:
         """Clean up all C resources."""
@@ -242,11 +231,6 @@ class CorrelatedWalker:
         if start_y is None:
             start_y = self.terrain.contents.height // 2
 
-        # Validate start position
-        if not (0 <= start_x < self.terrain.contents.width and 0 <= start_y < self.terrain.contents.height):
-            raise ValueError(f"Start position ({start_x}, {start_y}) out of bounds "
-                             f"for terrain {self.terrain.contents.width}x{self.terrain.contents.height}")
-
         # Initialize kernel mapping if needed
         if self.kernel_mapping is None:
             self.kernel_mapping = create_correlated_kernel_parameters(MEDIUM, self.S)
@@ -269,9 +253,10 @@ class CorrelatedWalker:
             self.dp_matrix = None
 
         try:
-            self.dp_matrix = mix_walk(
-                self.W, self.H, self.terrain, self.tensor_map, self.T,
-                start_x, start_y, use_serialization, True, dp_folder, self.kernel_mapping
+            # Use WalkerHelper for the core generation logic
+            self.dp_matrix = WalkerHelper.generate_single_segment(
+                self.terrain, start_x, start_y, self.T, self.kernel_mapping,
+                self.tensor_map, use_serialization, dp_folder
             )
             self._is_initialized = True
             logger.info(f"Successfully generated walk from terrain, start=({start_x}, {start_y})")
@@ -299,40 +284,33 @@ class CorrelatedWalker:
 
         Returns:
             numpy array of walk points
-
         """
         if not self.is_ready_for_backtrace:
             raise ValueError('Initialize walk first before calling backtrace. Call generate_from_terrain first.')
 
         if terrain is not None:
             self.terrain = terrain
-
-        # Validate end position
-        if not (0 <= end_x < self.W and 0 <= end_y < self.H):
-            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
-                             f"for grid {self.W}x{self.H}")
+            self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
 
         try:
-            walk_np = mix_backtrace(
+            # Use WalkerHelper for the core backtrace logic
+            walk_np = WalkerHelper.backtrace_single_segment(
                 self.dp_matrix, self.T, self.tensor_map, self.terrain,
-                end_x, end_y, use_serialization, "", "", self.kernel_mapping
+                end_x, end_y, self.kernel_mapping, use_serialization
             )
-
-            if walk_np is None:
-                raise RuntimeError("Backtrace returned null path")
 
             logger.info(f"Successfully backtraced walk to ({end_x}, {end_y})")
             if plot:
-                plot_combined_terrain(self.terrain, terrain_width=self.W, terrain_height=self.H, walk_points=walk_np,
-                                      steps=None, title=plot_title)
-            return np.array(walk_np)
+                plot_combined_terrain(self.terrain, terrain_width=self.W, terrain_height=self.H,
+                                      walk_points=walk_np, steps=None, title=plot_title)
+            return walk_np
 
         except Exception as e:
             logger.error(f"Failed to backtrace walk: {e}")
             raise
 
     def generate_from_terrain_multistep(self, terrain: Optional[Any] = None,
-                                        steps: list[tuple[int, int]] = None,
+                                        steps: List[Tuple[int, int]] = None,
                                         plot=False,
                                         plot_title="Correlated Walk on terrain with multiple steps") -> np.ndarray:
         """Generate a multistep walk from terrain data.
@@ -342,20 +320,27 @@ class CorrelatedWalker:
             steps: List of step points
             plot: Whether to plot the walk
             plot_title: Title of the plot
+
         Returns:
             list of walk point tuples
         """
+        if terrain is not None:
+            self.terrain = terrain
 
-        full_path = np.empty((0, 2))
-        for i in range(len(steps) - 1):
-            start_x, start_y = steps[i]
-            end_x, end_y = steps[i + 1]
-            self.generate_from_terrain(terrain, start_x, start_y)
-            segment = self.backtrace_from_terrain(end_x, end_y, terrain, plot=False)
-            full_path = np.vstack((full_path, segment[:-1]))
+        if steps is None:
+            raise ValueError("Steps list cannot be None")
 
-        if plot:
-            plot_combined_terrain(self.terrain, full_path, steps=steps, title=plot_title)
+        # Initialize kernel mapping and tensor map if needed
+        if self.kernel_mapping is None:
+            self.kernel_mapping = create_correlated_kernel_parameters(MEDIUM, self.S)
+        if self.tensor_map is None:
+            self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
+
+        # Use WalkerHelper for the multistep generation
+        full_path = WalkerHelper.generate_multistep_walk(
+            self.terrain, steps, self.T, self.kernel_mapping, self.tensor_map,
+            plot, plot_title
+        )
         return full_path
 
     def __enter__(self):

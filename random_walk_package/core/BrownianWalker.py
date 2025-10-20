@@ -1,9 +1,6 @@
-import logging
+import typing
 import typing
 import weakref
-from typing import Optional, Any
-
-import numpy as np
 
 from random_walk_package import tensor_free, matrix_free, create_gaussian_kernel, \
     tensor4D_free
@@ -12,8 +9,8 @@ from random_walk_package.bindings.brownian_walk import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters, \
     kernel_mapping_free
 from random_walk_package.bindings.data_structures.kernels import kernel_from_array
-from random_walk_package.bindings.mixed_walk import mix_backtrace, mix_walk
-from random_walk_package.bindings.plotter import plot_combined_terrain, plot_walk, plot_walk_multistep
+from random_walk_package.bindings.plotter import plot_walk, plot_walk_multistep
+from random_walk_package.core.WalkerHelper import *
 
 logger = logging.getLogger(__name__)
 
@@ -285,9 +282,10 @@ class BrownianWalker:
             self.dp_matrix_terrain = None
 
         try:
-            self.dp_matrix_terrain = mix_walk(
-                self.W, self.H, self.terrain, self.tensor_map, self.T,
-                start_x, start_y, False, False, "", self.kernel_mapping
+            # Use WalkerHelper for the core generation logic
+            self.dp_matrix = WalkerHelper.generate_single_segment(
+                self.terrain, start_x, start_y, self.T, self.kernel_mapping,
+                self.tensor_map, False, ""
             )
             self._is_initialized = True
             logger.info(f"Successfully generated walk from terrain, start=({start_x}, {start_y})")
@@ -318,26 +316,20 @@ class BrownianWalker:
 
         if terrain is not None:
             self.terrain = terrain
-
-        # Validate end position
-        if not (0 <= end_x < self.W and 0 <= end_y < self.H):
-            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
-                             f"for grid {self.W}x{self.H}")
+            self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
 
         try:
-            walk_np = mix_backtrace(
-                self.dp_matrix_terrain, self.T, self.tensor_map, self.terrain,
-                end_x, end_y, False, "", "", self.kernel_mapping
+            # Use WalkerHelper for the core backtrace logic
+            walk_np = WalkerHelper.backtrace_single_segment(
+                self.dp_matrix, self.T, self.tensor_map, self.terrain,
+                end_x, end_y, self.kernel_mapping, False
             )
-
-            if walk_np is None:
-                raise RuntimeError("Backtrace returned null path")
 
             logger.info(f"Successfully backtraced walk to ({end_x}, {end_y})")
             if plot:
-                plot_combined_terrain(self.terrain, terrain_width=self.W, terrain_height=self.H, walk_points=walk_np,
-                                      steps=None, title=plot_title)
-            return np.array(walk_np)
+                plot_combined_terrain(self.terrain, terrain_width=self.W, terrain_height=self.H,
+                                      walk_points=walk_np, steps=None, title=plot_title)
+            return walk_np
 
         except Exception as e:
             logger.error(f"Failed to backtrace walk: {e}")
@@ -357,16 +349,23 @@ class BrownianWalker:
             list of walk point tuples
         """
 
-        full_path = np.empty((0, 2))
-        for i in range(len(steps) - 1):
-            start_x, start_y = steps[i]
-            end_x, end_y = steps[i + 1]
-            self.generate_with_terrain(terrain, start_x, start_y)
-            segment = self.backtrace_terrain(end_x, end_y, terrain, plot=False)
-            full_path = np.vstack((full_path, segment[:-1]))
+        if terrain is not None:
+            self.terrain = terrain
 
-        if plot:
-            plot_combined_terrain(self.terrain, full_path, steps=steps, title=plot_title)
+        if steps is None:
+            raise ValueError("Steps list cannot be None")
+
+        # Initialize kernel mapping and tensor map if needed
+        if self.kernel_mapping is None:
+            self.kernel_mapping = create_brownian_kernel_parameters(MEDIUM, self.S)
+        if self.tensor_map is None:
+            self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
+
+        # Use WalkerHelper for the multistep generation
+        full_path = WalkerHelper.generate_multistep_walk(
+            self.terrain, steps, self.T, self.kernel_mapping, self.tensor_map,
+            plot, plot_title
+        )
         return full_path
 
     def __enter__(self):
