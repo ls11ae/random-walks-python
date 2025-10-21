@@ -134,7 +134,7 @@ class MixedWalker:
                     if serialized:
                         print(dp_dir)
                     # Backtrace from the end point
-                    walk_ptr = mix_backtrace(
+                    walk_ptr = mix_backtrace_c(
                         DP_Matrix=dp_matrix_step,
                         T=self.T,
                         tensor_map=self.tensor_map,
@@ -146,7 +146,7 @@ class MixedWalker:
                         dp_dir=dp_dir,
                         mapping=self.mapping
                     )
-                if walk_ptr is not None and walk_ptr.contents:
+                if walk_ptr is not None:
                     segment = get_walk_points(walk_ptr)
                 else:
                     segment = [(start_x, start_y), (end_x, end_y)]
@@ -173,6 +173,7 @@ class MixedWalker:
             kernels_map3d_free(self.tensor_map)
         map_path = os.path.join(self.walks_path, "entire_study.html")
         walk_to_osm(geodetic_walks, None, "entire study", self.walks_path, grid_steps_dict, map_path)
+        return map_path
 
     @staticmethod
     def generate_custom_walks(terrain, steps, T, kernel_mapping, plot=False, plot_title="Mixed Walk"):
@@ -180,5 +181,5 @@ class MixedWalker:
         walk = WalkerHelper.generate_multistep_walk(terrain, steps, T, kernel_mapping, tensor_map)
         kernels_map3d_free(tensor_map)
         if plot:
-            plot_combined_terrain(terrain, walk, steps, title=plot_title)
+            plot_combined_terrain(terrain=terrain, walk_points=walk, steps=steps, title="Mixed Walk")
         return walk

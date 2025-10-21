@@ -1,10 +1,10 @@
 import numpy as np
 
 from random_walk_package import timed_location_of
-from random_walk_package.bindings.brownian_walk import plot_walk_from_json
-from random_walk_package.bindings.data_structures.point2D import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
+from random_walk_package.bindings.plotter import plot_walk_from_json
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
+from random_walk_package.data_sources.walk_visualization import walk_to_osm
 
 
 class MixedTimeWalker:
@@ -110,8 +110,7 @@ class MixedTimeWalker:
         grid_steps_dict, geo_steps_dict, time_stamps_dict = self.movebank_processor.create_movement_data(samples=-1,
                                                                                                          time_stamped=True)
 
-        animal_paths: dict[str, list[tuple[int, int]]] = {}
-
+        geodetic_walks: dict[str, list[tuple[float, float]]] = {}
         for animal_id, steps in grid_steps_dict.items():
             if not steps or len(steps) < 2:
                 continue
@@ -176,6 +175,12 @@ class MixedTimeWalker:
             last_px, last_py = int(steps[-1][0]), int(steps[-1][1])
             full_path.append((last_px, last_py))
 
-            animal_paths[animal_id] = full_path
-
-        return animal_paths
+            grid_steps_dict[animal_id] = self.movebank_processor.grid_coordinates_to_geodetic(steps, animal_id)
+            geodetic_path = self.movebank_processor.grid_coordinates_to_geodetic(full_path, animal_id)
+            geodetic_walks[animal_id] = geodetic_path
+            walk_to_osm(walk_coords_or_dict=geodetic_path, original_coords=geo_steps_dict[animal_id],
+                        step_annotations=grid_steps_dict, animal_id=animal_id, walk_path=self.walks_path,
+                        annotated=True)
+        map_path = os.path.join(self.walks_path, "entire_study.html")
+        walk_to_osm(geodetic_walks, None, "entire study", self.walks_path, grid_steps_dict, map_path)
+        return map_path
