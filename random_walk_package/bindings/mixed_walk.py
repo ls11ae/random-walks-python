@@ -1,4 +1,5 @@
 # mixed_walk.py
+
 from random_walk_package import point2d_arr_free, get_walk_points
 from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.wrapper import dll
@@ -133,6 +134,13 @@ def mix_walk(W, H, terrain_map, kernels_map, T, start_x, start_y, serialize: boo
         serialize_path.encode('utf-8') if serialize else None)
 
     return result
+
+
+def mix_backtrace_c(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bool = False, serialize_path: str = "",
+                    dp_dir: str = "", mapping=None):
+    walk_c = dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, 0, serialize,
+                                  serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
+    return walk_c
 
 
 def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bool = False, serialize_path: str = "",

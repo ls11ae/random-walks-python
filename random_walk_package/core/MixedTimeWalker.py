@@ -156,6 +156,7 @@ class MixedTimeWalker:
                     grid_y=self.grid_points_per_edge,
                     start=start_t_loc,
                     goal=end_t_loc,
+                    full_weather_influence=True
                 )
 
                 segment = (
