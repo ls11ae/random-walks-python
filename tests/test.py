@@ -1,6 +1,7 @@
 # debugging: gdb --args python -m tests.test
-from tests.mixed_walk_test import test_time_walker
+from random_walk_package.bindings.plotter import plot_walk_from_json
 
 if __name__ == "__main__":
     # brownian_test.demonstrate_all_functionality()
-    test_time_walker()
+    plot_walk_from_json("/home/omar/CLionProjects/random-walks/resources/biased.json", 'Biased Walk')
+    # test_time_walker()

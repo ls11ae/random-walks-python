@@ -42,22 +42,8 @@ dll.terrain_set.restype = None
 dll.tensor_map_terrain.argtypes = [TerrainMapPtr, KernelParametersMappingPtr]
 dll.tensor_map_terrain.restype = KernelsMap3DPtr
 
-dll.tensor_map_terrain_biased.argtypes = [TerrainMapPtr, Point2DArrayPtr, KernelParametersMappingPtr]
-dll.tensor_map_terrain_biased.restype = KernelsMap4DPtr
-
 dll.parse_terrain_map.argtypes = [ctypes.c_char_p, TerrainMapPtr, ctypes.c_char]
 dll.parse_terrain_map.restype = ctypes.c_int
-
-dll.tensor_map_terrain_biased_grid.argtypes = [TerrainMapPtr, Point2DArrayGridPtr, KernelParametersMappingPtr]
-dll.tensor_map_terrain_biased_grid.restype = KernelsMap4DPtr
-
-dll.tensor_map_terrain_biased_grid_serialized.argtypes = [
-    TerrainMapPtr,
-    Point2DArrayGridPtr,
-    KernelParametersMappingPtr,
-    ctypes.c_char_p,
-]
-dll.tensor_map_terrain_biased_grid_serialized.restype = None
 
 dll.tensor_map_terrain_serialize.argtypes = [TerrainMapPtr, KernelParametersMappingPtr, ctypes.c_char_p]
 dll.tensor_map_terrain_serialize.restype = None
@@ -65,24 +51,14 @@ dll.tensor_map_terrain_serialize.restype = None
 dll.tensor_at.argtypes = [ctypes.c_char_p, ctypes.c_ssize_t, ctypes.c_ssize_t]
 dll.tensor_at.restype = TensorPtr
 
-dll.tensor_at_xyt.argtypes = [ctypes.c_char_p, ctypes.c_ssize_t, ctypes.c_ssize_t, ctypes.c_ssize_t]
-dll.tensor_at_xyt.restype = TensorPtr
-
 dll.kernels_map3d_free.argtypes = [KernelsMap3DPtr]
 dll.kernels_map3d_free.restype = None
-
-dll.kernels_map4d_free.argtypes = [KernelsMap4DPtr]
-dll.kernels_map4d_free.restype = None
 
 dll.terrain_map_free.argtypes = [TerrainMapPtr]
 dll.terrain_map_free.restype = None
 
 dll.create_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
 dll.create_terrain_map.restype = TerrainMapPtr
-
-dll.tensor_map_terrain_serialize_time.argtypes = [ctypes.c_void_p, TerrainMapPtr, KernelParametersMappingPtr,
-                                                  ctypes.c_char_p]
-dll.tensor_map_terrain_serialize_time.restype = None
 
 dll.terrain_single_value.argtypes = [ctypes.c_int, ctypes.c_ssize_t, ctypes.c_ssize_t]
 dll.terrain_single_value.restype = TerrainMapPtr

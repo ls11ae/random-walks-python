@@ -1,18 +1,6 @@
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 
-dll.coordinate_array_new.argtypes = [CoordArray, c_size_t]
-dll.coordinate_array_new.restype = CoordArray
-
-dll.getNormalizedLocations.argtypes = [CoordArray, c_size_t, c_size_t]
-dll.getNormalizedLocations.restype = Point2DArrayPtr
-
-dll.extractSteps.argtypes = [Point2DArrayPtr, c_size_t]
-dll.extractSteps.restype = Point2DArrayPtr
-
-dll.coordinate_array_free.argtypes = [CoordArray]
-dll.coordinate_array_free.restype = None
-
 dll.kernel_parameters_create.argtypes = [c_bool,  # is brownian?
                                          c_ssize_t,  # step size
                                          c_ssize_t,  # directions

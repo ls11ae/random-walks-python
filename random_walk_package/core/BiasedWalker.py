@@ -1,20 +1,11 @@
 import numpy as np
 
-from random_walk_package import get_walk_points
 from random_walk_package.bindings.correlated_walk import *
-from random_walk_package.bindings.mixed_walk import time_walk_init, time_walk_backtrace
+from random_walk_package.bindings.mixed_walk import time_walk_backtrace
 
 
 class BiasedWalker:
     def __init__(self, terrain=None, mapping=None, width=200, height=200, bias_array=None):
-        if terrain is None:
-            self.terrain = terrain_single_value(40, width, height)
-        else:
-            self.terrain = terrain
-        if mapping is None:
-            self.mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-        else:
-            self.mapping = mapping
         self.T = len(bias_array)
         self.bias_array = create_point2d_array(bias_array)
         self.tensor_map = tensor_map_terrain_biased(self.terrain, self.mapping, self.bias_array)
@@ -25,10 +16,9 @@ class BiasedWalker:
     def generate(self, start_x=None, start_y=None):
         if start_x is None or start_y is None:
             start_x, start_y = self.W // 2, self.H // 2
-        self.dp_matrix = time_walk_init(self.W, self.H, self.terrain, self.tensor_map, self.T, start_x, start_y)
 
     def backtrace(self, end_x, end_y):
-        walk = time_walk_backtrace(self.dp_matrix, self.T, self.terrain, self.tensor_map, end_x, end_y, 0)
+        walk = time_walk_backtrace(self.dp_matrix, self.tensor_map, end_x, end_y)
         walk_np = get_walk_points(walk)
         dll.point2d_array_free(walk)
         return walk_np

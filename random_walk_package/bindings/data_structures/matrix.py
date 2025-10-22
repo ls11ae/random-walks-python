@@ -3,57 +3,12 @@ import matplotlib.pyplot as plt
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 
-# Core matrix operations
+# Generate a new matrix
 dll.matrix_new.restype = MatrixPtr
 dll.matrix_new.argtypes = [c_ssize_t, c_ssize_t]
 
 dll.matrix_free.argtypes = [MatrixPtr]
 dll.matrix_free.restype = None
-
-dll.matrix_copy.restype = MatrixPtr
-dll.matrix_copy.argtypes = [MatrixPtr]
-
-# Accessors and basic manipulation
-dll.matrix_set.argtypes = [MatrixPtr, c_ssize_t, c_ssize_t, c_double]
-dll.matrix_set.restype = None
-
-dll.matrix_get.argtypes = [MatrixPtr, c_ssize_t, c_ssize_t]
-dll.matrix_get.restype = c_double
-
-dll.matrix_in_bounds.argtypes = [MatrixPtr, c_ssize_t, c_ssize_t]
-dll.matrix_in_bounds.restype = c_int
-
-dll.matrix_fill.argtypes = [MatrixPtr, c_double]
-dll.matrix_fill.restype = None
-
-# Mathematical operations
-dll.matrix_add.restype = MatrixPtr
-dll.matrix_add.argtypes = [MatrixPtr, MatrixPtr]
-
-dll.matrix_add_inplace.restype = c_int
-dll.matrix_add_inplace.argtypes = [MatrixPtr, MatrixPtr]
-
-dll.matrix_sub.restype = MatrixPtr
-dll.matrix_sub.argtypes = [MatrixPtr, MatrixPtr]
-
-dll.matrix_mul.restype = MatrixPtr
-dll.matrix_mul.argtypes = [MatrixPtr, MatrixPtr]
-
-dll.matrix_elementwise_mul.restype = MatrixPtr
-dll.matrix_elementwise_mul.argtypes = [MatrixPtr, MatrixPtr]
-
-dll.matrix_sum.restype = c_double
-dll.matrix_sum.argtypes = [MatrixPtr]
-
-# Matrix transformations
-dll.matrix_transpose.argtypes = [MatrixPtr]
-dll.matrix_transpose.restype = None
-
-dll.matrix_determinant.restype = c_double
-dll.matrix_determinant.argtypes = [MatrixPtr]
-
-dll.matrix_invert.restype = MatrixPtr
-dll.matrix_invert.argtypes = [MatrixPtr]
 
 # I/O and serialization
 dll.matrix_print.argtypes = [MatrixPtr]

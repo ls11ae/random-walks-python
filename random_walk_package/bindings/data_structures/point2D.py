@@ -19,9 +19,6 @@ dll.point2d_array_print.restype = None
 dll.point2d_array_free.argtypes = [Point2DArrayPtr]
 dll.point2d_array_free.restype = None
 
-dll.point_2d_array_grid_free.argtypes = [Point2DArrayGridPtr]
-dll.point_2d_array_grid_free.restype = None
-
 dll.point_2d_array_new_empty.argtypes = [c_size_t]
 dll.point_2d_array_new_empty.restype = Point2DArrayPtr
 

@@ -67,12 +67,7 @@ class BrownianWalker:
 
     def _validate_parameters(self) -> None:
         """Validate that all required parameters are set."""
-        if self.W <= 0 or self.H <= 0:
-            raise ValueError(f"Invalid grid dimensions: {self.W}x{self.H}")
-        if self.T <= 0:
-            raise ValueError(f"Invalid time steps: {self.T}")
-        if self.S <= 0:
-            raise ValueError(f"Invalid step size: {self.S}")
+        WalkerHelper.validate_parameters(self.T, self.W, self.H, self.S)
 
     def _cleanup_resources(self) -> None:
         """Clean up all C resources."""
