@@ -20,9 +20,7 @@ class BrownianWalker:
                  kernel: Optional[Any] = None, terrain: Optional[Any] = None,
                  k_mapping: Optional[Any] = None):
         """
-            Fetches and saves hourly weather data for a grid of equidistant points within the bounding box
-            of each animal. For each animal, per-grid-point CSVs are written into a dedicated subfolder,
-            and a merged CSV (weather_grid_all.csv) is created that aggregates all grid points.
+            Brownian Walker class.
 
             Args:
                 S (int): Stepsize, meaning the distance that can be moved in the grid in one step.

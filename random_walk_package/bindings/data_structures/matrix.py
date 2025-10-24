@@ -58,7 +58,8 @@ dll.matrix_generator_gaussian_pdf.argtypes = [
 
 
 def matrix_free(matrix_ptr):
-    dll.matrix_free(matrix_ptr)
+    if matrix_ptr is not None:
+        dll.matrix_free(matrix_ptr)
 
 
 # Convert result to numpy array

@@ -2,6 +2,9 @@ import os
 import sys
 from ctypes import *
 
+import numpy as np
+
+from random_walk_package import matrix_new, matrix_free
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array, get_walk_points
 from random_walk_package.bindings.data_structures.types import Tensor, Matrix, Point2DArray, Point2D
 from random_walk_package.wrapper import dll
@@ -106,4 +109,46 @@ def brownian_backtrace_multiple(kernel, points, time, width, height):
     walk_np = get_walk_points(multistep_walk)
     dll.point2d_array_free(multistep_walk)
     dll.point2d_array_free(array_ptr)
+    return walk_np
+
+
+def create_biases_offsets(points):
+    arr = np.asarray(points, dtype=np.float64)
+    if arr.ndim != 2 or arr.shape[1] != 2:
+        raise ValueError("points must be shape (N, 2)")
+    pts = (Point2D * len(arr))(*[Point2D(x, y) for x, y in arr])
+    biases = dll.create_biases_offsets(pts, len(arr))
+    return biases
+
+
+def create_biases_rotation(rotations_deg):
+    arr = np.asarray(rotations_deg, dtype=np.float64)
+    data = (c_double * len(arr))(*arr)
+    biases = dll.create_biases_rotation(data, len(arr))
+    return biases
+
+
+def biased_walk_init(matrix_ptr=None, size=None, start_x=None, start_y=None, offsets=None, rotations=None):
+    if offsets is None and rotations is None:
+        raise ValueError("Either offsets or rotations must be provided.")
+    if offsets is not None and size is not None:
+        biases = create_biases_offsets(offsets)
+        matrix_ptr = matrix_new(size, size)
+    elif rotations is not None and matrix_ptr is not None:
+        biases = create_biases_rotation(rotations)
+    else:
+        raise ValueError("Either base kernel and rotations or offsets must be provided.")
+
+    tensor_ptr = dll.biased_brownian_init(biases, matrix_ptr, size, size, biases.contents.len, start_x, start_y)
+    matrix_free(matrix_ptr)
+    return tensor_ptr, biases
+
+
+def biased_walk_backtrace(tensor_ptr, biases, matrix_ptr, size, end_x, end_y):
+    if matrix_ptr is None:
+        matrix_ptr = matrix_new(size, size)
+    walk = dll.biased_brownian_backtrace(tensor_ptr, biases, matrix_ptr, end_x, end_y)
+    walk_np = get_walk_points(walk)
+    dll.point2d_array_free(walk)
+    matrix_free(matrix_ptr)
     return walk_np
