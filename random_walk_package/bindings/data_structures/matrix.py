@@ -57,6 +57,11 @@ dll.matrix_generator_gaussian_pdf.argtypes = [
 ]
 
 
+def matrix_new(width, height) -> Matrix:
+    matrix = dll.matrix_new(width, height)
+    return matrix
+
+
 def matrix_free(matrix_ptr):
     if matrix_ptr is not None:
         dll.matrix_free(matrix_ptr)

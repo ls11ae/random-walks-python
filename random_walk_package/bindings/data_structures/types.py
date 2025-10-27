@@ -1,12 +1,23 @@
 from ctypes import *
 
 
+class Pair(Structure):
+    _fields_ = [("first", c_double),
+                ("second", c_double)]
+
+
+class MatrixData(Union):
+    _fields_ = [
+        ("points", POINTER(c_double)),
+        ("pairs", POINTER(Pair)), ]
+
+
 class Matrix(Structure):
     _fields_ = [
         ("width", c_ssize_t),
         ("height", c_ssize_t),
         ("len", c_ssize_t),
-        ("data", POINTER(c_double))
+        ("data", MatrixData),
     ]
 
 

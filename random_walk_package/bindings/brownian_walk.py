@@ -4,7 +4,7 @@ from ctypes import *
 
 import numpy as np
 
-from random_walk_package import matrix_new, matrix_free
+from random_walk_package.bindings.data_structures.matrix import matrix_free, matrix_new
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array, get_walk_points
 from random_walk_package.bindings.data_structures.types import Tensor, Matrix, Point2DArray, Point2D
 from random_walk_package.wrapper import dll
