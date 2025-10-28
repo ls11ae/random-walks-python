@@ -3,6 +3,8 @@ from typing import Optional, Any, Tuple, List
 
 import numpy as np
 
+from random_walk_package import create_gaussian_kernel, MatrixPtr
+from random_walk_package.bindings.data_structures.kernels import kernel_from_array
 from random_walk_package.bindings.mixed_walk import mix_backtrace, mix_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 
@@ -11,6 +13,12 @@ logger = logging.getLogger(__name__)
 
 class WalkerHelper:
     """Helper class for terrain-based walk generation operations."""
+
+    @staticmethod
+    def validate_point_location(start_x, start_y, W, H):
+        if not (0 <= start_x < W and 0 <= start_y < H):
+            raise ValueError(f"Start position ({start_x}, {start_y}) out of bounds "
+                             f"for grid {W}x{H}")
 
     @staticmethod
     def validate_parameters(T, W, H, S, D=None) -> None:
@@ -146,3 +154,20 @@ class WalkerHelper:
             plot_combined_terrain(terrain, full_path, steps=steps, title=plot_title)
 
         return full_path
+
+    @staticmethod
+    def set_custom_kernel(base_kernel: Optional[np.ndarray] = None, S: int = None) -> MatrixPtr:
+        kernel_width, kernel_height = base_kernel.shape if base_kernel is not None else (2 * S + 1, 2 * S + 1)
+        try:
+            if base_kernel is not None:
+                if kernel_width != 2 * S + 1 or kernel_height != 2 * S + 1:
+                    raise ValueError(
+                        "Custom kernel must have dimensions 2S+1x2S+1. Stepsize and passed Array are contradictory")
+                return kernel_from_array(base_kernel, kernel_width, kernel_height)
+            else:
+                return create_gaussian_kernel(kernel_width, kernel_height, sigma=S / 2.0, scale=1, x_offset=0,
+                                              y_offset=0)
+
+        except Exception as e:
+            logger.error(f"Failed to set kernel: {e}")
+            raise

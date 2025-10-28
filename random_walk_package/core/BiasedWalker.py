@@ -1,16 +1,19 @@
+import typing
 import weakref
 
-from random_walk_package import matrix_free, tensor_free, biased_walk_init, biased_walk_backtrace
+import numpy.typing as npt
+
+from random_walk_package import matrix_free, tensor_free, biased_walk_init, biased_walk_backtrace, matrix_new
 from random_walk_package.bindings.correlated_walk import *
 from random_walk_package.bindings.plotter import plot_walk
 from random_walk_package.core.WalkerHelper import *
 
 
-class BrownianWalker:
+class BiasedWalker:
     def __init__(self, S: int = 3, W: int = 101, H: int = 101, T: int = 50,
                  kernel: Optional[Any] = None):
         """
-            Brownian Walker class.
+            Biased Walker class.
 
             Args:
                 S (int): Stepsize, meaning the distance that can be moved in the grid in one step.
@@ -23,7 +26,7 @@ class BrownianWalker:
         self.W = W
         self.H = H
         self.T = T
-        self.kernels = kernel
+        self.kernels = kernel if kernel is not None else matrix_new(2 * S + 1, 2 * S + 1)
         self.dp_matrix = None
         self.biases = None
         # State tracking
@@ -55,18 +58,30 @@ class BrownianWalker:
         """Check if walker is ready for the generation of a backtrace (walk array)."""
         return self.dp_matrix is not None and self.biases is not None
 
-    def generate(self, S=None, base_kernel=None, start_x=None, start_y=None):
+    from typing import Union, Sequence, Tuple
+
+    def generate(self, S=None, base_kernel: Optional[np.ndarray] = None,
+                 bias_offsets: Union[
+                     Sequence[Tuple[float, float]], Sequence[Sequence[float]], npt.NDArray[np.float64]] = None,
+                 rotations: typing.Union[Sequence[float], npt.NDArray[np.float64]] = None,
+                 start_x=None, start_y=None):
         if start_x is None or start_y is None:
             start_x, start_y = self.W // 2, self.H // 2
 
-        self.kernels = base_kernel
+        self.S = S if S is not None else self.S
+
+        if base_kernel is not None:
+            matrix_free(self.kernels)
+            self.kernels = WalkerHelper.set_custom_kernel(base_kernel, self.S)
+
         self._validate_parameters()
         # Clean up previous DP matrix
         if self.dp_matrix is not None:
             tensor_free(self.dp_matrix)
-        kernel_width = 2 * S + 1
+        kernel_width = 2 * self.S + 1
         try:
-            self.dp_matrix, self.biases = biased_walk_init(matrix_ptr=base_kernel, size=kernel_width, start_x=start_x,
+            self.dp_matrix, self.biases = biased_walk_init(matrix_ptr=self.kernels, W=self.W, H=self.H,
+                                                           offsets=bias_offsets, rotations=rotations, start_x=start_x,
                                                            start_y=start_y)
             self._is_initialized = True
             logger.info(f"Successfully generated walk, start=({start_x}, {start_y})")
@@ -80,12 +95,10 @@ class BrownianWalker:
             raise ValueError('Initialize walk first before calling backtrace. Call generate first.')
 
         # Validate end position
-        if not (0 <= end_x < self.W and 0 <= end_y < self.H):
-            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
-                             f"for grid {self.W}x{self.H}")
+        WalkerHelper.validate_point_location(end_x, end_y, self.W, self.H)
 
         try:
-            walk_np = biased_walk_backtrace(self.dp_matrix, self.biases, self.kernels, 2 * self.S + 1, end_x, end_y)
+            walk_np = biased_walk_backtrace(self.dp_matrix, self.biases, self.kernels, end_x, end_y)
             if walk_np is None:
                 raise RuntimeError("Backtrace returned null path")
 

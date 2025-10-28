@@ -2,9 +2,7 @@ import os
 import sys
 from ctypes import *
 
-import numpy as np
-
-from random_walk_package.bindings.data_structures.matrix import matrix_free, matrix_new
+from random_walk_package.bindings.data_structures.matrix import matrix_free
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array, get_walk_points
 from random_walk_package.bindings.data_structures.types import Tensor, Matrix, Point2DArray, Point2D
 from random_walk_package.wrapper import dll
@@ -54,6 +52,8 @@ class Biases(Structure):
                 ("data", DataUnion),
                 ("len", c_size_t)]
 
+
+BiasesPtr = POINTER(Biases)
 
 dll.biased_brownian_init.argtypes = [
     POINTER(Biases),  # biases
@@ -112,8 +112,30 @@ def brownian_backtrace_multiple(kernel, points, time, width, height):
     return walk_np
 
 
-def create_biases_offsets(points):
-    arr = np.asarray(points, dtype=np.float64)
+from typing import Union, Sequence, Tuple
+import numpy as np
+import numpy.typing as npt
+
+
+def create_biases_offsets(
+        points: Union[
+            Sequence[Tuple[float, float]],
+            Sequence[Sequence[float]],
+            npt.NDArray[np.int32]
+        ]
+) -> BiasesPtr:
+    """Create biases from 2D points.
+
+    Args:
+        points: Array-like of 2D points. Can be:
+            - List of tuples: [(x1, y1), (x2, y2), ...]
+            - List of lists: [[x1, y1], [x2, y2], ...]
+            - NumPy array: shape (N, 2)
+
+    Returns:
+        Biases Array from DLL
+    """
+    arr = np.asarray(points, dtype=np.int32)
     if arr.ndim != 2 or arr.shape[1] != 2:
         raise ValueError("points must be shape (N, 2)")
     pts = (Point2D * len(arr))(*[Point2D(x, y) for x, y in arr])
@@ -121,32 +143,41 @@ def create_biases_offsets(points):
     return biases
 
 
-def create_biases_rotation(rotations_deg):
+def create_biases_rotation(
+        rotations_deg: Union[Sequence[float], npt.NDArray[np.int32]]
+) -> BiasesPtr:
+    """Create biases from rotation angles in degrees.
+
+    Args:
+        rotations_deg: Array-like of rotation angles in degrees
+
+    Returns:
+        Biases Array from DLL
+    """
     arr = np.asarray(rotations_deg, dtype=np.float64)
     data = (c_double * len(arr))(*arr)
     biases = dll.create_biases_rotation(data, len(arr))
     return biases
 
 
-def biased_walk_init(matrix_ptr=None, size=None, start_x=None, start_y=None, offsets=None, rotations=None):
+def biased_walk_init(matrix_ptr=None, W=None, H=None, start_x=None, start_y=None, offsets=None, rotations=None):
     if offsets is None and rotations is None:
         raise ValueError("Either offsets or rotations must be provided.")
-    if offsets is not None and size is not None:
+    if offsets is not None and W is not None:
         biases = create_biases_offsets(offsets)
-        matrix_ptr = matrix_new(size, size)
+        tensor_ptr = dll.biased_brownian_init(biases, matrix_ptr, W, H, biases.contents.len, start_x, start_y)
     elif rotations is not None and matrix_ptr is not None:
         biases = create_biases_rotation(rotations)
+        tensor_ptr = dll.biased_brownian_init(biases, matrix_ptr, W, H, biases.contents.len, start_x, start_y)
     else:
         raise ValueError("Either base kernel and rotations or offsets must be provided.")
 
-    tensor_ptr = dll.biased_brownian_init(biases, matrix_ptr, size, size, biases.contents.len, start_x, start_y)
-    matrix_free(matrix_ptr)
     return tensor_ptr, biases
 
 
-def biased_walk_backtrace(tensor_ptr, biases, matrix_ptr, size, end_x, end_y):
+def biased_walk_backtrace(tensor_ptr, biases, matrix_ptr, end_x, end_y):
     if matrix_ptr is None:
-        matrix_ptr = matrix_new(size, size)
+        raise ValueError("Matrix is None.")
     walk = dll.biased_brownian_backtrace(tensor_ptr, biases, matrix_ptr, end_x, end_y)
     walk_np = get_walk_points(walk)
     dll.point2d_array_free(walk)

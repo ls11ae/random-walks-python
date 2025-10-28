@@ -2,13 +2,11 @@ import typing
 import typing
 import weakref
 
-from random_walk_package import tensor_free, matrix_free, create_gaussian_kernel, \
-    tensor4D_free
+from random_walk_package import tensor_free, tensor4D_free
 from random_walk_package.bindings import get_tensor_map_terrain, MEDIUM, terrain_map_free, kernels_map3d_free
 from random_walk_package.bindings.brownian_walk import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters, \
     kernel_mapping_free
-from random_walk_package.bindings.data_structures.kernels import kernel_from_array
 from random_walk_package.bindings.plotter import plot_walk, plot_walk_multistep
 from random_walk_package.core.WalkerHelper import *
 
@@ -112,30 +110,12 @@ class BrownianWalker:
             S: Step size (uses existing if None)
         """
         self.S = S if S is not None else self.S
-        kernel_width, kernel_height = kernel_np.shape if kernel_np is not None else (2 * self.S + 1, 2 * self.S + 1)
-
         # Clean up the existing kernel
         if self.kernels is not None:
             matrix_free(self.kernels)
             self.kernels = None
 
-        try:
-            if kernel_np is not None:
-                if kernel_width != 2 * self.S + 1 or kernel_height != 2 * self.S + 1:
-                    raise ValueError(
-                        "Custom kernel must have dimensions 2S+1x2S+1. Stepsize and passed Array are contradictory")
-                matrix_c = kernel_from_array(kernel_np, kernel_width, kernel_height)
-                self.kernels = matrix_c
-            else:
-                self.kernels = create_gaussian_kernel(
-                    kernel_width, kernel_height, sigma=sigma, scale=1, x_offset=0, y_offset=0
-                )
-
-            logger.info(f"Successfully set kernel with size {kernel_width}x{kernel_width}")
-
-        except Exception as e:
-            logger.error(f"Failed to set kernel: {e}")
-            raise
+        self.kernels = WalkerHelper.set_custom_kernel(kernel_np, self.S)
 
     def generate(self, start_x: Optional[int] = None, start_y: Optional[int] = None) -> None:
         """Generate walk using a simple kernel approach."""
@@ -150,9 +130,7 @@ class BrownianWalker:
         self._validate_parameters()
 
         # Validate start position
-        if not (0 <= start_x < self.W and 0 <= start_y < self.H):
-            raise ValueError(f"Start position ({start_x}, {start_y}) out of bounds "
-                             f"for grid {self.W}x{self.H}")
+        WalkerHelper.validate_point_location(start_x, start_y, self.W, self.H)
 
         # Clean up previous DP matrix
         if self.dp_matrix is not None:
@@ -184,9 +162,7 @@ class BrownianWalker:
             raise ValueError('Initialize walk first before calling backtrace. Call generate first.')
 
         # Validate end position
-        if not (0 <= end_x < self.W and 0 <= end_y < self.H):
-            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
-                             f"for grid {self.W}x{self.H}")
+        WalkerHelper.validate_point_location(end_x, end_y, self.W, self.H)
 
         try:
             walk_np = brownian_backtrace(self.dp_matrix, self.kernels, end_x, end_y)
