@@ -2,7 +2,7 @@ import typing
 import typing
 import weakref
 
-from random_walk_package import tensor_free, tensor4D_free
+from random_walk_package import tensor_free, tensor4D_free, matrix_free
 from random_walk_package.bindings import get_tensor_map_terrain, MEDIUM, terrain_map_free, kernels_map3d_free
 from random_walk_package.bindings.brownian_walk import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters, \
