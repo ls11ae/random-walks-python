@@ -39,7 +39,7 @@ class BiasedWalker:
 
     def _cleanup_resources(self) -> None:
         """Clean up all C resources."""
-        resources = ["kernels", "dp_matrix", "kernel_mapping", "tensor_map", "terrain"]
+        resources = ["kernels", "dp_matrix", "biases"]
         for resource in resources:
             if getattr(self, resource, None) is not None:
                 try:

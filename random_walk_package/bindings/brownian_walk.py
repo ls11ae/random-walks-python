@@ -2,7 +2,6 @@ import os
 import sys
 from ctypes import *
 
-from random_walk_package.bindings.data_structures.matrix import matrix_free
 from random_walk_package.bindings.data_structures.point2D import create_point2d_array, get_walk_points
 from random_walk_package.bindings.data_structures.types import Tensor, Matrix, Point2DArray, Point2D
 from random_walk_package.wrapper import dll
@@ -181,5 +180,4 @@ def biased_walk_backtrace(tensor_ptr, biases, matrix_ptr, end_x, end_y):
     walk = dll.biased_brownian_backtrace(tensor_ptr, biases, matrix_ptr, end_x, end_y)
     walk_np = get_walk_points(walk)
     dll.point2d_array_free(walk)
-    matrix_free(matrix_ptr)
     return walk_np
