@@ -14,7 +14,8 @@ authors = [
 ]
 requires-python = ">=3.9"
 dependencies = [
-    "numpy"
+    "numpy",
+    "rasterio"
 ]
 
 [project.optional-dependencies]
@@ -33,7 +34,8 @@ full = [
 
 [tool.scikit-build]
 cmake.version = ">=3.15"
-cmake.args = ["-DENABLE_CUDA=OFF"]
+cmake.args = ["-DENABLE_CUDA=OFF",
+              "-DBUILD_TESTING=OFF"]
 build.verbose = true
 build-dir = "build"
 
