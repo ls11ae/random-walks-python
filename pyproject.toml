@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core", "pybind11", "setuptools"]
+requires = ["scikit-build-core>=0.8", "setuptools", "pybind11"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -12,27 +12,30 @@ authors = [
     { name = "Alexander Korn" },
     { name = "Omar Chatila" }
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
-    "numpy",
+    "numpy"
+]
+
+[project.optional-dependencies]
+full = [
     "matplotlib",
     "PyQt6",
+    "rioxarray",
+    "xarray",
     "requests",
     "pandas",
     "pystac_client",
     "planetary_computer",
-    "rioxarray",
-    "xarray",
     "memory_profiler",
     "folium"
 ]
 
 [tool.scikit-build]
 cmake.version = ">=3.15"
-cmake.args = ["-DENABLE_CUDA=ON"]
+cmake.args = ["-DENABLE_CUDA=OFF"]
 build.verbose = true
 build-dir = "build"
-install.components = ["random_walk"]
 
 [tool.scikit-build.wheel]
 packages = ["random_walk_package"]
