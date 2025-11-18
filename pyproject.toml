@@ -15,11 +15,7 @@ authors = [
 requires-python = ">=3.9"
 dependencies = [
     "numpy",
-    "rasterio"
-]
-
-[project.optional-dependencies]
-full = [
+    "rasterio",
     "matplotlib",
     "PyQt6",
     "rioxarray",

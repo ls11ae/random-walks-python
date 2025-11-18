@@ -10,7 +10,6 @@ librandom_walk.so
 .vscode/*
 random_walk_package/build
 random_walk_python/build
-random-walks
 build/.ninja_deps
 build/.skbuild-info.json
 build/cmake_install.cmake
