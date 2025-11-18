@@ -1,5 +1,6 @@
 # Import other modules after dll is available
 from random_walk_package.bindings.brownian_walk import *
+from random_walk_package.core import *
 from random_walk_package.bindings.data_structures.point2D import point2d_arr_free, Point2DArrayPtr
 from .bindings.cuda.correlated_gpu import *
 from .bindings.data_processing.movebank_parser import *
