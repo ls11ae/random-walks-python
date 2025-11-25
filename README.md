@@ -11,9 +11,5 @@ pip install .
 ~~~
 
 ~~~bash
-cp build/lib/librandom_walk.so random_walk_package/
-~~~
-
-~~~bash
 python -m tests.test
 ~~~
