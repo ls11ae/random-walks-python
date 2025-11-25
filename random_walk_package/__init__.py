@@ -1,12 +1,83 @@
-# Import other modules after dll is available
-from random_walk_package.bindings.brownian_walk import *
-from random_walk_package.core import *
-from random_walk_package.bindings.data_structures.point2D import point2d_arr_free, Point2DArrayPtr
-from .bindings.cuda.correlated_gpu import *
+# random_walk_package/__init__.py
+
+# --------------------------------------------------
+# Data processing helpers
+# --------------------------------------------------
 from .bindings.data_processing.movebank_parser import *
 from .bindings.data_processing.walk_json import *
 from .bindings.data_processing.weather_parser import *
+# --------------------------------------------------
+# Kernel / terrain helpers
+# --------------------------------------------------
+from .bindings.data_structures.kernel_terrain_mapping import (
+    create_brownian_kernel_parameters,
+    create_correlated_kernel_parameters,
+    set_landmark_mapping,
+    set_forbidden_landmark,
+)
+# --------------------------------------------------
+# Matrix / tensor helpers
+# --------------------------------------------------
 from .bindings.data_structures.matrix import *
-from .bindings.data_structures.point2D import *
+# --------------------------------------------------
+# Point2D helpers
+# --------------------------------------------------
+from .bindings.data_structures.point2D import Point2DArrayPtr, point2d_arr_free
 from .bindings.data_structures.tensor import *
-from .wrapper import dll  # Import dll first
+from .core.BiasedWalker import BiasedWalker
+# --------------------------------------------------
+# Core walkers
+# --------------------------------------------------
+from .core.BrownianWalker import BrownianWalker
+from .core.MixedTimeWalker import MixedTimeWalker
+from .core.MixedWalker import MixedWalker
+# --------------------------------------------------
+# Load the shared library first
+# --------------------------------------------------
+from .wrapper import dll
+
+# --------------------------------------------------
+# Optional GPU helpers
+# --------------------------------------------------
+try:
+    from .bindings.cuda.correlated_gpu import *
+except ImportError:
+    # GPU code not available; continue without raising
+    pass
+
+# --------------------------------------------------
+# Re-export enums / constants for easier use
+# --------------------------------------------------
+from .bindings import MEDIUM, LIGHT, TREE_COVER, GRASSLAND, WATER, create_terrain_map
+
+# --------------------------------------------------
+# Define __all__ for clean public API
+# --------------------------------------------------
+__all__ = [
+    # DLL
+    "dll",
+
+    # Walkers
+    "BrownianWalker",
+    "BiasedWalker",
+    "MixedWalker",
+    "MixedTimeWalker",
+
+    # Kernel / terrain helpers
+    "create_terrain_map",
+    "create_brownian_kernel_parameters",
+    "create_correlated_kernel_parameters",
+    "set_landmark_mapping",
+    "set_forbidden_landmark",
+
+    # Point2D helpers
+    "Point2DArrayPtr",
+    "point2d_arr_free",
+
+    # Enums / constants
+    "MEDIUM",
+    "LIGHT",
+    "GRASSLAND",
+    "TREE_COVER",
+    "WATER",
+]
