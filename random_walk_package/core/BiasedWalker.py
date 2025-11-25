@@ -2,8 +2,9 @@ import typing
 import weakref
 
 import numpy.typing as npt
+from random_walk_package.bindings.brownian_walk import biased_walk_init, biased_walk_backtrace
 
-from random_walk_package import matrix_free, tensor_free, biased_walk_init, biased_walk_backtrace, matrix_new
+from random_walk_package import matrix_free, tensor_free, matrix_new
 from random_walk_package.bindings.correlated_walk import *
 from random_walk_package.bindings.plotter import plot_walk
 from random_walk_package.core.WalkerHelper import *

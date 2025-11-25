@@ -1,4 +1,8 @@
 # random_walk_package/__init__.py
+# --------------------------------------------------
+# Load the shared library first
+# --------------------------------------------------
+from .wrapper import dll
 
 # --------------------------------------------------
 # Data processing helpers
@@ -24,17 +28,6 @@ from .bindings.data_structures.matrix import *
 # --------------------------------------------------
 from .bindings.data_structures.point2D import Point2DArrayPtr, point2d_arr_free
 from .bindings.data_structures.tensor import *
-from .core.BiasedWalker import BiasedWalker
-# --------------------------------------------------
-# Core walkers
-# --------------------------------------------------
-from .core.BrownianWalker import BrownianWalker
-from .core.MixedTimeWalker import MixedTimeWalker
-from .core.MixedWalker import MixedWalker
-# --------------------------------------------------
-# Load the shared library first
-# --------------------------------------------------
-from .wrapper import dll
 
 # --------------------------------------------------
 # Optional GPU helpers
@@ -51,17 +44,19 @@ except ImportError:
 from .bindings import MEDIUM, LIGHT, TREE_COVER, GRASSLAND, WATER, create_terrain_map
 
 # --------------------------------------------------
+# Core walkers
+# --------------------------------------------------
+from .core.BrownianWalker import BrownianWalker
+from .core.MixedTimeWalker import MixedTimeWalker
+from .core.MixedWalker import MixedWalker
+from .core.BiasedWalker import BiasedWalker
+
+# --------------------------------------------------
 # Define __all__ for clean public API
 # --------------------------------------------------
 __all__ = [
     # DLL
     "dll",
-
-    # Walkers
-    "BrownianWalker",
-    "BiasedWalker",
-    "MixedWalker",
-    "MixedTimeWalker",
 
     # Kernel / terrain helpers
     "create_terrain_map",
@@ -80,4 +75,10 @@ __all__ = [
     "GRASSLAND",
     "TREE_COVER",
     "WATER",
+
+    # Walkers
+    "BrownianWalker",
+    "BiasedWalker",
+    "MixedWalker",
+    "MixedTimeWalker",
 ]
