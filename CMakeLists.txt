@@ -7,5 +7,5 @@ add_subdirectory(random-walks)
 
 install(
     TARGETS random_walk
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${SKBUILD_PLATLIB_DIR}/random_walk_package
 )

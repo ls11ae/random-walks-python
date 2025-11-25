@@ -10,7 +10,7 @@ _base_dir = Path(__file__).resolve().parent
 _lib_dir = _base_dir.parent.parent
 
 # Build the full path to the shared library
-_so_path = Path(__file__).parent / "../build/lib/librandom_walk.so"
+_so_path = Path(__file__).resolve().parent / "librandom_walk.so"
 
 # Load the shared library
 dll = ctypes.CDLL(str(_so_path))
