@@ -94,7 +94,6 @@ def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_st
             "start_date": start_date_str,
             "end_date": end_date_str,
             "daily": "weather_code,temperature_2m_mean,relative_humidity_2m_mean,precipitation_sum,snowfall_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean",
-            # Fixed: consistent variable names
             "timezone": "UTC"
         }
 
@@ -204,17 +203,13 @@ class AnimalMovementProcessor:
             self.data_file = data_file
 
         self.df = None
-        self.bbox: dict[str, tuple[float, float, float, float]] = {}
-        self.bbox_utm: dict[str, tuple[float, float, float, float]] = {}
-        self.aid_espg_map: dict[str, str] = {}
-        self.discrete_params = None
-        self.center_lat = None
-        self.center_lon = None
-        self.timeline = None
+        self.bbox: dict[str, tuple[float, float, float, float]] = {}       # geo bbox per animal_id
+        self.bbox_utm: dict[str, tuple[float, float, float, float]] = {}   # utm bbox per animal_id
+        self.aid_espg_map: dict[str, str] = {}                             # EPSG code per animal_id
+        self.discrete_params = None                                        # grid parameters (0,0,width, height) per animal_id
         self.grid_coords = None
         self.geo_coords = None
         self._weather_data = None  # For trajectory weather
-        # self._gridded_weather_data = None # Optionally store gridded weather if needed
 
         # Initialize common resources
         self._load_data()
@@ -336,7 +331,7 @@ class AnimalMovementProcessor:
         if self.df is None:
             self._load_data()
 
-        utm_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
+        grid_coords_per_animal: dict[str, list[tuple[int, int]]] = {}
         geo_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
         time_stamps: dict[str, str] = {}
         animal_ids = get_unique_animal_ids(self.df)
@@ -368,14 +363,14 @@ class AnimalMovementProcessor:
                 bbox_utm=bbox_utm,
                 time_stamped=time_stamped
             )
-            utm_coords_by_animal[str(aid)] = coords_data
+            grid_coords_per_animal[str(aid)] = coords_data
             geo_coords_by_animal[str(aid)] = geo_coords
             if time_stamped:
                 time_stamps[str(aid)] = times
 
-        self.grid_coords = utm_coords_by_animal
+        self.grid_coords = grid_coords_per_animal
         self.geo_coords = geo_coords_by_animal
-        return utm_coords_by_animal, geo_coords_by_animal, time_stamps
+        return grid_coords_per_animal, geo_coords_by_animal, time_stamps
 
     def grid_coordinates_to_geodetic(self, coord: list[tuple[int, int]], animal_id: str) -> list[tuple[float, float]]:
         """

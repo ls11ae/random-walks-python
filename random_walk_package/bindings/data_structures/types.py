@@ -182,7 +182,7 @@ class KernelParameters(Structure):
                 ("bias_y", c_ssize_t)]
 
 
-class KernelParametersTerrainWeather(Structure):
+class KernelParamsYXT(Structure):
     _fields_ = [
         ("width", c_size_t),
         ("height", c_size_t),
@@ -192,7 +192,7 @@ class KernelParametersTerrainWeather(Structure):
     ]
 
 
-KernelParametersTerrainWeatherPtr = POINTER(KernelParametersTerrainWeather)
+KernelParamsXYTPtr = POINTER(KernelParamsYXT)
 
 
 class KernelParametersMapping(Structure):
