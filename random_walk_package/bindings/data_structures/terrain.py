@@ -191,10 +191,6 @@ def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
     return terrain_ptr.contents
 
 
-def terrain_at(terrain, x, y):
-    return dll.terrain_at(x, y, terrain)
-
-
 def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat,
                               txt_output_path="terrain_movebank.txt") -> TerrainMapPtr | None:  # type: ignore
     try:

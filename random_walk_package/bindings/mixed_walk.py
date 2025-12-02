@@ -63,7 +63,7 @@ dll.time_walk_geo_compact.argtypes = [
 ]
 dll.time_walk_geo_compact.restype = Point2DArrayPtr
 
-dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TimedLocation, TimedLocation]
+dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainMapPtr, TimedLocation, TimedLocation]
 dll.time_walk_custom.restype = Point2DArrayPtr
 
 

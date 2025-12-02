@@ -1,8 +1,9 @@
 import datetime
 
+import pandas as pd
 from pandas import DataFrame
 from pyproj import Transformer
-from random_walk_package.bindings import terrain_at
+
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 
@@ -19,16 +20,20 @@ def create_kernel_parameters(is_brownian: bool, step_size: int, directions: int,
                              max_bias_y: int) -> KernelParametersPtr:
     return dll.kernel_parameters_create(is_brownian, step_size, directions, diffusity, max_bias_y, max_bias_x)
 
+
 def compute_kernel(landmark, row):
-    x, y, t, is_brownian, S, D, diffusity, bias_x, bias_y = 0,1,2,3,4,5,6,7,8
+    x, y, t, is_brownian, S, D, diffusity, bias_x, bias_y = 0, 1, 2, 3, 4, 5, 6, 7, 8
     return x, y, t, is_brownian, S, D, diffusity, bias_x, bias_y
 
-def df_add_properties(df: DataFrame, terrain: TerrainMapPtr, bbox_geo, grid_width,
+
+def df_add_properties(df: DataFrame,
+                      kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
+                      terrain: TerrainMapPtr, bbox_geo, grid_width,
                       grid_height, utm_code, start_date: datetime, end_date: datetime,
-                      time_stamp = 'timestamp',
-                      lon = 'location-long',
-                      lat = 'location-lat',
-                      T = None):
+                      time_stamp='timestamp',
+                      lon='location-long',
+                      lat='location-lat',
+                      T=None):
     """
     Add random walk relevant properties to a DataFrame within a specific geographic bounding box.
 
@@ -40,6 +45,7 @@ def df_add_properties(df: DataFrame, terrain: TerrainMapPtr, bbox_geo, grid_widt
 
     Parameters:
         df (DataFrame): Input DataFrame containing geospatial and temporal data.
+        kernel_resolver: Function that takes a terrain type and a row of the DataFrame as input and returns a KernelParametersPtr.
         terrain (TerrainMapPtr): Reference to the terrain object for retrieving terrain
             information.
         bbox_geo: Geographic bounding box coordinates as (min_lon, min_lat, max_lon, max_lat).
@@ -67,12 +73,13 @@ def df_add_properties(df: DataFrame, terrain: TerrainMapPtr, bbox_geo, grid_widt
         are dropped. The function also performs filtering based on the provided geographic
         bounding box to exclude data outside the defined bounds.
     """
-    clean_df = df[[time_stamp, lon, lat]].dropna()
+    clean_df = df.dropna()
     min_lon, min_lat, max_lon, max_lat = bbox_geo
 
     # filter by bounding box
-    clean_df = clean_df[(clean_df.lon >= min_lon) & (clean_df.lon <= max_lon) &
-                        (clean_df.lat >= min_lat) & (clean_df.lat <= max_lat)]
+    clean_df = clean_df[
+        (clean_df[lon] >= min_lon) & (clean_df[lon] <= max_lon) &
+        (clean_df[lat] >= min_lat) & (clean_df[lat] <= max_lat)]
 
     transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{utm_code}", always_xy=True)
 
@@ -92,25 +99,34 @@ def df_add_properties(df: DataFrame, terrain: TerrainMapPtr, bbox_geo, grid_widt
 
     def utm_to_grid(pt):
         x_utm, y_utm = pt
+
+        if pd.isna(x_utm) or pd.isna(y_utm):
+            return 0, 0
+
+        if max_x == min_x or max_y == min_y:
+            return 0, 0
+
         gx = int((x_utm - min_x) / (max_x - min_x) * grid_width)
         gy = int((max_y - y_utm) / (max_y - min_y) * grid_height)
+
         return (
             max(0, min(grid_width - 1, gx)),
             max(0, min(grid_height - 1, gy)),
         )
+
     # utm -> grid
     grid_coords = utm_xy.apply(utm_to_grid)
     # add grid coordinates to df
     clean_df['x'] = [pt[0] for pt in grid_coords]
     clean_df['y'] = [pt[1] for pt in grid_coords]
 
-
     # add landcover info
     clean_df['terrain'] = [terrain_at(terrain, x, y) for x, y in grid_coords]
 
     # your custom geo data to kernel parameters conversion
     clean_df[['is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']] = clean_df.apply(
-            lambda row: compute_kernel(row['terrain'], row),
-            axis=1, result_type='expand')
+        lambda row: kernel_resolver(row['terrain'], row),
+        axis=1, result_type='expand')
+    clean_df = clean_df[['t', 'x', 'y', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]
 
     return clean_df
