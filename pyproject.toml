@@ -49,6 +49,13 @@ addopts = "-ra -q"
 testpaths = [
     "tests"
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+
 pythonpath = [
     ".", "random_walk_package"
 ]

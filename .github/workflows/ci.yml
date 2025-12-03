@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.9", "3.10", "3.11", "3.12" ] # Test multiple versions[citation:2]
+        python-version: [ "3.9", "3.10", "3.11", "3.12" ]
     env:
       SKBUILD_CUDA_ENABLED: "OFF"
 
@@ -26,8 +26,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel build[citation:2]
-          pip install -e .[test] # Install your package and optional test deps
+          python -m pip install --upgrade pip setuptools wheel build
+          pip install -e .
 
       - name: Copy built .so file (Development Fix)
         run: |
