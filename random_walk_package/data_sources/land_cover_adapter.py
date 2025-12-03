@@ -1,6 +1,9 @@
 import os
 
+import numpy as np
 import rasterio
+from rasterio.enums import Resampling
+from rasterio.warp import reproject
 
 from random_walk_package.data_sources.geo_fetcher import lonlat_bbox_to_utm, utm_bbox_to_lonlat
 
@@ -104,3 +107,49 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon
             return crs_epsg, (min_x, min_y, max_x, max_y)
     except rasterio.RasterioIOError as e:
         print(f"Error opening the file: {e}")
+
+
+def load_landcover_raster(tiff_path):
+    with rasterio.open(tiff_path) as src:
+        landcover_data = src.read(1)
+        landcover_meta = src.meta
+        crs_epsg = src.crs.to_epsg()
+
+    return landcover_data, landcover_meta, crs_epsg
+
+
+def create_regular_grid(bbox, Nx=100, Ny=100):
+    min_lon, min_lat, max_lon, max_lat = bbox
+
+    lons = np.linspace(min_lon, max_lon, Nx)
+    lats = np.linspace(max_lat, min_lat, Ny)  # top→bottom
+
+    grid_lon, grid_lat = np.meshgrid(lons, lats)
+    return grid_lon, grid_lat
+
+
+from rasterio.transform import from_bounds
+
+
+def resample_landcover_to_grid(landcover_data, landcover_meta, crs_espg, grid_lon, grid_lat):
+    Nx, Ny = grid_lon.shape[1], grid_lat.shape[0]
+
+    dst = np.zeros((Ny, Nx), dtype=np.int16)
+
+    transform = from_bounds(
+        grid_lon.min(), grid_lat.min(),
+        grid_lon.max(), grid_lat.max(),
+        Nx, Ny
+    )
+
+    reproject(
+        source=landcover_data,
+        destination=dst,
+        src_transform=landcover_meta["transform"],
+        src_crs=landcover_meta["crs"],
+        dst_transform=transform,
+        dst_crs=crs_espg,
+        resampling=Resampling.nearest
+    )
+
+    return dst

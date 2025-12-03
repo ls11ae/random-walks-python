@@ -25,13 +25,18 @@ dependencies = [
     "pystac_client",
     "planetary_computer",
     "memory_profiler",
-    "folium"
+    "folium",
+    "cdsapi",
+    "netcdf4",
+    "h5netcdf",
+    "scipy",
+    "cfgrib"
 ]
 
 [tool.scikit-build]
 cmake.version = ">=3.15"
 cmake.args = ["-DENABLE_CUDA=OFF",
-              "-DBUILD_TESTING=OFF"]
+    "-DBUILD_TESTING=OFF"]
 build.verbose = true
 build-dir = "build"
 
