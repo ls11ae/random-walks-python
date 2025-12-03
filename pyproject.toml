@@ -26,7 +26,8 @@ dependencies = [
     "planetary_computer",
     "memory_profiler",
     "folium",
-    "IPython"
+    "pytest",
+    "pytest-cov",
 ]
 
 [tool.scikit-build]
@@ -51,12 +52,6 @@ testpaths = [
 ]
 pythonpath = [
     ".", "random_walk_package"
-]
-
-[project.optional-dependencies]
-test = [
-    "pytest",
-    "pytest-cov",
 ]
 
 
