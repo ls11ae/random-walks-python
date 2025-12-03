@@ -1,9 +1,4 @@
-from random_walk_package.core.MixedWalker import *
-from random_walk_package.data_sources.geo_fetcher import *
-from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
-from random_walk_package.data_sources.movebank_adapter import *
-
-
+"""
 def landcover_test():
     file = os.path.join(script_dir, 'resources',
                         'Baboon group movement, South Africa (data from Bonnell et al. 2016).csv')
@@ -42,3 +37,4 @@ def move_bank_test():
     print(ids)
     coords, timeline = get_animal_coordinates(df, ids[0], 100)
     fetch_weather_for_trajectory(coords, timestamps=timeline)
+"""

@@ -36,9 +36,8 @@ def tensor_new(width, height, depth):
 
 
 def tensor_free(tensor_ptr: TensorPtr):
-    if tensor_ptr is None:
-        return
-    dll.tensor_free(tensor_ptr)
+    if tensor_ptr is not None:
+        dll.tensor_free(tensor_ptr)
 
 
 def tensor4D_free(tensor_ptrs: POINTER(TensorPtr), length: int):

@@ -1,0 +1,40 @@
+name: CI Build and Test
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.9", "3.10", "3.11", "3.12" ] # Test multiple versions[citation:2]
+    env:
+      SKBUILD_CUDA_ENABLED: "OFF"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel build[citation:2]
+          pip install -e .[test] # Install your package and optional test deps
+
+      - name: Copy built .so file (Development Fix)
+        run: |
+          # Find the built .so file and copy it to your package directory
+          find ./build -name "*.so" -exec cp {} ./random_walk_package/ \;
+          echo "Copied shared library to package directory."
+
+      - name: Run tests with pytest
+        run: |
+          python -m pytest tests/ -v

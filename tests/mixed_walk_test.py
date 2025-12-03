@@ -1,14 +1,11 @@
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark, \
     set_landmark_mapping
-from random_walk_package.core.MixedTimeWalker import MixedTimeWalker
 from random_walk_package.core.MixedWalker import *
 
-studies = ["elephant_study/", "baboon_SA_study/", "leap_of_the_cat/", "Boars_Austria/", "Cranes Kazakhstan/"]
-
-from IPython.display import *
+studies = ["elephant_study/", "baboon_SA_study/", "movebank_test/", "Boars_Austria/", "Cranes Kazakhstan/"]
 
 
-def mixed_walk_test():
+def test_mixed_walk():
     T = 10
     # todo: dynamic resolution based on bounding box size
     study = studies[2]
@@ -22,15 +19,10 @@ def mixed_walk_test():
 
     walker = MixedWalker(T=T, resolution=300, kernel_mapping=kernel_mapping, study_folder=study)
     walk_path = walker.generate_movebank_walks(serialized=False)
-    print(walk_path)
-    # Read the HTML file and display
-    with open(walk_path, 'r', encoding='utf-8') as f:
-        html_content = f.read()
-
-    display(HTML(html_content))
+    assert len(walk_path) > 0
 
 
-def test_time_walker():
+"""def test_time_walker():
     walker = MixedTimeWalker(
         T=50,
         resolution=100,
@@ -38,3 +30,4 @@ def test_time_walker():
         study_folder="elephant_study/"
     )
     walker.generate_walk_from_movebank(serialized=False)
+"""

@@ -4,6 +4,7 @@ from datetime import datetime
 import pandas
 
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
+from tests.brownian_test import test_brownian_complex_terrain
 
 
 def weather_terrain_params(landmark, row):
@@ -18,6 +19,7 @@ def weather_terrain_params(landmark, row):
 
 
 if __name__ == "__main__":
+    test_brownian_complex_terrain()
     # path to the study containing the animal movement data
     csv_path = 'leap_of_the_cat/The Leap of the Cat.csv'
     processor = AnimalMovementProcessor(csv_path)
