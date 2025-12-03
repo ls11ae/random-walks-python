@@ -178,7 +178,7 @@ def compare_with_reference_speeds(velocities, mean_velocity):
             print(f"Mean velocity is within routine cruising range")
             status_mean = "REALISTIC"
         else:
-            print(f"  ⚠ Mean velocity is HIGHER than typical cruising (check for outliers)")
+            print(f"Mean velocity is HIGHER than typical cruising (check for outliers)")
             status_mean = "TOO HIGH"
     
         # Check for unrealistic outliers
@@ -186,9 +186,9 @@ def compare_with_reference_speeds(velocities, mean_velocity):
         outliers_low = np.sum(velocities < 0.1)   # < 0.36 km/h is very slow
         
         if outliers_high > 0:
-            print(f"  ⚠ Found {outliers_high} measurements > 5 m/s (18 km/h) - may be unrealistic")
+            print(f"Found {outliers_high} measurements > 5 m/s (18 km/h) - may be unrealistic")
         if outliers_low > 0:
-            print(f"  ⚠ Found {outliers_low} measurements < 0.1 m/s (0.36 km/h) - near stationary")
+            print(f"Found {outliers_low} measurements < 0.1 m/s (0.36 km/h) - near stationary")
         
         return {
             'mean_velocity_ms': mean_velocity,
@@ -208,7 +208,8 @@ def diffusivity(step_lengths, time_diffs):
     diffusivity = mean_squared_displacement / (4 * mean_time_step)
     return diffusivity
 
-
+#bla blka bla 
 data_path = "/home/poiosh/movement_py/shark_13_with_currents.csv"
 data, bbox = shark_data_filter(data_path)
 fetch_landcover_data(bbox)
+
