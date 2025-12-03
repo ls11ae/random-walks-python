@@ -42,7 +42,7 @@ dll.mixed_walk_time_compact.argtypes = [
     TerrainMapPtr,  # terrain
     DirKernelsMapPtr,
     KernelParametersMappingPtr,  # mapping
-    KernelParametersTerrainWeatherPtr,  # terrain and weather parameters
+    KernelParamsXYTPtr,  # terrain and weather parameters
     c_ssize_t,  # T
     c_ssize_t,  # start:x
     c_ssize_t,  # start:y
@@ -62,6 +62,9 @@ dll.time_walk_geo_compact.argtypes = [
     c_bool  # full weather influence
 ]
 dll.time_walk_geo_compact.restype = Point2DArrayPtr
+
+dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainMapPtr, TimedLocation, TimedLocation]
+dll.time_walk_custom.restype = Point2DArrayPtr
 
 
 def time_walk_geo(T, csv_path, terrain_path, grid_x, grid_y, start, goal, mapping=None, full_weather_influence=False):

@@ -8,7 +8,7 @@ from random_walk_package.data_sources.walk_visualization import walk_to_osm
 
 
 class MixedTimeWalker:
-    def __init__(self, resolution=200, T=30, grid_points_per_edge=5, duration_in_days=7, mapping=None,
+    def __init__(self, resolution=200, T=30, grid_points_per_edge=2, duration_in_days=7, mapping=None,
                  study_folder=None):
         self.T = T
         self.resolution = resolution

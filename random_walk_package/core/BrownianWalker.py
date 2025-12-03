@@ -30,8 +30,8 @@ class BrownianWalker:
                 k_mapping: Optional Kernel-parameters-mapping, which defines the kernel parameters for each terrain class.
         """
         self.S = S
-        self.W = W
-        self.H = H
+        self.W = W if terrain is None else terrain.contents.width
+        self.H = H if terrain is None else terrain.contents.height
         self.T = T
         self.kernels = kernel
         self.terrain = terrain
@@ -288,7 +288,6 @@ class BrownianWalker:
             self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
 
         try:
-            # Use WalkerHelper for the core backtrace logic
             walk_np = WalkerHelper.backtrace_single_segment(
                 self.dp_matrix, self.T, self.tensor_map, self.terrain,
                 end_x, end_y, self.kernel_mapping, False

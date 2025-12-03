@@ -25,15 +25,33 @@ dependencies = [
     "pystac_client",
     "planetary_computer",
     "memory_profiler",
-    "folium"
+    "folium",
+    "pytest",
+    "pytest-cov",
 ]
 
 [tool.scikit-build]
 cmake.version = ">=3.15"
 cmake.args = ["-DENABLE_CUDA=OFF",
-              "-DBUILD_TESTING=OFF"]
+    "-DBUILD_TESTING=OFF"]
 build.verbose = true
 build-dir = "build"
 
 [tool.scikit-build.wheel]
 packages = ["random_walk_package"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["random_walk_package*"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests"
+]
+pythonpath = [
+    ".", "random_walk_package"
+]
+
+

@@ -1,5 +1,7 @@
 from ctypes import *
 
+from random_walk_package import dll
+
 
 class Pair(Structure):
     _fields_ = [("first", c_double),
@@ -85,6 +87,8 @@ class TerrainMap(Structure):
         ("height", c_ssize_t)
     ]
 
+def terrain_at(terrain, x, y):
+    return dll.terrain_at(x, y, terrain)
 
 class CacheEntry(Structure):
     pass  # forward declaration
@@ -182,7 +186,7 @@ class KernelParameters(Structure):
                 ("bias_y", c_ssize_t)]
 
 
-class KernelParametersTerrainWeather(Structure):
+class KernelParamsYXT(Structure):
     _fields_ = [
         ("width", c_size_t),
         ("height", c_size_t),
@@ -192,7 +196,7 @@ class KernelParametersTerrainWeather(Structure):
     ]
 
 
-KernelParametersTerrainWeatherPtr = POINTER(KernelParametersTerrainWeather)
+KernelParamsXYTPtr = POINTER(KernelParamsYXT)
 
 
 class KernelParametersMapping(Structure):

@@ -1,9 +1,12 @@
-import os
+import datetime
 import os
 import time
 
 import numpy as np
+from pandas.core.interchange.dataframe_protocol import DataFrame
 
+from random_walk_package.bindings import parse_terrain
+from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties
 # Assuming these imports are correctly resolved from your project structure
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
@@ -94,7 +97,6 @@ def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_st
             "start_date": start_date_str,
             "end_date": end_date_str,
             "daily": "weather_code,temperature_2m_mean,relative_humidity_2m_mean,precipitation_sum,snowfall_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean",
-            # Fixed: consistent variable names
             "timezone": "UTC"
         }
 
@@ -204,17 +206,15 @@ class AnimalMovementProcessor:
             self.data_file = data_file
 
         self.df = None
-        self.bbox: dict[str, tuple[float, float, float, float]] = {}
-        self.bbox_utm: dict[str, tuple[float, float, float, float]] = {}
-        self.aid_espg_map: dict[str, str] = {}
-        self.discrete_params = None
-        self.center_lat = None
-        self.center_lon = None
-        self.timeline = None
+        self.bbox: dict[str, tuple[float, float, float, float]] = {}  # geo bbox per animal_id
+        self.bbox_utm: dict[str, tuple[float, float, float, float]] = {}  # utm bbox per animal_id
+        self.aid_espg_map: dict[str, str] = {}  # EPSG code per animal_id
+        self.terrain_paths: dict[str, str] = {}  # terrain txt path per animal_id
+        self.discrete_params: dict[
+            str, tuple[int, int, int, int]] = None  # grid parameters (0,0,width, height) per animal_id
         self.grid_coords = None
         self.geo_coords = None
         self._weather_data = None  # For trajectory weather
-        # self._gridded_weather_data = None # Optionally store gridded weather if needed
 
         # Initialize common resources
         self._load_data()
@@ -303,7 +303,7 @@ class AnimalMovementProcessor:
             self.bbox_utm[str(animal_id)] = bbox_utm
             print(f"Wrote landcover TXT: {txt_path}")
             results[str(animal_id)] = txt_path
-
+        self.terrain_paths = results
         return results
 
     def create_weather_tuples(self) -> list[tuple]:
@@ -336,7 +336,7 @@ class AnimalMovementProcessor:
         if self.df is None:
             self._load_data()
 
-        utm_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
+        grid_coords_per_animal: dict[str, list[tuple[int, int]]] = {}
         geo_coords_by_animal: dict[str, list[tuple[int, int]]] = {}
         time_stamps: dict[str, str] = {}
         animal_ids = get_unique_animal_ids(self.df)
@@ -368,14 +368,14 @@ class AnimalMovementProcessor:
                 bbox_utm=bbox_utm,
                 time_stamped=time_stamped
             )
-            utm_coords_by_animal[str(aid)] = coords_data
+            grid_coords_per_animal[str(aid)] = coords_data
             geo_coords_by_animal[str(aid)] = geo_coords
             if time_stamped:
                 time_stamps[str(aid)] = times
 
-        self.grid_coords = utm_coords_by_animal
+        self.grid_coords = grid_coords_per_animal
         self.geo_coords = geo_coords_by_animal
-        return utm_coords_by_animal, geo_coords_by_animal, time_stamps
+        return grid_coords_per_animal, geo_coords_by_animal, time_stamps
 
     def grid_coordinates_to_geodetic(self, coord: list[tuple[int, int]], animal_id: str) -> list[tuple[float, float]]:
         """
@@ -531,3 +531,51 @@ class AnimalMovementProcessor:
 
         print(f"Gridded weather data stored under: {base_output_dir}")
         return results_map
+
+    def create_kernel_parameter_data_per_animal(
+            self,
+            df: DataFrame,
+            kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
+            start_date: datetime,
+            end_date: datetime,
+            T: int | None = None,
+            time_stamp='timestamp',
+            lon='location-long',
+            lat='location-lat'
+    ):
+        out_dir = os.path.join(self.resources_dir, 'kernel_data')
+        os.makedirs(out_dir, exist_ok=True)
+
+        animal_ids = get_unique_animal_ids(self.df)
+        results = {}
+
+        for aid in animal_ids:
+            bbox = self.bbox[aid]
+            dp = self.discrete_params[aid]
+            width, height = dp[2], dp[3] if dp else None
+            terrain_pth = self.terrain_paths.get(aid)
+            terrain_map = parse_terrain(file=terrain_pth, delim=' ')
+            df_proc = df_add_properties(
+                df=df,
+                kernel_resolver=kernel_resolver,
+                terrain=terrain_map,
+                bbox_geo=bbox,
+                grid_width=width,
+                grid_height=height,
+                utm_code=self.aid_espg_map[str(aid)],
+                start_date=start_date,
+                end_date=end_date,
+                time_stamp=time_stamp,
+                lon=lon,
+                lat=lat,
+                T=T
+            )
+
+            # Save CSV
+            out_path = os.path.join(out_dir, f"{aid}_kernel_data.csv")
+            df_proc.to_csv(out_path, index=False)
+            results[str(aid)] = out_path
+
+            print(f"KernelData Saved: {out_path}")
+
+        return results

@@ -1,7 +1,7 @@
 from random_walk_package.core.BiasedWalker import BiasedWalker
 
 
-def biased_test():
+def test_biased():
     T = 150
     size = 400
     bias_offsets1 = [(9, 0)] * (T // 3)
@@ -12,5 +12,7 @@ def biased_test():
     walker = BiasedWalker(S=7, W=size, H=size, T=T)
     walker.generate(bias_offsets=biases, start_x=200, start_y=50)
     walk = walker.backtrace(end_x=200, end_y=280)
-    """plot_walk(walk, size, size,
-              title=f"Biased Walk with bias offsets: {bias_offsets1[0], bias_offsets2[0], bias_offsets3[0]}")"""
+
+    assert len(walk) == T
+    assert tuple(walk[0]) == (200, 50)
+    assert tuple(walk[-1]) == (200, 280)
