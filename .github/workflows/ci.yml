@@ -16,13 +16,22 @@ jobs:
       SKBUILD_CUDA_ENABLED: "OFF"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+
+      - name: Initialize and update submodules (if needed)
+        run: |
+          git submodule update --init --recursive
+          echo "Submodules initialized"
 
       - name: Install dependencies
         run: |
