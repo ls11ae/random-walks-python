@@ -20,7 +20,6 @@ def shark_data_filter(data_path):
     bbox = lonlat_bbox_to_utm(min_long, min_lat, max_long, max_lat, "4326")
    
     return data, bbox
-
 class MarineMovement:
     def __init__(self, age_class="adult"):
         self.age_class = age_class.lower()
