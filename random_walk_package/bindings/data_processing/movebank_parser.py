@@ -32,8 +32,7 @@ def df_add_properties(df: DataFrame,
                       grid_height, utm_code, start_date: datetime, end_date: datetime,
                       time_stamp='timestamp',
                       lon='location-long',
-                      lat='location-lat',
-                      T=None):
+                      lat='location-lat'):
     """
     Add random walk relevant properties to a DataFrame within a specific geographic bounding box.
 
@@ -74,6 +73,11 @@ def df_add_properties(df: DataFrame,
         bounding box to exclude data outside the defined bounds.
     """
     clean_df = df.dropna()
+
+    # filter by time
+    clean_df[time_stamp] = pd.to_datetime(clean_df[time_stamp], errors='coerce')
+    clean_df = clean_df[(clean_df[time_stamp] >= start_date) & (clean_df[time_stamp] <= end_date)]
+
     min_lon, min_lat, max_lon, max_lat = bbox_geo
 
     # filter by bounding box
@@ -82,15 +86,6 @@ def df_add_properties(df: DataFrame,
         (clean_df[lat] >= min_lat) & (clean_df[lat] <= max_lat)]
 
     transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{utm_code}", always_xy=True)
-
-    # optional sampling
-    if T is not None and T > 0:
-        step = max(1, len(clean_df) // T)
-        clean_df = clean_df.iloc[::step].head(T)
-        clean_df['t'] = [t for t in range(T)]
-    else:
-        clean_df = clean_df.sort_values(time_stamp)
-        clean_df['t'] = clean_df.index
 
     # transform all coordinates to UTM
     utm_xy = clean_df.apply(lambda row: transformer.transform(row[lon], row[lat]), axis=1)
@@ -127,6 +122,6 @@ def df_add_properties(df: DataFrame,
     clean_df[['is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']] = clean_df.apply(
         lambda row: kernel_resolver(row['terrain'], row),
         axis=1, result_type='expand')
-    clean_df = clean_df[['t', 'x', 'y', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]
+    clean_df = clean_df[[time_stamp, 'x', 'y', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]
 
     return clean_df

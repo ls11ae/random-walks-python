@@ -538,7 +538,6 @@ class AnimalMovementProcessor:
             kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
             start_date: datetime,
             end_date: datetime,
-            T: int | None = None,
             time_stamp='timestamp',
             lon='location-long',
             lat='location-lat'
@@ -550,9 +549,10 @@ class AnimalMovementProcessor:
         results = {}
 
         for aid in animal_ids:
+            if aid != 'CAMILA':
+                continue
             bbox = self.bbox[aid]
-            dp = self.discrete_params[aid]
-            width, height = dp[2], dp[3] if dp else None
+            _, _, width, height = self.discrete_params.get(aid)
             terrain_pth = self.terrain_paths.get(aid)
             terrain_map = parse_terrain(file=terrain_pth, delim=' ')
             df_proc = df_add_properties(
@@ -568,7 +568,6 @@ class AnimalMovementProcessor:
                 time_stamp=time_stamp,
                 lon=lon,
                 lat=lat,
-                T=T
             )
 
             # Save CSV
