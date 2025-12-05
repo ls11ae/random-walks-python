@@ -47,6 +47,7 @@ include = ["random_walk_package*"]
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q"
+log_cli = true
 testpaths = [
     "tests"
 ]

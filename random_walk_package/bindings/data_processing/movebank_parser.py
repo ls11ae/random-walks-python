@@ -31,6 +31,7 @@ def df_add_properties(df: DataFrame,
                       terrain: TerrainMapPtr, bbox_geo, grid_width,
                       grid_height, utm_code, start_date: datetime, end_date: datetime,
                       time_stamp='timestamp',
+                      grid_points_per_edge=5,
                       lon='location-long',
                       lat='location-lat'):
     """
@@ -54,6 +55,7 @@ def df_add_properties(df: DataFrame,
         start_date (datetime): Starting date for temporal range filtering.
         end_date (datetime): Ending date for temporal range filtering.
         time_stamp: Column name in the DataFrame for the timestamp values. Defaults to 'timestamp'.
+        grid_points_per_edge: Number environmental data samples along each dimension. Defaults to 5 (25 env entries).
         lon: Column name in the DataFrame for longitude values. Defaults to 'location-long'.
         lat: Column name in the DataFrame for latitude values. Defaults to 'location-lat'.
         T: Optional. Total number of sampled time steps to retain. Defaults to None.
@@ -111,12 +113,16 @@ def df_add_properties(df: DataFrame,
 
     # utm -> grid
     grid_coords = utm_xy.apply(utm_to_grid)
-    # add grid coordinates to df
-    clean_df['x'] = [pt[0] for pt in grid_coords]
-    clean_df['y'] = [pt[1] for pt in grid_coords]
+
+    s_x = grid_width // grid_points_per_edge
+    s_y = grid_height // grid_points_per_edge
 
     # add landcover info
     clean_df['terrain'] = [terrain_at(terrain, x, y) for x, y in grid_coords]
+
+    # add grid coordinates to df
+    clean_df['x'] = [pt[0] // s_x for pt in grid_coords]
+    clean_df['y'] = [pt[1] // s_y for pt in grid_coords]
 
     # your custom geo data to kernel parameters conversion
     clean_df[['is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']] = clean_df.apply(

@@ -194,7 +194,7 @@ def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_st
 
 
 class AnimalMovementProcessor:
-    def __init__(self, data_file):
+    def __init__(self, data_file, environment_grid_size: int = 5):
         self.script_dir = os.path.dirname(os.path.realpath(__file__))
         base_project_dir = os.path.join(self.script_dir, '..')  # Adjust if script is not in a subdir of project root
         self.resources_dir = os.path.join(base_project_dir, 'resources')
@@ -215,6 +215,7 @@ class AnimalMovementProcessor:
         self.grid_coords = None
         self.geo_coords = None
         self._weather_data = None  # For trajectory weather
+        self.grid_points_per_edge = environment_grid_size
 
         # Initialize common resources
         self._load_data()
@@ -436,6 +437,7 @@ class AnimalMovementProcessor:
             dict[str, str]: Mapping {animal_id: path_to_merged_csv} for each processed animal.
         """
         # Ensure bounding boxes are available
+        self.grid_points_per_edge = grid_points_per_edge
         if not self.bbox:
             self._compute_bbox()
             if not self.bbox:
@@ -532,7 +534,7 @@ class AnimalMovementProcessor:
         print(f"Gridded weather data stored under: {base_output_dir}")
         return results_map
 
-    def create_kernel_parameter_data_per_animal(
+    def kernel_params_per_animal_csv(
             self,
             df: DataFrame,
             kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
@@ -553,6 +555,7 @@ class AnimalMovementProcessor:
                 continue
             bbox = self.bbox[aid]
             _, _, width, height = self.discrete_params.get(aid)
+            print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
             terrain_pth = self.terrain_paths.get(aid)
             terrain_map = parse_terrain(file=terrain_pth, delim=' ')
             df_proc = df_add_properties(
@@ -566,6 +569,7 @@ class AnimalMovementProcessor:
                 start_date=start_date,
                 end_date=end_date,
                 time_stamp=time_stamp,
+                grid_points_per_edge=self.grid_points_per_edge,
                 lon=lon,
                 lat=lat,
             )
