@@ -128,6 +128,11 @@ def df_add_properties(df: DataFrame,
     clean_df[['is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']] = clean_df.apply(
         lambda row: kernel_resolver(row['terrain'], row),
         axis=1, result_type='expand')
-    clean_df = clean_df[[time_stamp, 'x', 'y', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]
-
-    return clean_df
+    clean_df = clean_df[[time_stamp, 'y', 'x', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]
+    clean_df = clean_df.sort_values(
+        by=['y', 'x', time_stamp],
+        ascending=True
+    )
+    times = df[time_stamp].unique().size
+    print(f"Times {times}")
+    return clean_df, times

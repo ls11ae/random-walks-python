@@ -23,6 +23,14 @@ class Matrix(Structure):
     ]
 
 
+class DateTime(Structure):
+    _fields_ = [("year", c_int),
+                ("month", c_int),
+                ("day", c_int),
+                ("hour", c_int)]
+
+
+DateTimePtr = POINTER(DateTime)
 MatrixPtr = POINTER(Matrix)
 
 
@@ -36,13 +44,6 @@ class Tensor(Structure):
 class Point2D(Structure):
     _fields_ = [("x", c_ssize_t),
                 ("y", c_ssize_t)]
-
-
-class DateTime(Structure):
-    _fields_ = [("year", c_int),
-                ("month", c_int),
-                ("day", c_int),
-                ("hour", c_int)]
 
 
 class TimedLocation(Structure):
@@ -87,8 +88,10 @@ class TerrainMap(Structure):
         ("height", c_ssize_t)
     ]
 
+
 def terrain_at(terrain, x, y):
     return dll.terrain_at(x, y, terrain)
+
 
 class CacheEntry(Structure):
     pass  # forward declaration
@@ -146,6 +149,48 @@ class KernelsMap4D(Structure):
     ]
 
 
+class Dimensions3D(Structure):
+    _fields_ = [("y", c_ssize_t),
+                ("x", c_ssize_t),
+                ("t", c_ssize_t)]
+
+
+class KernelParameters(Structure):
+    _fields_ = [("is_brownian", c_bool),
+                ("S", c_ssize_t),
+                ("D", c_ssize_t),
+                ("diffusity", c_float),
+                ("bias_x", c_ssize_t),
+                ("bias_y", c_ssize_t)]
+
+
+KernelParametersPtr = POINTER(KernelParameters)
+
+
+class TimedKernelParameters(Structure):
+    _fields_ = [("date_time", DateTimePtr),
+                ("params", KernelParametersPtr),
+                ("landmark", c_int)]
+
+
+TimedKernelParametersPtr = POINTER(TimedKernelParameters)
+
+
+class EnvironmentInfluenceGrid(Structure):
+    _fields_ = [("params", POINTER(POINTER(POINTER(POINTER(TimedKernelParameters))))),
+                ("dims", POINTER(Dimensions3D))]
+
+
+EnvironmentInfluenceGridPtr = POINTER(EnvironmentInfluenceGrid)
+
+
+class DateTimeInterval(Structure):
+    _fields_ = [("start", DateTime),
+                ("end", DateTime)]
+
+
+DateTimeIntervalPtr = POINTER(DateTimeInterval)
+
 TerrainMapPtr = POINTER(TerrainMap)
 KernelsMapPtr = POINTER(KernelsMap)
 TensorMapPtr = POINTER(KernelsMap3D)
@@ -175,15 +220,6 @@ class Coordinate_array(Structure):
 
 
 CoordArray = POINTER(Coordinate_array)
-
-
-class KernelParameters(Structure):
-    _fields_ = [("is_brownian", c_bool),
-                ("S", c_ssize_t),
-                ("D", c_ssize_t),
-                ("diffusity", c_float),
-                ("bias_x", c_ssize_t),
-                ("bias_y", c_ssize_t)]
 
 
 class KernelParamsYXT(Structure):
@@ -239,7 +275,6 @@ class WeatherGrid(Structure):
     ]
 
 
-KernelParametersPtr = POINTER(KernelParameters)
 WeatherTimelinePtr = POINTER(WeatherTimeline)
 WeatherGridPtr = POINTER(WeatherGrid)
 WeatherEntryPtr = POINTER(WeatherEntry)

@@ -4,6 +4,13 @@ from datetime import datetime
 
 import pandas as pd
 
+from random_walk_package import create_terrain_map, set_forbidden_landmark, WATER, KernelParamsYXT, \
+    EnvironmentInfluenceGrid
+from random_walk_package.bindings import create_mixed_kernel_parameters, HEAVY
+from random_walk_package.bindings.data_processing.environment_handling import parse_kernel_parameters, \
+    get_kernels_environment_grid, free_environment_influence_grid, free_kernel_parameters_yxt
+from random_walk_package.bindings.mixed_walk import environment_mixed_walk
+from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 
 
@@ -38,20 +45,55 @@ if __name__ == "__main__":
     print(len(csv_files))
     dfs = (read_weather_csv(f) for f in csv_files)
 
-    # Dataframe for your environmental data
+    # Dataframe for your environmental data, for weather i need to merge the CSVs, normally you wouldnt need this
     df_full = pd.concat(dfs).sort_values("timestamp").reset_index(drop=True)
     df_full.to_csv(os.path.join(data_dir, "weather_data_full.csv"))
+
     # path to the study containing the animal movement data
     study = 'leap_of_the_cat/The Leap of the Cat.csv'
     processor = AnimalMovementProcessor(study)
     # creates landcover grid txt files
     processor.create_landcover_data_txt(resolution=200, out_directory='leap_of_the_cat')
+
+    # although filtering of dates also happens in C, it makes sense to set the dates of the interval of the study here
+    start_date = datetime(1999, 8, 23)
+    end_date = datetime(2030, 12, 6)
+
     # create kernel params csv files
-    paths = processor.kernel_params_per_animal_csv(df=df_full,
-                                                   kernel_resolver=weather_terrain_params,
-                                                   start_date=datetime(2000, 8, 23),
-                                                   end_date=datetime(2030, 12, 6),
-                                                   time_stamp='timestamp',
-                                                   lon='longitude',
-                                                   lat='latitude')
-    print(paths)
+    paths, times = processor.kernel_params_per_animal_csv(df=df_full,
+                                                          aid='CAMILA',
+                                                          kernel_resolver=weather_terrain_params,
+                                                          start_date=start_date,
+                                                          end_date=end_date,
+                                                          time_stamp='timestamp',
+                                                          lon='longitude',
+                                                          lat='latitude')
+
+    dimensions = processor.grid_points_per_edge, processor.grid_points_per_edge, times
+
+    # C allocated, must be freed manually
+    environment_parameters: EnvironmentInfluenceGrid = parse_kernel_parameters(paths['CAMILA'], start_date, end_date,
+                                                                               dimensions)
+    # some terrain txt, path starts from resources/ folder
+    terrain = create_terrain_map("terrain_baboons.txt", " ")
+
+    # mapping which defines kernel parameters based on landmark
+    mapping = create_mixed_kernel_parameters(animal_type=HEAVY, base_step_size=7)
+    set_forbidden_landmark(mapping, landmark=WATER)
+
+    # C structure holding kernel params for each x,y in terrain grid and t in interval start_date, end_date
+    kernel_environment: KernelParamsYXT = get_kernels_environment_grid(terrain, environment_parameters, mapping,
+                                                                       environment_weight=0.5)
+    # the actual walk: for a better idea, check out the MixedTimeWalk implementation (and how these details are abstracted/bundled for the user) in core/
+    # for each 2 consecutive points, we set the number of steps we want in the RW, and the correct kernels are computed and used
+    T = 100
+    # the projected animal coords you iterate
+    start_point = (100, 100)
+    end_point = (200, 200)
+    walk = environment_mixed_walk(T, mapping, terrain, kernel_environment, start_date, end_date, start_point, end_point)
+    # currently theres a segmentation fault in the last step but plot like this
+    plot_combined_terrain(terrain, walk, terrain.contents.width, terrain.contents.height, steps=None, title="my walk")
+
+    # free C allocated memory (i will probably do that on the C side instead, unless we need these multiple times)
+    free_environment_influence_grid(environment_parameters)
+    free_kernel_parameters_yxt(kernel_environment)

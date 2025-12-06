@@ -63,8 +63,17 @@ dll.time_walk_geo_compact.argtypes = [
 ]
 dll.time_walk_geo_compact.restype = Point2DArrayPtr
 
-dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainMapPtr, TimedLocation, TimedLocation]
+dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainMapPtr, KernelParamsXYTPtr,
+                                 TimedLocation, TimedLocation]
 dll.time_walk_custom.restype = Point2DArrayPtr
+
+
+def environment_mixed_walk(T, mapping, terrain, kernel_parameters, start_date, end_date, start_point, end_point):
+    start_dt = DateTime(start_date.year, start_date.month, start_date.day, start_date.hour)
+    end_dt = DateTime(end_date.year, end_date.month, end_date.day, end_date.hour)
+    tloc_start = TimedLocation(start_dt, Point2D(start_point[0], start_point[1]))
+    tloc_end = TimedLocation(end_dt, Point2D(end_point[0], end_point[1]))
+    return dll.time_walk_custom(T, mapping, terrain, kernel_parameters, tloc_start, tloc_end)
 
 
 def time_walk_geo(T, csv_path, terrain_path, grid_x, grid_y, start, goal, mapping=None, full_weather_influence=False):

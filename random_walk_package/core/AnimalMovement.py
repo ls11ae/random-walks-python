@@ -537,6 +537,7 @@ class AnimalMovementProcessor:
     def kernel_params_per_animal_csv(
             self,
             df: DataFrame,
+            aid: str,
             kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
             start_date: datetime,
             end_date: datetime,
@@ -549,36 +550,32 @@ class AnimalMovementProcessor:
 
         animal_ids = get_unique_animal_ids(self.df)
         results = {}
+        bbox = self.bbox[aid]
+        _, _, width, height = self.discrete_params.get(aid)
+        print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
+        terrain_pth = self.terrain_paths.get(aid)
+        terrain_map = parse_terrain(file=terrain_pth, delim=' ')
+        df_proc, times = df_add_properties(
+            df=df,
+            kernel_resolver=kernel_resolver,
+            terrain=terrain_map,
+            bbox_geo=bbox,
+            grid_width=width,
+            grid_height=height,
+            utm_code=self.aid_espg_map[str(aid)],
+            start_date=start_date,
+            end_date=end_date,
+            time_stamp=time_stamp,
+            grid_points_per_edge=self.grid_points_per_edge,
+            lon=lon,
+            lat=lat,
+        )
 
-        for aid in animal_ids:
-            if aid != 'CAMILA':
-                continue
-            bbox = self.bbox[aid]
-            _, _, width, height = self.discrete_params.get(aid)
-            print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
-            terrain_pth = self.terrain_paths.get(aid)
-            terrain_map = parse_terrain(file=terrain_pth, delim=' ')
-            df_proc = df_add_properties(
-                df=df,
-                kernel_resolver=kernel_resolver,
-                terrain=terrain_map,
-                bbox_geo=bbox,
-                grid_width=width,
-                grid_height=height,
-                utm_code=self.aid_espg_map[str(aid)],
-                start_date=start_date,
-                end_date=end_date,
-                time_stamp=time_stamp,
-                grid_points_per_edge=self.grid_points_per_edge,
-                lon=lon,
-                lat=lat,
-            )
+        # Save CSV
+        out_path = os.path.join(out_dir, f"{aid}_kernel_data.csv")
+        df_proc.to_csv(out_path, index=False)
+        results[str(aid)] = out_path
 
-            # Save CSV
-            out_path = os.path.join(out_dir, f"{aid}_kernel_data.csv")
-            df_proc.to_csv(out_path, index=False)
-            results[str(aid)] = out_path
+        print(f"KernelData Saved: {out_path}")
 
-            print(f"KernelData Saved: {out_path}")
-
-        return results
+        return results, times
