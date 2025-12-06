@@ -5,10 +5,11 @@ from datetime import datetime
 import pandas as pd
 
 from random_walk_package import create_terrain_map, set_forbidden_landmark, WATER, KernelParamsYXT, \
-    EnvironmentInfluenceGrid
-from random_walk_package.bindings import create_mixed_kernel_parameters, HEAVY
+    EnvironmentInfluenceGrid, dll, point2d_arr_free
+from random_walk_package.bindings import create_mixed_kernel_parameters, HEAVY, get_walk_points, terrain_map_free
 from random_walk_package.bindings.data_processing.environment_handling import parse_kernel_parameters, \
     get_kernels_environment_grid, free_environment_influence_grid, free_kernel_parameters_yxt
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import kernel_mapping_free
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
@@ -75,7 +76,7 @@ if __name__ == "__main__":
     environment_parameters: EnvironmentInfluenceGrid = parse_kernel_parameters(paths['CAMILA'], start_date, end_date,
                                                                                dimensions)
     # some terrain txt, path starts from resources/ folder
-    terrain = create_terrain_map("terrain_baboons.txt", " ")
+    terrain = create_terrain_map("baboon_SA_study/landcover_baboons123_200.txt", " ")
 
     # mapping which defines kernel parameters based on landmark
     mapping = create_mixed_kernel_parameters(animal_type=HEAVY, base_step_size=7)
@@ -86,14 +87,20 @@ if __name__ == "__main__":
                                                                        environment_weight=0.5)
     # the actual walk: for a better idea, check out the MixedTimeWalk implementation (and how these details are abstracted/bundled for the user) in core/
     # for each 2 consecutive points, we set the number of steps we want in the RW, and the correct kernels are computed and used
-    T = 100
+    T = 80
     # the projected animal coords you iterate
-    start_point = (100, 100)
-    end_point = (200, 200)
+    start_point = (50, 50)
+    end_point = (150, 150)
+
     walk = environment_mixed_walk(T, mapping, terrain, kernel_environment, start_date, end_date, start_point, end_point)
-    # currently theres a segmentation fault in the last step but plot like this
-    plot_combined_terrain(terrain, walk, terrain.contents.width, terrain.contents.height, steps=None, title="my walk")
+    dll.point2d_array_print(walk)
+    walknp = get_walk_points(walk)
+    # print(terrain.contents.width, terrain.contents.height)
+    plot_combined_terrain(terrain, walknp, steps=[(50, 50), (150, 150)], title="⋆༺︎⋆ my fancy walk ⋆༻⋆")
 
     # free C allocated memory (i will probably do that on the C side instead, unless we need these multiple times)
-    free_environment_influence_grid(environment_parameters)
+    point2d_arr_free(walk)
     free_kernel_parameters_yxt(kernel_environment)
+    kernel_mapping_free(mapping)
+    terrain_map_free(terrain)
+    free_environment_influence_grid(environment_parameters)

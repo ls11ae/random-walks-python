@@ -228,6 +228,7 @@ class KernelParamsYXT(Structure):
         ("height", c_size_t),
         ("time", c_size_t),
         ("max_D", c_size_t),
+        ("max_S", c_size_t),
         ("data", POINTER(POINTER(POINTER(POINTER(KernelParameters)))))
     ]
 
