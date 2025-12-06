@@ -13,6 +13,7 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
+from tests.mixed_walk_test import test_time_walker
 
 
 def weather_terrain_params(landmark, row):
@@ -34,7 +35,7 @@ def read_weather_csv(path):
     return df
 
 
-if __name__ == "__main__":
+def environment_pipeline_test():
     # merging weather data to one dataset
     out_dir = "weather_data_full.csv"
     data_dir = "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/leap_of_the_cat/weather_data/CAMILA"
@@ -104,3 +105,7 @@ if __name__ == "__main__":
     kernel_mapping_free(mapping)
     terrain_map_free(terrain)
     free_environment_influence_grid(environment_parameters)
+
+
+if __name__ == "__main__":
+    test_time_walker()

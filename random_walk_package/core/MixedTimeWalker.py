@@ -86,7 +86,7 @@ class MixedTimeWalker:
         plot_walk_from_json(walk_path, title=os.path.basename(self.movebank_study))
         return walk_np
 
-    def generate_walk_from_movebank(self, serialized=True, output_prefix='time_walk'):
+    def generate_walk_from_movebank(self):
         """
         Generate time-dependent walks for each animal using Movebank steps.
         - Computes T per segment automatically as Manhattan distance (min 5).
