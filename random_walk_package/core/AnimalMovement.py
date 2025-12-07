@@ -350,7 +350,6 @@ class AnimalMovementProcessor:
         out_dir = os.path.join(self.resources_dir, 'kernel_data')
         os.makedirs(out_dir, exist_ok=True)
 
-        animal_ids = get_unique_animal_ids(self.df)
         results = {}
         bbox = self.bbox[aid]
         _, _, width, height = self.discrete_params.get(aid)

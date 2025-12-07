@@ -140,14 +140,6 @@ def get_start_end_dates(df, animal_id: str):
     return start_date, end_date
 
 
-def map_lon_to_x(lon, min_lon, max_lon, x_res):
-    return int((lon - min_lon) / (max_lon - min_lon) * x_res)
-
-
-def map_lat_to_y(lat, min_lat, max_lat, y_res):
-    return int((max_lat - lat) / (max_lat - min_lat) * y_res)
-
-
 def get_animal_coordinates(df: pd.DataFrame, animal_id: str, epsg_code: str,
                            samples: int = None, width=100, height=100,
                            bbox_utm: tuple[float, float, float, float] | None = None, time_stamped=False):

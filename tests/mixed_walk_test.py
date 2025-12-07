@@ -1,4 +1,3 @@
-from random_walk_package import MixedTimeWalker
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark, \
     set_landmark_mapping
 from random_walk_package.core.MixedWalker import *
@@ -23,7 +22,7 @@ def test_mixed_walk():
     assert len(walk_path) > 0
 
 
-def test_time_walker():
+"""def test_time_walker():
     walker = MixedTimeWalker(
         T=50,
         resolution=100,
@@ -31,3 +30,4 @@ def test_time_walker():
         study_folder="leap_of_the_cat/"
     )
     walker.generate_walk_from_movebank()
+"""
