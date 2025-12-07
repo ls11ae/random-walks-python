@@ -18,18 +18,19 @@ from random_walk_package.data_sources.open_meteo_api import _fetch_hourly_data_f
 # landcover_to_discrete_txt is imported in the original but not used, can be kept or removed.
 
 class AnimalMovementProcessor:
-    def __init__(self, data_file, environment_grid_size: int = 5):
+    def __init__(self, data_file=None,df =None, environment_grid_size: int = 5):
         self.script_dir = os.path.dirname(os.path.realpath(__file__))
         base_project_dir = os.path.join(self.script_dir, '..')  # Adjust if script is not in a subdir of project root
         self.resources_dir = os.path.join(base_project_dir, 'resources')
 
         # Ensure data_file path is constructed correctly relative to resources_dir
-        if not os.path.isabs(data_file):
-            self.data_file = os.path.join(self.resources_dir, data_file)
-        else:
-            self.data_file = data_file
+        if False and data_file is not None: 
+            if not os.path.isabs(data_file):
+                self.data_file = os.path.join(self.resources_dir, data_file)
+            else:
+                self.data_file = data_file
 
-        self.df = None
+        self.df = df
         self.bbox: dict[str, tuple[float, float, float, float]] = {}  # geo bbox per animal_id
         self.bbox_utm: dict[str, tuple[float, float, float, float]] = {}  # utm bbox per animal_id
         self.aid_espg_map: dict[str, str] = {}  # EPSG code per animal_id
@@ -42,7 +43,8 @@ class AnimalMovementProcessor:
         self.grid_points_per_edge = environment_grid_size
 
         # Initialize common resources
-        self._load_data()
+        if df is not None: 
+            self._load_data()
         self._compute_bbox()
 
     def _load_data(self):
