@@ -1,5 +1,7 @@
+import os
 import time
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -180,27 +182,60 @@ def _fetch_hourly_data_for_period_at_point(lat: float, lon: float, start_date_st
     return []  # Return empty list on failure after retries
 
 
-def weather_tuples(weather_data):
-    """Generate weather tuples grouped by movement steps"""
-    if not weather_data:  # Check if it's None or empty
-        # Changed condition from hasattr to direct check for None or empty list
-        raise ValueError(
-            "Weather data not loaded or generated. Call create_movement_data() and then fetch_trajectory_weather() or load_weather_data() first.")
+def create_weather_csvs(bbox, interval, animal_id,
+                        animal_dir, grid_points_per_edge=10, fetch_hourly=False, merged_csv_path=None,
+                        results_map: dict[str, str] = None):
+    start_date, end_date = interval
+    min_lon, min_lat, max_lon, max_lat = bbox
+    # Otherwise, generate grid coordinates and fetch
+    if max_lon == min_lon or max_lat == min_lat:
+        lon_coords = np.array([min_lon])
+        lat_coords = np.array([min_lat])
+        if grid_points_per_edge > 1:
+            print(f"Warning: BBox for animal {animal_id} is point/line. Using 1 grid point.")
+    else:
+        lon_coords = np.linspace(min_lon + (max_lon - min_lon) / (2 * grid_points_per_edge),
+                                 max_lon - (max_lon - min_lon) / (2 * grid_points_per_edge),
+                                 num=grid_points_per_edge, endpoint=True)
+        lat_coords = np.linspace(min_lat + (max_lat - min_lat) / (2 * grid_points_per_edge),
+                                 max_lat - (max_lat - min_lat) / (2 * grid_points_per_edge),
+                                 num=grid_points_per_edge, endpoint=True)
 
-    sampled_weather = []
-    for i in range(len(weather_data)):
-        entry = weather_data[i]
-        sampled_weather.append((
-            entry[0],  # timestamp
-            entry[1],  # latitude
-            entry[2],  # longitude
-            entry[3],  # temperature_2m
-            entry[4],  # relative_humidity_2m
-            entry[5],  # precipitation
-            entry[6],  # wind_speed_10m
-            entry[7],  # wind_direction_10m
-            entry[8],  # snowfall
-            entry[9],  # weather_code
-            entry[10]  # cloud_cover
-        ))
-    return sampled_weather
+    grid_points_to_query = []
+    for lat_val in lat_coords:
+        for lon_val in lon_coords:
+            grid_points_to_query.append((lat_val, lon_val))
+    print(f"[{animal_id}] Generated {len(grid_points_to_query)} grid points for weather fetching.")
+
+    total_points_to_fetch = len(grid_points_to_query)
+
+    for i, (lat, lon) in enumerate(grid_points_to_query):
+        print(
+            f"[{animal_id}] Fetching weather for grid point {i + 1}/{total_points_to_fetch} (Lat: {lat:.4f}, Lon: {lon:.4f})")
+        point_weather_data_list = _fetch_hourly_data_for_period_at_point(
+            lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"), fetch_hourly
+        )
+        # Save per-grid-point CSV
+        y_idx = i // grid_points_per_edge
+        x_idx = i % grid_points_per_edge
+        csv_name = f"weather_grid_y{y_idx}_x{x_idx}.csv"
+        csv_path = os.path.join(animal_dir, csv_name)
+        df_point = pd.DataFrame(point_weather_data_list)
+        columns_order = (['latitude', 'longitude', 'timestamp', 'temperature_2m', 'relative_humidity_2m',
+                          'precipitation', 'wind_speed_10m', 'wind_direction_10m', 'snowfall', 'weather_code',
+                          'cloud_cover'] if fetch_hourly else
+                         ['latitude', 'longitude', 'timestamp', 'temperature_2m_mean',
+                          'relative_humidity_2m_mean',
+                          'precipitation_sum', 'wind_speed_10m_max', 'wind_direction_10m_dominant',
+                          'snowfall_sum',
+                          'weather_code', 'cloud_cover_mean'])
+
+        df_point = df_point.reindex(columns=columns_order)
+        df_point.to_csv(csv_path, index=False)
+        print(f"[{animal_id}] Saved grid point CSV: {csv_path}")
+        results_map[str(animal_id)] = animal_dir
+
+        if i < total_points_to_fetch - 1:
+            time.sleep(0.2)
+
+        results_map[str(animal_id)] = merged_csv_path

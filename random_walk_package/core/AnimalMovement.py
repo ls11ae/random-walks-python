@@ -12,7 +12,7 @@ from random_walk_package.data_sources.land_cover_adapter import landcover_to_dis
 from random_walk_package.data_sources.movebank_adapter import get_start_end_dates, \
     get_unique_animal_ids, get_animal_coordinates, get_bounding_boxes_per_animal, \
     bbox_dict_to_discrete_space
-from random_walk_package.data_sources.open_meteo_api import _fetch_hourly_data_for_period_at_point, weather_tuples
+from random_walk_package.data_sources.open_meteo_api import _fetch_hourly_data_for_period_at_point
 
 
 # landcover_to_discrete_txt is imported in the original but not used, can be kept or removed.
@@ -130,9 +130,6 @@ class AnimalMovementProcessor:
             results[str(animal_id)] = txt_path
         self.terrain_paths = results
         return results
-
-    def create_weather_tuples(self) -> list[tuple]:
-        return weather_tuples(self._weather_data)
 
     def create_movement_data(self, samples=10, time_stamped=False) -> tuple[
         dict[str, list[tuple[int, int]]], dict[str, list[tuple[int, int]]], dict[str, str] | None]:

@@ -31,12 +31,17 @@ def padded_bbox(min_lon_raw, min_lat_raw, max_lon_raw, max_lat_raw, padding: flo
     min_lat = min_lat_raw - lat_pad
     max_lat = max_lat_raw + lat_pad
 
-    # Clamp to valid geographic bounds
-    min_lon = max(min_lon, -180.0)
-    max_lon = min(max_lon, 180.0)
-    min_lat = max(min_lat, -90.0)
-    max_lat = min(max_lat, 90.0)
     return min_lon, min_lat, max_lon, max_lat
+
+
+def clamp_lonlat_bbox(bbox):
+    min_x, min_y, max_x, max_y = bbox
+    return (
+        max(min_x, -180.0),
+        max(min_y, -90.0),
+        min(max_x, 180.0),
+        min(max_y, 90.0),
+    )
 
 
 def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.2) -> dict[

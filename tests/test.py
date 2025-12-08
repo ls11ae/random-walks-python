@@ -121,5 +121,5 @@ if __name__ == "__main__":
     # creates landcover grid txt files
     processor.create_landcover_data_txt(resolution=200,
                                         out_directory='random_walk_package/resources/leap_of_the_cat/terrain')
+    processor.fetch_open_meteo_weather('random_walk_package/resources/leap_of_the_cat/weather', samples_per_dimension=2)
     movement_data = processor.create_movement_data_dict()
-    print(movement_data)
