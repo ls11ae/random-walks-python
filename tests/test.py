@@ -12,17 +12,18 @@ from random_walk_package.bindings.data_processing.environment_handling import pa
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import kernel_mapping_free
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
-from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
-from tests.mixed_walk_test import test_time_walker
+from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
 
 
-def weather_terrain_params(landmark, row):
+def weather_terrain_params(landmark, row, animal_class='pup'):
     is_brownian = True
-    S = float(row["wind_speed_10m_max"]) / 2.0
-    D = int(row["wind_direction_10m_dominant"] // 45)
-    diffusity = float(row["cloud_cover_mean"]) / 100.0
-    bias_x = int(row["precipitation_sum"] > 0.1)
-    bias_y = int(landmark in (50, 80))
+    if animal_class == 'pup':
+        bias_x = row["bias_x"]
+        S = float(row["wind_speed_10m_max"]) / 2.0
+        D = int(row["wind_direction_10m_dominant"] // 45)
+        diffusity = float(row["cloud_cover_mean"]) / 100.0
+        bias_x = int(row["precipitation_sum"] > 0.1)
+        bias_y = int(landmark in (50, 80))
 
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
@@ -108,4 +109,17 @@ def environment_pipeline_test():
 
 
 if __name__ == "__main__":
-    test_time_walker()
+    study = "random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv"
+    df = pd.read_csv(study)
+    print(df.head())
+    processor = AnimalMovementProcessor(data=df,
+                                        lat_col="location-lat",
+                                        lon_col="location-long",
+                                        time_col="timestamp",
+                                        id_col="tag-local-identifier",
+                                        crs="EPSG:4326")
+    # creates landcover grid txt files
+    processor.create_landcover_data_txt(resolution=200,
+                                        out_directory='random_walk_package/resources/leap_of_the_cat/terrain')
+    movement_data = processor.create_movement_data_dict()
+    print(movement_data)

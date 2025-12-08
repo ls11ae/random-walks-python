@@ -8,6 +8,37 @@ def get_unique_animal_ids(df: pd.DataFrame) -> list:
     return df['tag-local-identifier'].unique().tolist()
 
 
+def padded_bbox(min_lon_raw, min_lat_raw, max_lon_raw, max_lat_raw, padding: float = 0.2) -> tuple[
+    float, float, float, float]:
+    lon_range = max(max_lon_raw - min_lon_raw, 0.0)
+    lat_range = max(max_lat_raw - min_lat_raw, 0.0)
+
+    # Handle degenerate cases by inflating a tiny range (avoids division by zero later)
+    if lon_range == 0.0:
+        lon_range = 1e-6
+        min_lon_raw -= lon_range / 2.0
+        max_lon_raw += lon_range / 2.0
+    if lat_range == 0.0:
+        lat_range = 1e-6
+        min_lat_raw -= lat_range / 2.0
+        max_lat_raw += lat_range / 2.0
+
+    lon_pad = lon_range * padding
+    lat_pad = lat_range * padding
+
+    min_lon = min_lon_raw - lon_pad
+    max_lon = max_lon_raw + lon_pad
+    min_lat = min_lat_raw - lat_pad
+    max_lat = max_lat_raw + lat_pad
+
+    # Clamp to valid geographic bounds
+    min_lon = max(min_lon, -180.0)
+    max_lon = min(max_lon, 180.0)
+    min_lat = max(min_lat, -90.0)
+    max_lat = min(max_lat, 90.0)
+    return min_lon, min_lat, max_lon, max_lat
+
+
 def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.2) -> dict[
     str, tuple[float, float, float, float]]:
     """Return per-animal padded bounding boxes as a dict:
@@ -34,38 +65,8 @@ def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.2) -> dic
 
         print(
             f"Raw bounds for {animal_id}: lon={min_lon_raw:.6f} to {max_lon_raw:.6f}, lat={min_lat_raw:.6f} to {max_lat_raw:.6f}")
-
-        lon_range = max(max_lon_raw - min_lon_raw, 0.0)
-        lat_range = max(max_lat_raw - min_lat_raw, 0.0)
-
-        # Handle degenerate cases by inflating a tiny range (avoids division by zero later)
-        if lon_range == 0.0:
-            print(f"Zero longitude range found for animal {animal_id}, inflating")
-            lon_range = 1e-6
-            min_lon_raw -= lon_range / 2.0
-            max_lon_raw += lon_range / 2.0
-        if lat_range == 0.0:
-            print(f"Zero latitude range found for animal {animal_id}, inflating")
-            lat_range = 1e-6
-            min_lat_raw -= lat_range / 2.0
-            max_lat_raw += lat_range / 2.0
-
-        lon_pad = lon_range * padding
-        lat_pad = lat_range * padding
-
-        min_lon = min_lon_raw - lon_pad
-        max_lon = max_lon_raw + lon_pad
-        min_lat = min_lat_raw - lat_pad
-        max_lat = max_lat_raw + lat_pad
-
-        # Clamp to valid geographic bounds
-        min_lon = max(min_lon, -180.0)
-        max_lon = min(max_lon, 180.0)
-        min_lat = max(min_lat, -90.0)
-        max_lat = min(max_lat, 90.0)
-
+        min_lon, min_lat, max_lon, max_lat = padded_bbox(max_lon_raw, min_lat_raw, min_lon_raw, max_lat_raw, padding)
         print(f"Final bounds for {animal_id}: lon={min_lon:.6f} to {max_lon:.6f}, lat={min_lat:.6f} to {max_lat:.6f}")
-
         result[str(animal_id)] = (min_lon, min_lat, max_lon, max_lat)
 
     print(f"Processed {len(result)} animals")

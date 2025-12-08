@@ -120,7 +120,9 @@ def df_add_properties(df: DataFrame,
     # add landcover info
     clean_df['terrain'] = [terrain_at(terrain, x, y) for x, y in grid_coords]
 
-    # add grid coordinates to df
+    # maps terrain grid coordinates to environment grid coordinates
+    # typically the env grid is much smaller
+    # NN-interpolation is used (later) to get the corresponding env data for a terrain grid cell
     clean_df['x'] = [pt[0] // s_x for pt in grid_coords]
     clean_df['y'] = [pt[1] // s_y for pt in grid_coords]
 
