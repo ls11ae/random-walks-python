@@ -19,7 +19,7 @@ landcover_classes = {
 }
 
 
-def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat, output="terrain.txt") -> \
+def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, min_lat, max_lon, max_lat, output="terrain.txt") -> \
         tuple[int, tuple[float, float, float, float]] | None:
     if os.path.exists(output):
         print(f"Output file {output} already exists, skipping generation")

@@ -17,6 +17,35 @@ class AnimalMovementProcessor:
                  lat_col="latitude",
                  id_col="animal_id",
                  crs="EPSG:4326"):
+        """
+        Initializes an instance of a class to process and manage trajectory data.
+
+        Parameters
+        ----------
+        data : pandas.DataFrame or geopandas.GeoDataFrame or mpd.TrajectoryCollection
+            Input dataset containing trajectory data. If it is not an instance of
+            `mpd.TrajectoryCollection`, it is converted into one.
+        time_col : str, optional
+            The name of the column containing time data, by default "timestamp".
+        lon_col : str, optional
+            The name of the column containing longitude data, by default "longitude".
+        lat_col : str, optional
+            The name of the column containing latitude data, by default "latitude".
+        id_col : str, optional
+            The name of the column containing unique animal identifiers, by default "animal_id".
+        crs : str, optional
+            The coordinate reference system to assign to the data if it is not already a
+            GeoDataFrame, by default "EPSG:4326".
+
+        Attributes
+        ----------
+        traj : mpd.TrajectoryCollection
+            A TrajectoryCollection object containing processed trajectories.
+        terrain_paths : dict[str, str]
+            A dictionary storing terrain text paths for each unique animal identifier.
+        resolution : None
+            the number of cells in the regular grid along the longer axis of the bounding box.
+        """
         if isinstance(data, mpd.TrajectoryCollection):
             self.traj = data
 
@@ -42,6 +71,7 @@ class AnimalMovementProcessor:
         self.resolution = None
 
     def traj_utm(self, traj_id):
+        # we dont save utm bboxes anymore, we compute them on the fly
         traj = self.traj.get_trajectory(traj_id)
 
         lon, lat = traj.df.geometry.iloc[0].coords[0]
@@ -50,6 +80,7 @@ class AnimalMovementProcessor:
         return traj.to_crs(utm_crs)
 
     def bbox_geo(self, traj_id):
+        # we dont save utm geo bboxes anymore, we compute them on the fly
         return self.traj.get_trajectory(traj_id).df.total_bounds
 
     def bbox_utm(self, traj_id):
@@ -57,6 +88,7 @@ class AnimalMovementProcessor:
 
     @staticmethod
     def _grid_shape_from_bbox(bbox_utm, resolution):
+        """Compute regular grid shape (width, height) from utm bounding box and resolution."""
         xmin, ymin, xmax, ymax = bbox_utm
         width_m = xmax - xmin
         height_m = ymax - ymin
@@ -93,6 +125,7 @@ class AnimalMovementProcessor:
             # REGULAR GRID SHAPE (x/y)
             nx, ny = self._grid_shape_from_bbox(traj_utm.df.total_bounds, resolution)
 
+            # Output paths
             base_name = (
                 f"landcover_{traj_id}_"
                 f"{min_lon:.2f}_{min_lat:.2f}_{max_lon:.2f}_{max_lat:.2f}"
@@ -100,11 +133,13 @@ class AnimalMovementProcessor:
             tif_path = out_directory / f"{base_name}.tif"
             txt_path = out_directory / f"{base_name}_{resolution}.txt"
 
+            # only fetch TIFF if it doesn't exist yet
             if not tif_path.exists():
                 fetch_landcover_data(
                     (min_lon, min_lat, max_lon, max_lat),
                     str(tif_path),
                 )
+            # always reconstruct terrain txt files
             landcover_to_discrete_txt(
                 str(tif_path),
                 nx,

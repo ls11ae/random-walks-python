@@ -65,7 +65,7 @@ def get_bounding_boxes_per_animal(df: pd.DataFrame, padding: float = 0.2) -> dic
 
         print(
             f"Raw bounds for {animal_id}: lon={min_lon_raw:.6f} to {max_lon_raw:.6f}, lat={min_lat_raw:.6f} to {max_lat_raw:.6f}")
-        min_lon, min_lat, max_lon, max_lat = padded_bbox(max_lon_raw, min_lat_raw, min_lon_raw, max_lat_raw, padding)
+        min_lon, min_lat, max_lon, max_lat = padded_bbox(min_lon_raw, min_lat_raw, max_lon_raw, max_lat_raw, padding)
         print(f"Final bounds for {animal_id}: lon={min_lon:.6f} to {max_lon:.6f}, lat={min_lat:.6f} to {max_lat:.6f}")
         result[str(animal_id)] = (min_lon, min_lat, max_lon, max_lat)
 
