@@ -33,7 +33,7 @@ def df_add_properties(df: DataFrame,
                       time_stamp='timestamp',
                       grid_points_per_edge=5,
                       lon='location-long',
-                      lat='location-lat'):
+                      lat='location-lat') -> (pd.DataFrame, int):
     """
     Add random walk relevant properties to a DataFrame within a specific geographic bounding box.
 
@@ -126,15 +126,21 @@ def df_add_properties(df: DataFrame,
     clean_df['x'] = [pt[0] // s_x for pt in grid_coords]
     clean_df['y'] = [pt[1] // s_y for pt in grid_coords]
 
+    if clean_df.empty:
+        print(f"No overlap between environment bbox/time interval and study bbox")
+        return clean_df, 0
+
     # your custom geo data to kernel parameters conversion
     clean_df[['is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']] = clean_df.apply(
         lambda row: kernel_resolver(row['terrain'], row),
         axis=1, result_type='expand')
+    # remove unnecessary columns
     clean_df = clean_df[[time_stamp, 'y', 'x', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]
-    clean_df = clean_df.sort_values(
-        by=['y', 'x', time_stamp],
-        ascending=True
-    )
-    times = df[time_stamp].unique().size
+    # remove duplicates
+    clean_df = (clean_df.groupby([time_stamp, 'x', 'y'], as_index=False).first())
+    # sort by (y, x, time)
+    clean_df = clean_df.sort_values(by=['y', 'x', time_stamp], ascending=True)
+
+    times = clean_df[time_stamp].nunique()
     print(f"Times {times}")
     return clean_df, times

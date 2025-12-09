@@ -15,16 +15,13 @@ from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
 
 
-def weather_terrain_params(landmark, row, animal_class='pup'):
+def weather_terrain_params(landmark, row):
     is_brownian = True
-    if animal_class == 'pup':
-        bias_x = row["bias_x"]
-        S = float(row["wind_speed_10m_max"]) / 2.0
-        D = int(row["wind_direction_10m_dominant"] // 45)
-        diffusity = float(row["cloud_cover_mean"]) / 100.0
-        bias_x = int(row["precipitation_sum"] > 0.1)
-        bias_y = int(landmark in (50, 80))
-
+    S = float(row["wind_speed_10m_max"]) / 2.0
+    D = int(row["wind_direction_10m_dominant"] // 45)
+    diffusity = float(row["cloud_cover_mean"]) / 100.0
+    bias_x = int(row["precipitation_sum"] > 0.1)
+    bias_y = int(landmark in (50, 80))
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
 
@@ -72,7 +69,7 @@ def environment_pipeline_test():
                                                           lon='longitude',
                                                           lat='latitude')
 
-    dimensions = processor.grid_points_per_edge, processor.grid_points_per_edge, times
+    dimensions = processor.env_samples, processor.env_samples, times
 
     # C allocated, must be freed manually
     environment_parameters: EnvironmentInfluenceGrid = parse_kernel_parameters(paths['CAMILA'], start_date, end_date,
@@ -109,9 +106,12 @@ def environment_pipeline_test():
 
 
 if __name__ == "__main__":
-    study = "random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv"
+    study = 'random_walk_package/resources/movebank_test/The Leap of the Cat.csv'
     df = pd.read_csv(study)
-    print(df.head())
+
+    environment_csv = 'random_walk_package/resources/movebank_test/weather_data_full.csv'
+    df_env = pd.read_csv(environment_csv)
+
     processor = AnimalMovementProcessor(data=df,
                                         lat_col="location-lat",
                                         lon_col="location-long",
@@ -120,6 +120,21 @@ if __name__ == "__main__":
                                         crs="EPSG:4326")
     # creates landcover grid txt files
     processor.create_landcover_data_txt(resolution=200,
-                                        out_directory='random_walk_package/resources/leap_of_the_cat/terrain')
-    processor.fetch_open_meteo_weather('random_walk_package/resources/leap_of_the_cat/weather', samples_per_dimension=2)
+                                        out_directory='random_walk_package/resources/movebank_test/terrain')
+    # processor.fetch_open_meteo_weather('random_walk_package/resources/leap_of_the_cat/weather', samples_per_dimension=2)
     movement_data = processor.create_movement_data_dict()
+
+    start_date = datetime(2000, 8, 24)
+    end_date = datetime(2001, 1, 15)
+
+    # create kernel params csv files
+    paths = processor.kernel_params_per_animal_csv(df=df_env,
+                                                   animal_id='CAMILA',
+                                                   kernel_resolver=weather_terrain_params,
+                                                   start_date=start_date,
+                                                   end_date=end_date,
+                                                   time_stamp='timestamp',
+                                                   lon='longitude',
+                                                   lat='latitude',
+                                                   out_directory='random_walk_package/resources/movebank_test/kernel_data')
+    print(paths)

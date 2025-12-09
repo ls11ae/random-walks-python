@@ -142,10 +142,6 @@ def tensor_map_terrain_biased_grid_serialized(terrain: TerrainMapPtr, biases: Po
 
 
 def parse_terrain(file: str, delim: str) -> TerrainMap:
-    file = os.path.join(script_dir, 'resources', file)
-    if not os.path.exists(file):
-        raise FileNotFoundError(f"File '{file}' does not exist.")
-
     if len(delim) != 1:
         raise ValueError("Delimiter must be a single character.")
 
