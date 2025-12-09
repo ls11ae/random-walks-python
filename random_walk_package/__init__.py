@@ -2,8 +2,6 @@
 # --------------------------------------------------
 # Load the shared library first
 # --------------------------------------------------
-from .wrapper import dll
-
 # --------------------------------------------------
 # Data processing helpers
 # --------------------------------------------------
@@ -28,6 +26,7 @@ from .bindings.data_structures.matrix import *
 # --------------------------------------------------
 from .bindings.data_structures.point2D import Point2DArrayPtr, point2d_arr_free
 from .bindings.data_structures.tensor import *
+from .wrapper import dll
 
 # --------------------------------------------------
 # Optional GPU helpers
@@ -50,6 +49,7 @@ from .core.BrownianWalker import BrownianWalker
 from .core.MixedTimeWalker import MixedTimeWalker
 from .core.MixedWalker import MixedWalker
 from .core.BiasedWalker import BiasedWalker
+from .core.AnimalMovementNew import AnimalMovementProcessor
 
 # --------------------------------------------------
 # Define __all__ for clean public API

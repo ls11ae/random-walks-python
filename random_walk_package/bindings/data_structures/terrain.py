@@ -158,6 +158,10 @@ def parse_terrain(file: str, delim: str) -> TerrainMap:
     return terrain
 
 
+def terrain_at(terrain, x, y):
+    return dll.terrain_at(x, y, terrain)
+
+
 def tensor_map_terrain_biased(terrain, bias_array, kernel_mapping) -> KernelsMap4DPtr:  # type: ignore
     return dll.tensor_map_terrain_biased(terrain, kernel_mapping, bias_array)
 

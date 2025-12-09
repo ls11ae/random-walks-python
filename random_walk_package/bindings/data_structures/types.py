@@ -1,7 +1,5 @@
 from ctypes import *
 
-from random_walk_package import dll
-
 
 class Pair(Structure):
     _fields_ = [("first", c_double),
@@ -87,10 +85,6 @@ class TerrainMap(Structure):
         ("width", c_ssize_t),
         ("height", c_ssize_t)
     ]
-
-
-def terrain_at(terrain, x, y):
-    return dll.terrain_at(x, y, terrain)
 
 
 class CacheEntry(Structure):
