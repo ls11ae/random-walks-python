@@ -3,7 +3,7 @@ import os
 import time
 
 import numpy as np
-from pandas.core.interchange.dataframe_protocol import DataFrame
+from pandas import DataFrame
 
 from random_walk_package.bindings import parse_terrain
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties

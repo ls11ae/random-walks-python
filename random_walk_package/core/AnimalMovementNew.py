@@ -1,14 +1,36 @@
+import datetime
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import geopandas as gpd
 import movingpandas as mpd
+from pandas import DataFrame
 from pyproj import CRS
 
+from random_walk_package.bindings import parse_terrain
+from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
 from random_walk_package.data_sources.open_meteo_api import create_weather_csvs
+
+
+@dataclass
+class MovementTrajectory:
+    traj_id: str
+    df: pd.DataFrame
+
+    # df columns: ["grid_x", "grid_y", "geo_x", "geo_y", "time"]
+
+    def grid_steps(self) -> list[tuple[int, int]]:
+        return list(zip(self.df.grid_x, self.df.grid_y))
+
+    def geo_path(self) -> list[tuple[float, float]]:
+        return list(zip(self.df.geo_x, self.df.geo_y))
+
+    def __len__(self):
+        return len(self.df)
 
 
 class AnimalMovementProcessor:
@@ -71,7 +93,9 @@ class AnimalMovementProcessor:
             )
         self.terrain_paths: dict[str, str] = {}  # terrain txt path per animal_id
         self.resolution = None
-        self.weather_samples = 5
+        self.env_samples = 5
+        self.longitude_col = lon_col
+        self.latitude_col = lat_col
 
     def traj_utm(self, traj_id):
         # we dont save utm bboxes anymore, we compute them on the fly
@@ -85,11 +109,12 @@ class AnimalMovementProcessor:
     def bbox_geo(self, traj_id):
         # we dont save utm geo bboxes anymore, we compute them on the fly
         min_lon, min_lat, max_lon, max_lat = self.traj.get_trajectory(traj_id).df.total_bounds
-        return clamp_lonlat_bbox(padded_bbox(min_lon, min_lat, max_lon, max_lat, padding=0.2))
+        return clamp_lonlat_bbox(padded_bbox(min_lon, min_lat, max_lon, max_lat, padding=0.1))
 
     def bbox_utm(self, traj_id):
-        min_x, min_y, max_x, max_y = self.traj_utm(traj_id).df.total_bounds
-        return padded_bbox(min_x, min_y, max_x, max_y, padding=0.2)
+        utm_traj = self.traj_utm(traj_id)
+        min_x, min_y, max_x, max_y = utm_traj.df.total_bounds
+        return padded_bbox(min_x, min_y, max_x, max_y, padding=0.1), utm_traj.crs.to_epsg()
 
     @staticmethod
     def _grid_shape_from_bbox(bbox_utm, resolution):
@@ -125,9 +150,9 @@ class AnimalMovementProcessor:
             # PADDED GEO BBOX (lon/lat)
             min_lon, min_lat, max_lon, max_lat = self.bbox_geo(traj_id)
             # PADDED UTM BBOX (x/y)
-            min_x, min_y, max_x, max_y = self.bbox_utm(traj_id)
+            utm_bbox, _ = self.bbox_utm(traj_id)
             # REGULAR GRID SHAPE (x/y)
-            nx, ny = self._grid_shape_from_bbox([min_x, min_y, max_x, max_y], resolution)
+            nx, ny = self._grid_shape_from_bbox(utm_bbox, resolution)
 
             # Output paths
             base_name = (
@@ -157,29 +182,26 @@ class AnimalMovementProcessor:
         return results
 
     def create_movement_data(self, traj_id: str):
-        traj_geo = self.traj.get_trajectory(traj_id)
         traj_utm = self.traj_utm(traj_id)
+        utm_bbox, _ = self.bbox_utm(traj_id)
+        xmin, ymin, xmax, ymax = utm_bbox
 
-        xmin, ymin, xmax, ymax = traj_utm.df.total_bounds
-
-        nx, ny = AnimalMovementProcessor._grid_shape_from_bbox(traj_utm.df.total_bounds, self.resolution)
-        # ADD GRID COORDINATES
+        nx, ny = self._grid_shape_from_bbox(utm_bbox, self.resolution)
         df = traj_utm.df.copy()
-        df["gx"] = ((df.geometry.x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
-        df["gy"] = ((df.geometry.y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
 
-        return {
-            "grid": df[["gx", "gy"]],
-            "geo": traj_geo.df.geometry,
-            "time": traj_geo.df.index
-        }
+        df["grid_x"] = ((df.geometry.x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
+        df["grid_y"] = ((df.geometry.y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
+        df["geo_x"] = self.traj.get_trajectory(traj_id).df[self.longitude_col]
+        df["geo_y"] = self.traj.get_trajectory(traj_id).df[self.latitude_col]
+        df["time"] = df.index
+
+        return MovementTrajectory(traj_id=traj_id, df=df)
 
     def create_movement_data_dict(self):
-        results = {}
-        for traj in self.traj.trajectories:
-            traj_id = traj.id
-            results[str(traj_id)] = self.create_movement_data(str(traj_id))
-        return results
+        return {
+            str(traj.id): self.create_movement_data(str(traj.id))
+            for traj in self.traj.trajectories
+        }
 
     @staticmethod
     def grid_to_geo(x, y, min_x, min_y, max_x, max_y, width, height, epsg) -> tuple[float, float]:
@@ -190,28 +212,14 @@ class AnimalMovementProcessor:
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat
 
-    def grid_coordinates_to_geodetic(self, coord: list[tuple[int, int]], animal_id: str) -> pd.DataFrame:
-        utm_traj = self.traj_utm(animal_id)
-        epsg = utm_traj.crs
-        min_x, min_y, max_x, max_y = utm_traj.df.total_bounds
-        # todo: rewrite padded bbox to accept tuple
-        min_x, min_y, max_x, max_y = padded_bbox(min_x, min_y, max_x, max_y, padding=0.2)
-        width, height = AnimalMovementProcessor._grid_shape_from_bbox((min_x, min_y, max_x, max_y), self.resolution)
-        df = pd.DataFrame(coord, columns=["gx", "gy"])
-        df["lon"], df["lat"] = df.apply(lambda row: self.grid_to_geo(row["gx"], row["gy"],
-                                                                     min_x, min_y, max_x, max_y, width, height,
-                                                                     epsg), axis=1)
-        # todo: add timestamps
-        return df
-
     def fetch_open_meteo_weather(self, output_folder: str, samples_per_dimension: int = 5):
-        self.weather_samples = samples_per_dimension
+        self.env_samples = samples_per_dimension
         if output_folder is None:
             output_folder = "weather"
         out_directory = Path(output_folder)
         out_directory.mkdir(exist_ok=True, parents=True)
 
-        expected_csv_count = self.weather_samples * self.weather_samples
+        expected_csv_count = self.env_samples * self.env_samples
         results_map: dict[str, str] = {}
         for traj in self.traj.trajectories:
             traj_id = traj.id
@@ -239,8 +247,59 @@ class AnimalMovementProcessor:
                                 interval=(start_date, end_date),
                                 animal_id=traj_id,
                                 animal_dir=animal_dir,
-                                grid_points_per_edge=self.weather_samples,
+                                grid_points_per_edge=self.env_samples,
                                 fetch_hourly=fetch_hourly,
                                 merged_csv_path=merged_csv_path,
                                 results_map=results_map)
         return results_map
+
+    def kernel_params_per_animal_csv(
+            self,
+            df: DataFrame,
+            animal_id: str,
+            kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
+            start_date: datetime.datetime,
+            end_date: datetime.datetime,
+            time_stamp='timestamp',
+            lon='location-long',
+            lat='location-lat',
+            out_directory: str | None = None
+    ):
+        if out_directory is None:
+            out_directory = "kernels"
+        out_directory = Path(out_directory)
+        out_directory.mkdir(exist_ok=True, parents=True)
+
+        results = {}
+        for traj in self.traj.trajectories:
+            aid = traj.id
+            if str(aid) != animal_id:
+                continue
+            bbox = self.bbox_geo(aid)
+            utm_bbox, epsg = self.bbox_utm(aid)
+            width, height = self._grid_shape_from_bbox(utm_bbox, self.resolution)
+            print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
+            terrain_pth = self.terrain_paths.get(str(aid))
+            terrain_map = parse_terrain(file=terrain_pth, delim=' ')
+            df_proc, _ = df_add_properties(
+                df=df,
+                kernel_resolver=kernel_resolver,
+                terrain=terrain_map,
+                bbox_geo=bbox,
+                grid_width=width,
+                grid_height=height,
+                utm_code=epsg,
+                start_date=start_date,
+                end_date=end_date,
+                time_stamp=time_stamp,
+                grid_points_per_edge=5,
+                lon=lon,
+                lat=lat,
+            )
+
+            # Save CSV
+            out_path = os.path.join(out_directory, f"{aid}_kernel_data.csv")
+            df_proc.to_csv(out_path, index=False)
+            results[str(aid)] = out_path
+        print(f"KernelData Saved: {out_path}")
+        return results

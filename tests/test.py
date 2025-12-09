@@ -109,7 +109,7 @@ if __name__ == "__main__":
     study = 'random_walk_package/resources/movebank_test/The Leap of the Cat.csv'
     df = pd.read_csv(study)
 
-    environment_csv = 'random_walk_package/resources/movebank_test/weather_data_full.csv'
+    environment_csv = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
     df_env = pd.read_csv(environment_csv)
 
     processor = AnimalMovementProcessor(data=df,
