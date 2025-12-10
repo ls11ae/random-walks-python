@@ -301,5 +301,5 @@ class AnimalMovementProcessor:
             out_path = os.path.join(out_directory, f"{aid}_kernel_data.csv")
             df_proc.to_csv(out_path, index=False)
             results[str(aid)] = out_path
-        print(f"KernelData Saved: {out_path}")
+        print(f"KernelData Saved: {out_directory}")
         return results

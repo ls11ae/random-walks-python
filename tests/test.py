@@ -137,4 +137,4 @@ if __name__ == "__main__":
                                                    lon='longitude',
                                                    lat='latitude',
                                                    out_directory='random_walk_package/resources/movebank_test/kernel_data')
-    print(paths)
+    print(movement_data)
