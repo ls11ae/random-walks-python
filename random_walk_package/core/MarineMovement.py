@@ -53,9 +53,8 @@ class MarineMovement:
         )
         '''
         self.terrain_data()
-        _, coordinates, _ = self.processor.create_movement_data(
-            samples=-1)  # if i have a lot of enties with smal dt, takes every 100th entry
-        steps = next(iter(coordinates.values()))
+        data_dict = self.processor.create_movement_data_dict()
+        steps = next(iter(data_dict.values()))
         self.data["x"] = [t[0] for t in steps]
         self.data["y"] = [t[1] for t in steps]
 
@@ -211,7 +210,7 @@ class MarineMovement:
 
         print(f"List of saved files: {get_result_annualmean}")
 
-    def compute_current_offset(x, y, age_class, grid_x, grid_y, currents_u, currents_v, dt, alpha_pup=0.6,
+    def compute_current_offset(self, x, y, age_class, grid_x, grid_y, currents_u, currents_v, dt, alpha_pup=0.6,
                                alpha_adult=0.4):
         """
         Compute the ocean-current displacement (meters) for a timestep dt.
@@ -255,7 +254,8 @@ print(data.head())
 
 # although filtering of dates also happens in C, it makes sense to set the dates of the interval of the study here
 
-processor = AnimalMovementProcessor(time_col='timestamp', lon_col='longitude', lat_col='latitude', data=data,
+processor = AnimalMovementProcessor(data=data, lon_col='longitude', time_col='timestamp',
+                                    lat_col='latitude',
                                     id_col="tag-local-identifier", crs="EPSG:4326")
 animal_to_traj = processor.create_movement_data_dict()
 print(animal_to_traj)

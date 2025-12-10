@@ -1,9 +1,9 @@
-import requests
 import pandas as pd
-from pystac_client import Client
-from pyproj import Transformer
 import planetary_computer
+import requests
 import rioxarray
+from pyproj import Transformer
+from pystac_client import Client
 
 from random_walk_package.bindings.data_processing.movebank_parser import Coordinate_array
 
@@ -30,6 +30,7 @@ def reproject_to_utm(infile, outfile=None):
 
     return outfile if outfile else da_utm, epsg_code
 
+
 def lonlat_bbox_to_utm(min_lon, min_lat, max_lon, max_lat, epsg_code):
     transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg_code}", always_xy=True)
     minx, miny = transformer.transform(min_lon, min_lat)
@@ -42,6 +43,7 @@ def utm_bbox_to_lonlat(min_x, min_y, max_x, max_y, epsg_code):
     min_lon, min_lat = transformer.transform(min_x, min_y)
     max_lon, max_lat = transformer.transform(max_x, max_y)
     return min_lon, min_lat, max_lon, max_lat
+
 
 def utm_to_lonlat(x, y, epsg_code):
     transformer = Transformer.from_crs(f"EPSG:{epsg_code}", "EPSG:4326", always_xy=True)
@@ -300,6 +302,7 @@ def fetch_movebank_data_events(study_id, sensor_type_id,
     except Exception as e:
         print(f"An unexpected error occurred with Movebank event data: {e}")
     return None
+
 
 def fetch_weather_for_trajectory(coords: Coordinate_array, timestamps: list[str],
                                  output_filename: str = "weather_trajectory.csv") -> pd.DataFrame:
