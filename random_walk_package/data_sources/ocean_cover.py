@@ -10,6 +10,11 @@ OCEAN_COVER_SHAPE_PATH = "../resources/marine_cover/ne_10m_land.shp"
 OCEAN_COVER_TIF_PATH = "../resources/marine_cover/ne_10m_ocean.tif"
 OCEAN_COVER_TXT_PATH = "../resources/marine_cover/ne_10m_ocean.txt"
 
+OCEAN_VALUE = 0
+LAND_VALUE = 1
+OCEAN_VALUE_MAPPED = 80
+LAND_VALUE_MAPPED = 10
+
 land = gpd.read_file(
     OCEAN_COVER_SHAPE_PATH
 ).to_crs("EPSG:4326")
@@ -60,8 +65,20 @@ print(mask, "land pixels")
 print("non zero pixels" + str(np.count_nonzero(mask)))
 import matplotlib.pyplot as plt
 
-g_x, g_y = 1000, int(1000 / aspect_ratio)
+g_x, g_y = GRID_RESOLUTION_LONGER_AXIS, int(GRID_RESOLUTION_LONGER_AXIS / aspect_ratio)
 landcover_to_discrete_txt(OCEAN_COVER_TIF_PATH, g_x, g_y, minx, miny, maxx, maxy, output=OCEAN_COVER_TXT_PATH)
+
+# dirty fix: remap 0/1 to out landcover classes 80/10. it would be cleaner to do that in landcover_to_discrete_txt, maybe with a 'is_marine:bool' flag
+with open(OCEAN_COVER_TXT_PATH, 'r') as file:
+    data = file.read()
+    data = data.replace(str(OCEAN_VALUE), str(OCEAN_VALUE_MAPPED))
+    data = data.replace(str(LAND_VALUE), str(LAND_VALUE_MAPPED))
+with open(OCEAN_COVER_TXT_PATH, 'w') as file:
+    file.write(data)
+
+mask[mask == OCEAN_VALUE] = OCEAN_VALUE_MAPPED
+mask[mask == LAND_VALUE] = LAND_VALUE_MAPPED
+
 data = np.loadtxt(OCEAN_COVER_TXT_PATH, dtype=int)
 
 plt.imshow(data, cmap="gray")
