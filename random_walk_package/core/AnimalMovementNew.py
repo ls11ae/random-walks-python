@@ -97,6 +97,10 @@ class AnimalMovementProcessor:
         self.longitude_col = lon_col
         self.latitude_col = lat_col
 
+    @property
+    def terrain_path(self):
+        return self.terrain_paths
+
     def traj_utm(self, traj_id):
         # we dont save utm bboxes anymore, we compute them on the fly
         traj = self.traj.get_trajectory(traj_id)
@@ -141,7 +145,8 @@ class AnimalMovementProcessor:
         self.resolution = resolution
         if out_directory is None:
             out_directory = "landcover"
-        out_directory = Path(out_directory)
+
+        out_directory = Path(out_directory, "landcover")
         out_directory.mkdir(exist_ok=True, parents=True)
 
         results = {}
@@ -204,13 +209,60 @@ class AnimalMovementProcessor:
         }
 
     @staticmethod
-    def grid_to_geo(x, y, min_x, min_y, max_x, max_y, width, height, epsg) -> tuple[float, float]:
+    def grid_to_geo(x, y, utm_bbox, width, height, epsg) -> tuple[float, float]:
+        min_x, min_y, max_x, max_y = utm_bbox
         utm_x = min_x + (x / (width - 1)) * (max_x - min_x)
         utm_y = max_y - (y / (height - 1)) * (max_y - min_y)
 
         # UTM -> Geodetic
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat
+
+    def make_timestamped_geodetic_trajectory(self, full_path, movement_traj: MovementTrajectory):
+        """
+        full_path: list of (x, y) grid coords
+        movement_traj: original MovementTrajectory with timestamps
+        """
+
+        # Convert all grid coords → lon/lat
+        geo_df = self.grid_to_geo_path(full_path, movement_traj.traj_id)
+
+        # track segment boundaries
+        steps = movement_traj.df
+        indices = steps.index
+        boundaries = movement_traj.segment_boundaries  # collected during walk building
+
+        rows = []
+        for i in range(len(indices) - 1):
+            t0 = steps.loc[indices[i], "time"]
+            t1 = steps.loc[indices[i + 1], "time"]
+
+            a = boundaries[i]
+            b = boundaries[i + 1]
+            seg = geo_df.iloc[a:b].copy()
+
+            seg["time"] = self.interpolate_timestamps(t0, t1, len(seg))
+            seg["traj_id"] = movement_traj.traj_id
+
+            rows.append(seg)
+
+        df = pd.concat(rows, ignore_index=True)
+        df["geometry"] = gpd.points_from_xy(df.longitude, df.latitude)
+
+        return gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:4326")
+
+    @staticmethod
+    def interpolate_timestamps(start_t, end_t, n_points):
+        """Returns a list of timestamps of length n_points, inclusive."""
+        return pd.date_range(start=start_t, end=end_t, periods=n_points).to_list()
+
+    def grid_to_geo_path(self, path, traj_id):
+        utm_bounds ,epsg = self.bbox_utm(traj_id)
+        width, height = self._grid_shape_from_bbox(utm_bounds, self.resolution)
+        geo = [self.grid_to_geo(x,y, utm_bounds, width, height,epsg) for x, y in path]
+        df = pd.DataFrame(geo, columns=["longitude", "latitude"])
+        return df
+
 
     def fetch_open_meteo_weather(self, output_folder: str, samples_per_dimension: int = 5):
         self.env_samples = samples_per_dimension

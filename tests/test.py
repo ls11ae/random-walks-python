@@ -13,6 +13,7 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
+from tests.mixed_walk_test import test_mixed_walk
 
 
 def weather_terrain_params(landmark, row):
@@ -106,6 +107,8 @@ def environment_pipeline_test():
 
 
 if __name__ == "__main__":
+    test_mixed_walk()
+    exit(0)
     study = 'random_walk_package/resources/movebank_test/The Leap of the Cat.csv'
     df = pd.read_csv(study)
 

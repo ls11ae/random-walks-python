@@ -1,8 +1,11 @@
 import os.path
 from math import isclose
+from pathlib import Path
 from typing import Optional
+import movingpandas as mpd
 
 import folium
+from folium.plugins import TimestampedGeoJson
 
 
 def _color_cycle():
@@ -201,3 +204,59 @@ def walk_to_osm(
     out_file = os.path.join(walk_path, out_name)
     m.save(out_file)
     return os.path.abspath(out_file)
+
+def plot_trajectory_collection_timed(traj_coll, save_path="walks/"):
+    """
+    Create a TimeDimension animated map for a MovingPandas TrajectoryCollection.
+    One animated layer per trajectory.
+    """
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    if len(traj_coll.trajectories) == 0:
+        return None
+
+    # Center of first trajectory
+    p = traj_coll.trajectories[0].df.geometry.iloc[0]
+    center = (p.y, p.x)
+
+    m = folium.Map(location=center, zoom_start=14, tiles="OpenStreetMap")
+
+    features = []
+
+    for traj in traj_coll.trajectories:
+        traj_id = str(traj.id)
+
+        df = traj.df
+        coords = [(pt.x, pt.y) for pt in df.geometry]  # Note GeoJSON = [lon, lat]
+        times = df.index.astype(str).tolist()
+
+        feature = {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coords,
+            },
+            "properties": {
+                "times": times,
+                "style": {"color": "red", "weight": 3},
+                "icon": "circle",
+                "popup": traj_id,
+            }
+        }
+        features.append(feature)
+
+    TimestampedGeoJson(
+        {
+            "type": "FeatureCollection",
+            "features": features,
+        },
+        period="PT1S",            # 1 second per frame
+        add_last_point=True,
+        auto_play=False,
+        loop=False
+    ).add_to(m)
+
+    output = save_path / "trajectories_timed.html"
+    m.save(str(output))
+    return output

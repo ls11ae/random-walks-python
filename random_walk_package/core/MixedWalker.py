@@ -1,11 +1,16 @@
+import os.path
 import subprocess
 from pathlib import Path
 
+import geopandas as gpd
+import pandas as pd
+import movingpandas as mpd
+import folium
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
-from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
+from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
 from random_walk_package.core.WalkerHelper import WalkerHelper
-from random_walk_package.data_sources.walk_visualization import walk_to_osm
+from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed
 
 try:
     from random_walk_package.bindings.cuda.mixed_gpu import preprocess_mixed_gpu, mixed_walk_gpu, free_kernel_pool
@@ -30,44 +35,37 @@ except (AttributeError, ImportError, OSError) as e:
 
 
 class MixedWalker:
-    def __init__(self, T=30, S=9, animal_type=MEDIUM, resolution=100, kernel_mapping=None, study_folder=None):
-        self.T = T
+    def __init__(self, data,
+                 kernel_mapping,
+                 resolution,
+                 out_directory,
+                 time_col="timestamp",
+                 lon_col="longitude",
+                 lat_col="latitude",
+                 id_col="animal_id",
+                 crs="EPSG:4326"):
+        self.data = data
+        self.time_col = time_col
+        self.lon_col = lon_col
+        self.lat_col = lat_col
+        self.id_col = id_col
+        self.crs = crs
         self.resolution = resolution
-        self.mapping = kernel_mapping if kernel_mapping is not None else create_mixed_kernel_parameters(animal_type, S)
-        self.tensor_map = None
+        self.out_directory = out_directory
         self.movebank_processor = None
+        self.mapping = kernel_mapping
 
-        self.script_dir = os.path.dirname(os.path.realpath(__file__))
-        self.base_project_dir = os.path.abspath(os.path.join(self.script_dir, '..'))
-
-        self.study_folder = os.path.join(self.base_project_dir, 'resources')
-        if study_folder:
-            self.study_folder = os.path.join(self.study_folder, study_folder)
-
-        print(f"Using study folder: {self.study_folder}")
-
-        # Find the only CSV file in the study_folder
-        csv_files = [f for f in os.listdir(self.study_folder) if f.endswith('.csv')]
-        if len(csv_files) != 1:
-            raise FileNotFoundError("Expected exactly one CSV file in the study folder.")
-        self.movebank_study = os.path.join(self.study_folder, csv_files[0])
-
-        self.serialization_path = os.path.join(self.study_folder, 'serialization')
-        if not os.path.exists(self.serialization_path):
-            os.makedirs(self.serialization_path)
-
-        # Create walks folder in study_folder and set as walks_path
-        self.walks_path = os.path.join(self.study_folder, 'walks')
-        if not os.path.exists(self.walks_path):
-            os.makedirs(self.walks_path)
-
-        self.aid_to_terrain_path = self.study_folder
         self._process_movebank_data()
 
     def _process_movebank_data(self):
-        self.movebank_processor = AnimalMovementProcessor(self.movebank_study)
-        self.aid_to_terrain_path = self.movebank_processor.create_landcover_data_txt(self.resolution,
-                                                                                     out_directory=self.study_folder)
+        self.movebank_processor = AnimalMovementProcessor(data=self.data,
+                                                          time_col=self.time_col,
+                                                          lon_col=self.lon_col,
+                                                          lat_col=self.lat_col,
+                                                          id_col=self.id_col,
+                                                          crs=self.crs)
+        self.movebank_processor.create_landcover_data_txt(resolution=self.resolution,
+                                                          out_directory=self.out_directory)
 
     @staticmethod
     def has_cuda():
@@ -77,103 +75,185 @@ class MixedWalker:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
-    def generate_movebank_walks(self, serialized=False):
-        use_cuda = False  # self.has_cuda()
-        grid_steps_dict, geo_steps_dict, times = self.movebank_processor.create_movement_data(samples=-1)
+    def generate_movebank_walks(self, walks_dir, serialization_dir=None):
+        """
+        Build random-walk trajectories for each animal, linear-interpolate timestamps
+        for intermediate points, return a single mpd.TrajectoryCollection containing
+        all animals.
+        """
+        use_cuda = self.has_cuda()
+        steps_dict = self.movebank_processor.create_movement_data_dict()
 
+        serialized: bool = serialization_dir is not None
         recmp: bool = True
-        serialization_dir = Path(self.base_project_dir) / 'resources' / self.serialization_path / 'tensors'
 
-        geodetic_walks: dict[str, list[tuple[float, float]]] = {}
-
-        if serialization_dir.exists() and any(serialization_dir.iterdir()):
+        if serialization_dir is not None and serialization_dir.exists() and any(serialization_dir.iterdir()):
             recmp = False
-        for animal_id, steps in grid_steps_dict.items():
-            spatial_map = parse_terrain(file=self.aid_to_terrain_path[animal_id], delim=' ')
-            print(f"Loaded terrain from {self.aid_to_terrain_path[animal_id]}")
+
+        per_animal_gdfs = []  # collect final GeoDataFrames per animal
+
+        for animal_id, trajectory in steps_dict.items():
+            terrain_map = parse_terrain(file=self.movebank_processor.terrain_paths[animal_id], delim=' ')
+            kernel_map = None
+            steps = trajectory.df
             if serialized and recmp:
-                tensor_map_terrain_serialize(spatial_map, self.mapping, self.serialization_path)
-                print(f"Serialized terrain map to {self.serialization_path}")
+                tensor_map_terrain_serialize(terrain_map, self.mapping, serialization_dir)
+                print(f"Serialized terrain map to {serialization_dir}")
             else:
                 print("create kernels")
-                self.tensor_map = get_tensor_map_terrain(spatial_map, self.mapping)
+                kernel_map = get_tensor_map_terrain(terrain_map, self.mapping)
                 print("create tensor map")
 
-            kernel_pool = preprocess_mixed_gpu(self.tensor_map, spatial_map) if use_cuda else None
+            kernel_pool = preprocess_mixed_gpu(kernel_map, terrain_map) if use_cuda else None
 
-            width = spatial_map.width
-            height = spatial_map.height
+            width = terrain_map.width
+            height = terrain_map.height
             full_path = []
-            for i in range(len(steps) - 1):
-                start_x, start_y = steps[i]
-                end_x, end_y = steps[i + 1]
-                print("Start: " + str(start_x) + ", " + str(start_y))
-                print(start_x, start_y, end_x, end_y)
+            steps_df = steps_dict[animal_id].df
+            idx = steps_df.index
 
+            # track segment boundaries so we can slice full_path per original segment
+            segment_boundaries = [0]
+
+            for i in range(len(idx) - 1):
+                start_x, start_y = steps["grid_x"].iloc[i], steps["grid_y"].iloc[i]
+                end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
+
+                print("Start: " + str(start_x) + ", " + str(start_y))
+                manhattan = abs(start_x - end_x) + abs(start_y - end_y)
+                T = 5 if manhattan < 5 else manhattan
+
+                dp_dir = None
                 if start_x == end_x and start_y == end_y:
-                    full_path.extend([(start_x, start_y)])
+                    # still record a single point segment
+                    segment = [(start_x, start_y)]
+                else:
+                    if serialized:
+                        dp_dir = os.path.join(serialization_dir, str(start_x), str(start_y),
+                                              "DP_T" + str(T) + "_X" + str(start_x) + "_Y" + str(start_y))
+                        if os.path.exists(dp_dir):
+                            recmp = True
+                        else:
+                            os.makedirs(dp_dir)
+
+                    # Initialize DP matrix for the current start point
+                    dp_matrix_step = None
+                    if use_cuda:
+                        walk_ptr = mixed_walk_gpu(T, width, height, start_x, start_y, end_x, end_y, kernel_map,
+                                                  self.mapping, terrain_map, serialized, serialization_dir,
+                                                  kernel_pool)
+                    else:
+                        dp_matrix_step = mix_walk(W=width, H=height, terrain_map=terrain_map,
+                                                  kernels_map=kernel_map,
+                                                  start_x=int(start_x),
+                                                  start_y=int(start_y),
+                                                  T=T,
+                                                  serialize=serialized,
+                                                  recompute=recmp,
+                                                  serialize_path=serialization_dir,
+                                                  mapping=self.mapping)
+                        # Backtrace from the end point
+                        walk_ptr = mix_backtrace_c(
+                            DP_Matrix=dp_matrix_step,
+                            T=T,
+                            tensor_map=kernel_map,
+                            terrain=terrain_map,
+                            end_x=int(end_x),
+                            end_y=int(end_y),
+                            serialize=serialized,
+                            serialize_path=serialization_dir if serialized else "",
+                            dp_dir=dp_dir if dp_dir else "",
+                            mapping=self.mapping
+                        )
+
+                    if walk_ptr is not None:
+                        segment = get_walk_points(walk_ptr)
+                    else:
+                        segment = [(start_x, start_y), (end_x, end_y)]
+
+                    # Cleanup C memory for DP matrix (only if non-serialized & CPU)
+                    if not serialized and not use_cuda:
+                        dll.tensor4D_free(dp_matrix_step, T)
+                    dll.point2d_array_free(walk_ptr)
+
+                full_path.extend(segment[:-1] if len(segment) > 1 else segment)
+                segment_boundaries.append(len(full_path))
+
+            # After loop, append final endpoint of last original step (to close path)
+            last_row = steps_df.iloc[-1]
+            last_grid = (int(last_row["grid_x"]), int(last_row["grid_y"]))
+            # ensure last point is present
+            if len(full_path) == 0 or full_path[-1][0] != last_grid[0] or full_path[-1][1] != last_grid[1]:
+                full_path.append(last_grid)
+
+            # Now convert full_path (list of (x,y)) into geodetic DataFrame
+            # NOTE: grid_to_geo_path is expected to return a DataFrame with columns ["longitude", "latitude"]
+            geodetic_path_df = self.movebank_processor.grid_to_geo_path(full_path, animal_id)
+            # If grid_to_geo_path returns list of tuples, convert:
+            if not isinstance(geodetic_path_df, pd.DataFrame):
+                geodetic_path_df = pd.DataFrame(geodetic_path_df, columns=["longitude", "latitude"])
+
+            # Build timestamped segments using segment_boundaries
+            rows = []
+            for i in range(len(idx) - 1):
+                t_start = steps_df.loc[idx[i], "time"]
+                t_end = steps_df.loc[idx[i + 1], "time"]
+
+                a = segment_boundaries[i]
+                b = segment_boundaries[i + 1]
+                # slice; ensure we don't go out of range
+                seg_df = geodetic_path_df.iloc[a:b].copy()
+                n = len(seg_df)
+                if n == 0:
                     continue
 
-                print(self.serialization_path)
-                dp_dir = os.path.join(self.base_project_dir, 'resources', self.serialization_path,
-                                      "DP_T" + str(self.T) + "_X" + str(start_x) + "_Y" + str(start_y))
-                print(f"Recomputing {recmp}")
-                # Initialize DP matrix for the current start point
-                t = abs(start_x - end_x) + abs(start_y - end_y)
-                self.T = 5 if t < 5 else t
-                print(f"Setting T to {self.T}")
-                if use_cuda:
-                    walk_ptr = mixed_walk_gpu(self.T, width, height, start_x, start_y, end_x, end_y, self.tensor_map,
-                                              self.mapping, spatial_map, False, "", kernel_pool)
-                else:
-                    dp_matrix_step = mix_walk(W=width, H=height, terrain_map=spatial_map, kernels_map=self.tensor_map,
-                                              start_x=int(start_x), start_y=int(start_y), T=self.T,
-                                              serialize=serialized,
-                                              recompute=recmp,
-                                              serialize_path=self.serialization_path, mapping=self.mapping)
-                    if serialized:
-                        print(dp_dir)
-                    # Backtrace from the end point
-                    walk_ptr = mix_backtrace_c(
-                        DP_Matrix=dp_matrix_step,
-                        T=self.T,
-                        tensor_map=self.tensor_map,
-                        terrain=spatial_map,
-                        end_x=int(end_x),
-                        end_y=int(end_y),
-                        serialize=serialized,
-                        serialize_path=self.serialization_path,
-                        dp_dir=dp_dir,
-                        mapping=self.mapping
-                    )
-                if walk_ptr is not None:
-                    segment = get_walk_points(walk_ptr)
-                else:
-                    segment = [(start_x, start_y), (end_x, end_y)]
-                # Cleanup C memory
-                if not serialized and not use_cuda:
-                    dll.tensor4D_free(dp_matrix_step, self.T)
-                dll.point2d_array_free(walk_ptr)
+                seg_df["time"] = self.movebank_processor.interpolate_timestamps(t_start, t_end, n)
+                seg_df["traj_id"] = animal_id
+                rows.append(seg_df)
 
-                # Concatenate paths (skip duplicate point)
-                full_path.extend(segment[:-1])
+            # Also add final single-point segment if necessary (from last observation)
+            # if the last segment boundary didn't include the final appended grid point, include it
+            if segment_boundaries[-1] < len(geodetic_path_df):
+                last_seg = geodetic_path_df.iloc[segment_boundaries[-1]:].copy()
+                if len(last_seg) > 0:
+                    t_last = steps_df.loc[idx[-1], "time"]
+                    last_seg["time"] = [t_last] * len(last_seg)
+                    last_seg["traj_id"] = animal_id
+                    rows.append(last_seg)
 
-            print(
-                f"Finished walking {animal_id} from {steps[0]} to {steps[-1]} with {len(steps)} steps."
-            )
+            if len(rows) == 0:
+                # fallback: create a single point at original observation 0
+                lon, lat = geodetic_path_df.loc[0, ["longitude", "latitude"]]
+                t0 = steps_df.loc[idx[0], "time"]
+                rows = [pd.DataFrame([{"longitude": lon, "latitude": lat, "time": t0, "traj_id": animal_id}])]
+
+            final_df = pd.concat(rows, ignore_index=True)
+            final_df["geometry"] = gpd.points_from_xy(final_df.longitude, final_df.latitude)
+            final_gdf = gpd.GeoDataFrame(final_df, geometry="geometry", crs="EPSG:4326")
+
+            per_animal_gdfs.append(final_gdf)
+
             free_kernel_pool(kernel_pool)
-            # Add final point
-            full_path.append(steps[-1])
-            grid_steps_dict[animal_id] = self.movebank_processor.grid_coordinates_to_geodetic(steps, animal_id)
-            geodetic_path = self.movebank_processor.grid_coordinates_to_geodetic(full_path, animal_id)
-            geodetic_walks[animal_id] = geodetic_path
-            walk_to_osm(walk_coords_or_dict=geodetic_path, original_coords=geo_steps_dict[animal_id],
-                        step_annotations=grid_steps_dict,
-                        animal_id=animal_id, walk_path=self.walks_path, annotated=True)
-            kernels_map3d_free(self.tensor_map)
-        map_path = os.path.join(self.walks_path, "entire_study.html")
-        walk_to_osm(geodetic_walks, None, "entire study", self.walks_path, grid_steps_dict, map_path)
-        return map_path
+            kernels_map3d_free(kernel_map)
+
+        # Combine all animals into a single GeoDataFrame and create one TrajectoryCollection
+        if len(per_animal_gdfs) == 0:
+            return mpd.TrajectoryCollection(gpd.GeoDataFrame(columns=["geometry"]), traj_id_col="traj_id", t="time")
+
+        combined = pd.concat(per_animal_gdfs, ignore_index=True)
+        combined_gdf = gpd.GeoDataFrame(combined, geometry="geometry", crs="EPSG:4326")
+
+        # Ensure 'time' column is datetime-like
+        combined_gdf["time"] = pd.to_datetime(combined_gdf["time"])
+
+        # Create a TrajectoryCollection with traj_id column used to split trajectories
+        traj_collection = mpd.TrajectoryCollection(combined_gdf, traj_id_col="traj_id", t="time")
+
+        # Optionally: plot immediately
+        out_directory = Path(self.out_directory, "walks")
+        out_directory.mkdir(exist_ok=True, parents=True)
+        leaflet_path = plot_trajectory_collection_timed(traj_collection, save_path=str(out_directory))
+        return traj_collection, leaflet_path
 
     @staticmethod
     def generate_custom_walks(terrain, steps, T, kernel_mapping, plot=False, plot_title="Mixed Walk"):
