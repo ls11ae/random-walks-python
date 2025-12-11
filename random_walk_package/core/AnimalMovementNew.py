@@ -65,7 +65,7 @@ class AnimalMovementProcessor:
         ----------
         traj : mpd.TrajectoryCollection
             A TrajectoryCollection object containing processed trajectories.
-        terrain_paths : dict[str, str]
+        terrain_paths : dict[id, str]
             A dictionary storing terrain text paths for each unique animal identifier.
         resolution : None
             the number of cells in the regular grid along the longer axis of the bounding box.
@@ -91,7 +91,7 @@ class AnimalMovementProcessor:
                 traj_id_col=id_col,
                 t=time_col,
             )
-        self.terrain_paths: dict[str, str] = {}  # terrain txt path per animal_id
+        self.terrain_paths = {}  # terrain txt path per animal_id
         self.resolution = None
         self.env_samples = 5
         self.longitude_col = lon_col
@@ -181,12 +181,12 @@ class AnimalMovementProcessor:
                 str(txt_path),
             )
 
-            results[str(traj_id)] = str(txt_path)
+            results[traj_id] = str(txt_path)
 
         self.terrain_paths = results
         return results
 
-    def create_movement_data(self, traj_id: str):
+    def create_movement_data(self, traj_id):
         traj_utm = self.traj_utm(traj_id)
         utm_bbox, _ = self.bbox_utm(traj_id)
         xmin, ymin, xmax, ymax = utm_bbox
@@ -204,7 +204,7 @@ class AnimalMovementProcessor:
 
     def create_movement_data_dict(self):
         return {
-            str(traj.id): self.create_movement_data(str(traj.id))
+            traj.id: self.create_movement_data(traj.id)
             for traj in self.traj.trajectories
         }
 
@@ -257,12 +257,11 @@ class AnimalMovementProcessor:
         return pd.date_range(start=start_t, end=end_t, periods=n_points).to_list()
 
     def grid_to_geo_path(self, path, traj_id):
-        utm_bounds ,epsg = self.bbox_utm(traj_id)
+        utm_bounds, epsg = self.bbox_utm(traj_id)
         width, height = self._grid_shape_from_bbox(utm_bounds, self.resolution)
-        geo = [self.grid_to_geo(x,y, utm_bounds, width, height,epsg) for x, y in path]
+        geo = [self.grid_to_geo(x, y, utm_bounds, width, height, epsg) for x, y in path]
         df = pd.DataFrame(geo, columns=["longitude", "latitude"])
         return df
-
 
     def fetch_open_meteo_weather(self, output_folder: str, samples_per_dimension: int = 5):
         self.env_samples = samples_per_dimension
@@ -331,7 +330,7 @@ class AnimalMovementProcessor:
             utm_bbox, epsg = self.bbox_utm(aid)
             width, height = self._grid_shape_from_bbox(utm_bbox, self.resolution)
             print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
-            terrain_pth = self.terrain_paths.get(str(aid))
+            terrain_pth = self.terrain_paths.get(aid)
             terrain_map = parse_terrain(file=terrain_pth, delim=' ')
             df_proc, _ = df_add_properties(
                 df=df,

@@ -3,9 +3,9 @@ import subprocess
 from pathlib import Path
 
 import geopandas as gpd
-import pandas as pd
 import movingpandas as mpd
-import folium
+import pandas as pd
+
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
@@ -75,7 +75,7 @@ class MixedWalker:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
-    def generate_movebank_walks(self, walks_dir, serialization_dir=None):
+    def generate_movebank_walks(self, serialization_dir=None):
         """
         Build random-walk trajectories for each animal, linear-interpolate timestamps
         for intermediate points, return a single mpd.TrajectoryCollection containing
@@ -87,7 +87,8 @@ class MixedWalker:
         serialized: bool = serialization_dir is not None
         recmp: bool = True
 
-        if serialization_dir is not None and serialization_dir.exists() and any(serialization_dir.iterdir()):
+        if serialization_dir is not None and Path(serialization_dir).exists() and any(
+                Path(serialization_dir).iterdir()):
             recmp = False
 
         per_animal_gdfs = []  # collect final GeoDataFrames per animal

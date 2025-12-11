@@ -67,5 +67,7 @@ def free_kernel_pool(kernel_pool: KernelPoolCPointer):
 def mixed_walk_gpu(time: int, width: int, height: int, start_x: int, start_y: int, end_x: int, end_y: int,
                    kernels_map: KernelsMap3DPtr, mapping: KernelParametersMappingPtr, terrain_map: TerrainMapPtr,
                    serialize: bool, serialization_path: str, kernel_pool: KernelPoolCPointer) -> Point2DArrayPtr:
+    if serialization_path is None:
+        serialization_path = ""
     return dll.gpu_mixed_walk(time, width, height, start_x, start_y, end_x, end_y, kernels_map, mapping, terrain_map,
                               serialize, serialization_path.encode('ascii'), kernel_pool)
