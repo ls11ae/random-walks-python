@@ -109,7 +109,7 @@ def environment_pipeline_test():
 if __name__ == "__main__":
     test_mixed_walk()
     exit(0)
-    study = 'random_walk_package/resources/movebank_test/The Leap of the Cat.csv'
+    study = 'random_walk_package/resources/movebank_test/The Leap of the Cat2.csv'
     df = pd.read_csv(study)
 
     environment_csv = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
@@ -122,7 +122,7 @@ if __name__ == "__main__":
                                         id_col="tag-local-identifier",
                                         crs="EPSG:4326")
     # creates landcover grid txt files
-    processor.create_landcover_data_txt(resolution=200,
+    processor.create_landcover_data_txt(resolution=500,
                                         out_directory='random_walk_package/resources/movebank_test/terrain')
     # processor.fetch_open_meteo_weather('random_walk_package/resources/leap_of_the_cat/weather', samples_per_dimension=2)
     movement_data = processor.create_movement_data_dict()
