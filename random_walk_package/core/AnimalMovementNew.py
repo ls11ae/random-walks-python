@@ -218,44 +218,6 @@ class AnimalMovementProcessor:
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat
 
-    def make_timestamped_geodetic_trajectory(self, full_path, movement_traj: MovementTrajectory):
-        """
-        full_path: list of (x, y) grid coords
-        movement_traj: original MovementTrajectory with timestamps
-        """
-
-        # Convert all grid coords → lon/lat
-        geo_df = self.grid_to_geo_path(full_path, movement_traj.traj_id)
-
-        # track segment boundaries
-        steps = movement_traj.df
-        indices = steps.index
-        boundaries = movement_traj.segment_boundaries  # collected during walk building
-
-        rows = []
-        for i in range(len(indices) - 1):
-            t0 = steps.loc[indices[i], "time"]
-            t1 = steps.loc[indices[i + 1], "time"]
-
-            a = boundaries[i]
-            b = boundaries[i + 1]
-            seg = geo_df.iloc[a:b].copy()
-
-            seg["time"] = self.interpolate_timestamps(t0, t1, len(seg))
-            seg["traj_id"] = movement_traj.traj_id
-
-            rows.append(seg)
-
-        df = pd.concat(rows, ignore_index=True)
-        df["geometry"] = gpd.points_from_xy(df.longitude, df.latitude)
-
-        return gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:4326")
-
-    @staticmethod
-    def interpolate_timestamps(start_t, end_t, n_points):
-        """Returns a list of timestamps of length n_points, inclusive."""
-        return pd.date_range(start=start_t, end=end_t, periods=n_points).to_list()
-
     def grid_to_geo_path(self, path, traj_id):
         utm_bounds, epsg = self.bbox_utm(traj_id)
         width, height = self._grid_shape_from_bbox(utm_bounds, self.resolution)

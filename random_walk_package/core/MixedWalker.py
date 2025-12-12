@@ -195,38 +195,7 @@ class MixedWalker:
                 geodetic_path_df = pd.DataFrame(geodetic_path_df, columns=["longitude", "latitude"])
 
             # Build timestamped segments using segment_boundaries
-            rows = []
-            for i in range(len(idx) - 1):
-                t_start = steps_df.loc[idx[i], "time"]
-                t_end = steps_df.loc[idx[i + 1], "time"]
-
-                a = segment_boundaries[i]
-                b = segment_boundaries[i + 1]
-                # slice; ensure we don't go out of range
-                seg_df = geodetic_path_df.iloc[a:b].copy()
-                n = len(seg_df)
-                if n == 0:
-                    continue
-
-                seg_df["time"] = self.movebank_processor.interpolate_timestamps(t_start, t_end, n)
-                seg_df["traj_id"] = animal_id
-                rows.append(seg_df)
-
-            # Also add final single-point segment if necessary (from last observation)
-            # if the last segment boundary didn't include the final appended grid point, include it
-            if segment_boundaries[-1] < len(geodetic_path_df):
-                last_seg = geodetic_path_df.iloc[segment_boundaries[-1]:].copy()
-                if len(last_seg) > 0:
-                    t_last = steps_df.loc[idx[-1], "time"]
-                    last_seg["time"] = [t_last] * len(last_seg)
-                    last_seg["traj_id"] = animal_id
-                    rows.append(last_seg)
-
-            if len(rows) == 0:
-                # fallback: create a single point at original observation 0
-                lon, lat = geodetic_path_df.loc[0, ["longitude", "latitude"]]
-                t0 = steps_df.loc[idx[0], "time"]
-                rows = [pd.DataFrame([{"longitude": lon, "latitude": lat, "time": t0, "traj_id": animal_id}])]
+            rows = WalkerHelper.create_timed_df(steps_df, geodetic_path_df, animal_id, idx, segment_boundaries)
 
             final_df = pd.concat(rows, ignore_index=True)
             final_df["geometry"] = gpd.points_from_xy(final_df.longitude, final_df.latitude)

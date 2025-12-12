@@ -1,7 +1,6 @@
 from memory_profiler import profile
 
 from random_walk_package import matrix_generator_gaussian_pdf
-from random_walk_package.bindings.plotter import plot_walk
 
 try:
     from random_walk_package.bindings.cuda.brownian_gpu import brownian_walk_gpu
@@ -33,8 +32,5 @@ def test_brownian_walk_gpu():
         result_ptr = brownian_walk_gpu(kernel, S=S, T=T, W=W, H=H, start_x=start_x, start_y=start_y, end_x=end_x,
                                        end_y=end_y)
 
-        plot_walk(result_ptr, W, H)
+        # plot_walk(result_ptr, W, H)
     assert 1 == 1
-
-
-test_brownian_walk_gpu()

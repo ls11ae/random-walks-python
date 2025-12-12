@@ -1,37 +1,37 @@
-import pandas as pd
-
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark, \
-    set_landmark_mapping
+from random_walk_package import create_correlated_kernel_parameters
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark
 from random_walk_package.core.MixedWalker import *
 
-studies = ["elephant_study/", "baboon_SA_study/", "random_walk_package/resources/movebank_test/The Leap of the Cat.csv", "Boars_Austria/", "Cranes Kazakhstan/"]
+studies = ["turtles_study/Striped Mud Turtles (Kinosternon baurii) Lakeland, FL.csv",
+           "movebank_test/The Leap of the Cat.csv",
+           "Boars_Austria/",
+           "Cranes Kazakhstan/"]
 
 
 def test_mixed_walk():
-    # todo: dynamic resolution based on bounding box size
-    study = studies[2]
+    resources_dir = os.path.dirname("random_walk_package/resources/")
+    study = os.path.join(resources_dir, studies[0])
     df = pd.read_csv(study)
-    kernel_mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=4)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=6, diffusity=1)
+    kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=3)
+    """set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=4, directions=8, diffusity=1)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
-                         step_size=5,
+                         step_size=4,
                          directions=1,
-                         diffusity=2.6)
+                         diffusity=2.6)"""
     set_forbidden_landmark(kernel_mapping, WATER)
-    out_dir = "random_walk_package/resources/movebank_test/"
+
+    out_dir = os.path.dirname(study)
     walker = MixedWalker(data=df,
                          kernel_mapping=kernel_mapping,
-                         resolution=100,
+                         resolution=400,
                          out_directory=out_dir,
                          time_col="timestamp",
                          lon_col="location-long",
                          lat_col="location-lat",
-                         id_col="tag-local-identifier",
+                         id_col="individual-local-identifier",
                          crs="EPSG:4326")
     walks_dir = out_dir
-    trajectory_collection = walker.generate_movebank_walks(walks_dir)
-
-
+    trajectory_collection = walker.generate_movebank_walks()
 
 
 """def test_time_walker():

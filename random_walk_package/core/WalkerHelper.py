@@ -2,6 +2,7 @@ import logging
 from typing import Optional, Any, Tuple, List
 
 import numpy as np
+import pandas as pd
 
 from random_walk_package import create_gaussian_kernel, MatrixPtr
 from random_walk_package.bindings.data_structures.kernels import kernel_from_array
@@ -113,6 +114,11 @@ class WalkerHelper:
             raise
 
     @staticmethod
+    def interpolate_timestamps(start_t, end_t, n_points):
+        """Returns a list of timestamps of length n_points, inclusive."""
+        return pd.date_range(start=start_t, end=end_t, periods=n_points).to_list()
+
+    @staticmethod
     def generate_multistep_walk(terrain: Any, steps: List[Tuple[int, int]], T: int,
                                 kernel_mapping: Any, tensor_map: Any, plot: bool = False,
                                 plot_title: str = "Correlated Walk on terrain with multiple steps") -> np.ndarray:
@@ -171,3 +177,39 @@ class WalkerHelper:
         except Exception as e:
             logger.error(f"Failed to set kernel: {e}")
             raise
+
+    @staticmethod
+    def create_timed_df(steps_df, geodetic_path_df, animal_id, idx, segment_boundaries):
+        rows = []
+        for i in range(len(idx) - 1):
+            t_start = steps_df.loc[idx[i], "time"]
+            t_end = steps_df.loc[idx[i + 1], "time"]
+
+            a = segment_boundaries[i]
+            b = segment_boundaries[i + 1]
+            # slice; ensure we don't go out of range
+            seg_df = geodetic_path_df.iloc[a:b].copy()
+            n = len(seg_df)
+            if n == 0:
+                continue
+
+            seg_df["time"] = WalkerHelper.interpolate_timestamps(t_start, t_end, n)
+            seg_df["traj_id"] = animal_id
+            rows.append(seg_df)
+
+        # Also add final single-point segment if necessary (from last observation)
+        # if the last segment boundary didn't include the final appended grid point, include it
+        if segment_boundaries[-1] < len(geodetic_path_df):
+            last_seg = geodetic_path_df.iloc[segment_boundaries[-1]:].copy()
+            if len(last_seg) > 0:
+                t_last = steps_df.loc[idx[-1], "time"]
+                last_seg["time"] = [t_last] * len(last_seg)
+                last_seg["traj_id"] = animal_id
+                rows.append(last_seg)
+
+        if len(rows) == 0:
+            # fallback: create a single point at original observation 0
+            lon, lat = geodetic_path_df.loc[0, ["longitude", "latitude"]]
+            t0 = steps_df.loc[idx[0], "time"]
+            rows = [pd.DataFrame([{"longitude": lon, "latitude": lat, "time": t0, "traj_id": animal_id}])]
+        return rows
