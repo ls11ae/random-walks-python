@@ -55,9 +55,9 @@ class MixedWalker:
         self.movebank_processor = None
         self.mapping = kernel_mapping
 
-        self._process_movebank_data()
+        self.process_movebank_data()
 
-    def _process_movebank_data(self):
+    def process_movebank_data(self):
         self.movebank_processor = AnimalMovementProcessor(data=self.data,
                                                           time_col=self.time_col,
                                                           lon_col=self.lon_col,

@@ -96,10 +96,15 @@ class AnimalMovementProcessor:
         self.env_samples = 5
         self.longitude_col = lon_col
         self.latitude_col = lat_col
+        self.start_dt = min(traj.get_start_time() for traj in self.traj.trajectories)
+        self.end_dt = max(traj.get_end_time() for traj in self.traj.trajectories)
 
     @property
     def terrain_path(self):
         return self.terrain_paths
+
+    def time_period(self):
+        return self.start_dt, self.end_dt
 
     def traj_utm(self, traj_id):
         # we dont save utm bboxes anymore, we compute them on the fly
@@ -269,7 +274,6 @@ class AnimalMovementProcessor:
     def kernel_params_per_animal_csv(
             self,
             df: DataFrame,
-            animal_id: str,
             kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
             start_date: datetime.datetime,
             end_date: datetime.datetime,
@@ -286,8 +290,6 @@ class AnimalMovementProcessor:
         results = {}
         for traj in self.traj.trajectories:
             aid = traj.id
-            if str(aid) != animal_id:
-                continue
             bbox = self.bbox_geo(aid)
             utm_bbox, epsg = self.bbox_utm(aid)
             width, height = self._grid_shape_from_bbox(utm_bbox, self.resolution)

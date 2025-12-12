@@ -118,7 +118,7 @@ def df_add_properties(df: DataFrame,
     s_y = grid_height // grid_points_per_edge
 
     # add landcover info
-    clean_df['terrain'] = [terrain_at(terrain, x, y) for x, y in grid_coords]
+    clean_df['terrain'] = [dll.terrain_at(x, y, terrain) for x, y in grid_coords]
 
     # maps terrain grid coordinates to environment grid coordinates
     # typically the env grid is much smaller

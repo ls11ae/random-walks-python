@@ -10,7 +10,7 @@ studies = ["turtles_study/Striped Mud Turtles (Kinosternon baurii) Lakeland, FL.
 
 def test_mixed_walk():
     resources_dir = os.path.dirname("random_walk_package/resources/")
-    study = os.path.join(resources_dir, studies[0])
+    study = os.path.join(resources_dir, studies[1])
     df = pd.read_csv(study)
     kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=3)
     """set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=4, directions=8, diffusity=1)
@@ -23,7 +23,7 @@ def test_mixed_walk():
     out_dir = os.path.dirname(study)
     walker = MixedWalker(data=df,
                          kernel_mapping=kernel_mapping,
-                         resolution=400,
+                         resolution=200,
                          out_directory=out_dir,
                          time_col="timestamp",
                          lon_col="location-long",
