@@ -1,6 +1,7 @@
 from random_walk_package import create_correlated_kernel_parameters
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark
 from random_walk_package.core.MixedWalker import *
+from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed
 
 studies = ["turtles_study/Striped Mud Turtles (Kinosternon baurii) Lakeland, FL.csv",
            "movebank_test/The Leap of the Cat.csv",
@@ -32,6 +33,7 @@ def test_mixed_walk():
                          crs="EPSG:4326")
     walks_dir = out_dir
     trajectory_collection = walker.generate_movebank_walks()
+    leaflet_path = plot_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))
 
 
 """def test_time_walker():

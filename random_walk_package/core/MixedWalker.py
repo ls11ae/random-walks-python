@@ -10,7 +10,6 @@ from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
 from random_walk_package.core.WalkerHelper import WalkerHelper
-from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed
 
 try:
     from random_walk_package.bindings.cuda.mixed_gpu import preprocess_mixed_gpu, mixed_walk_gpu, free_kernel_pool
@@ -55,9 +54,7 @@ class MixedWalker:
         self.movebank_processor = None
         self.mapping = kernel_mapping
 
-        self.process_movebank_data()
-
-    def process_movebank_data(self):
+    def _process_movebank_data(self):
         self.movebank_processor = AnimalMovementProcessor(data=self.data,
                                                           time_col=self.time_col,
                                                           lon_col=self.lon_col,
@@ -81,6 +78,7 @@ class MixedWalker:
         for intermediate points, return a single mpd.TrajectoryCollection containing
         all animals.
         """
+        self._process_movebank_data()
         use_cuda = self.has_cuda()
         steps_dict = self.movebank_processor.create_movement_data_dict()
 
@@ -172,7 +170,6 @@ class MixedWalker:
                     else:
                         segment = [(start_x, start_y), (end_x, end_y)]
 
-                    # Cleanup C memory for DP matrix (only if non-serialized & CPU)
                     if not serialized and not use_cuda:
                         dll.tensor4D_free(dp_matrix_step, T)
                     dll.point2d_array_free(walk_ptr)
@@ -187,8 +184,7 @@ class MixedWalker:
             if len(full_path) == 0 or full_path[-1][0] != last_grid[0] or full_path[-1][1] != last_grid[1]:
                 full_path.append(last_grid)
 
-            # Now convert full_path (list of (x,y)) into geodetic DataFrame
-            # NOTE: grid_to_geo_path is expected to return a DataFrame with columns ["longitude", "latitude"]
+            # convert full_path (list of (x,y)) into geodetic DataFrame
             geodetic_path_df = self.movebank_processor.grid_to_geo_path(full_path, animal_id)
             # If grid_to_geo_path returns list of tuples, convert:
             if not isinstance(geodetic_path_df, pd.DataFrame):
@@ -218,12 +214,7 @@ class MixedWalker:
 
         # Create a TrajectoryCollection with traj_id column used to split trajectories
         traj_collection = mpd.TrajectoryCollection(combined_gdf, traj_id_col="traj_id", t="time")
-
-        # Optionally: plot immediately
-        out_directory = Path(self.out_directory, "walks")
-        out_directory.mkdir(exist_ok=True, parents=True)
-        leaflet_path = plot_trajectory_collection_timed(traj_collection, save_path=str(out_directory))
-        return traj_collection, leaflet_path
+        return traj_collection
 
     @staticmethod
     def generate_custom_walks(terrain, steps, T, kernel_mapping, plot=False, plot_title="Mixed Walk"):

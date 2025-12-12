@@ -1,4 +1,3 @@
-import datetime
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,7 +39,8 @@ class AnimalMovementProcessor:
                  lon_col="longitude",
                  lat_col="latitude",
                  id_col="animal_id",
-                 crs="EPSG:4326"):
+                 crs="EPSG:4326",
+                 env_samples=5):
         """
         Initializes an instance of a class to process and manage trajectory data.
 
@@ -93,11 +93,11 @@ class AnimalMovementProcessor:
             )
         self.terrain_paths = {}  # terrain txt path per animal_id
         self.resolution = None
-        self.env_samples = 5
+        self.env_samples = env_samples
         self.longitude_col = lon_col
         self.latitude_col = lat_col
-        self.start_dt = min(traj.get_start_time() for traj in self.traj.trajectories)
-        self.end_dt = max(traj.get_end_time() for traj in self.traj.trajectories)
+        self.start_dt = {str(traj.id): traj.get_start_time() for traj in self.traj.trajectories}
+        self.end_dt = {str(traj.id): traj.get_end_time() for traj in self.traj.trajectories}
 
     @property
     def terrain_path(self):
@@ -275,8 +275,6 @@ class AnimalMovementProcessor:
             self,
             df: DataFrame,
             kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
-            start_date: datetime.datetime,
-            end_date: datetime.datetime,
             time_stamp='timestamp',
             lon='location-long',
             lat='location-lat',
@@ -286,8 +284,8 @@ class AnimalMovementProcessor:
             out_directory = "kernels"
         out_directory = Path(out_directory)
         out_directory.mkdir(exist_ok=True, parents=True)
-
         results = {}
+        times = -1
         for traj in self.traj.trajectories:
             aid = traj.id
             bbox = self.bbox_geo(aid)
@@ -296,7 +294,7 @@ class AnimalMovementProcessor:
             print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
             terrain_pth = self.terrain_paths.get(aid)
             terrain_map = parse_terrain(file=terrain_pth, delim=' ')
-            df_proc, _ = df_add_properties(
+            df_proc, t = df_add_properties(
                 df=df,
                 kernel_resolver=kernel_resolver,
                 terrain=terrain_map,
@@ -304,17 +302,18 @@ class AnimalMovementProcessor:
                 grid_width=width,
                 grid_height=height,
                 utm_code=epsg,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=self.start_dt[str(aid)],
+                end_date=self.end_dt[str(aid)],
                 time_stamp=time_stamp,
-                grid_points_per_edge=5,
+                grid_points_per_edge=self.env_samples,
                 lon=lon,
                 lat=lat,
             )
+            times = t if t > times else times
 
             # Save CSV
             out_path = os.path.join(out_directory, f"{aid}_kernel_data.csv")
             df_proc.to_csv(out_path, index=False)
             results[str(aid)] = out_path
         print(f"KernelData Saved: {out_directory}")
-        return results
+        return results, times

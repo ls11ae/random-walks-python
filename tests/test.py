@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 
 from random_walk_package import create_terrain_map, set_forbidden_landmark, WATER, KernelParamsYXT, \
-    EnvironmentInfluenceGrid, dll, point2d_arr_free
+    EnvironmentInfluenceGrid, dll, point2d_arr_free, MixedTimeWalker
 from random_walk_package.bindings import create_mixed_kernel_parameters, HEAVY, get_walk_points, terrain_map_free
 from random_walk_package.bindings.data_processing.environment_handling import parse_kernel_parameters, \
     get_kernels_environment_grid, free_environment_influence_grid, free_kernel_parameters_yxt
@@ -13,6 +13,7 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
+from tests.mixed_walk_test import test_mixed_walk
 
 
 def weather_terrain_params(landmark, row):
@@ -105,12 +106,29 @@ def environment_pipeline_test():
 
 
 if __name__ == "__main__":
-    # test_mixed_walk()
-    study = 'random_walk_package/resources/movebank_test/The Leap of the Cat.csv'
+    test_mixed_walk()
+    study = 'random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv'
     df = pd.read_csv(study)
 
     environment_csv = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
     df_env = pd.read_csv(environment_csv)
+
+    out_dir = os.path.dirname(study)
+
+    mapping = create_mixed_kernel_parameters(animal_type=HEAVY, base_step_size=7)
+    walker = MixedTimeWalker(data=df,
+                             env_data=df_env,
+                             kernel_mapping=mapping,
+                             resolution=400,
+                             out_directory=out_dir,
+                             env_samples=5,
+                             kernel_resolver=weather_terrain_params,
+                             time_col="timestamp",
+                             lon_col="location-long",
+                             lat_col="location-lat",
+                             id_col="tag-local-identifier",
+                             crs="EPSG:4326"
+                             )
 
     processor = AnimalMovementProcessor(data=df,
                                         lat_col="location-lat",
@@ -120,7 +138,7 @@ if __name__ == "__main__":
                                         crs="EPSG:4326")
     # creates landcover grid txt files
     processor.create_landcover_data_txt(resolution=500,
-                                        out_directory='random_walk_package/resources/movebank_test/terrain')
+                                        out_directory='random_walk_package/resources/leap_of_the_cat/terrain')
     # processor.fetch_open_meteo_weather('random_walk_package/resources/leap_of_the_cat/weather', samples_per_dimension=2)
     movement_data = processor.create_movement_data_dict()
 
@@ -128,13 +146,12 @@ if __name__ == "__main__":
     end_date = datetime(2001, 1, 15)
 
     # create kernel params csv files
-    paths = processor.kernel_params_per_animal_csv(df=df_env,
-                                                   animal_id='CAMILA',
-                                                   kernel_resolver=weather_terrain_params,
-                                                   start_date=start_date,
-                                                   end_date=end_date,
-                                                   time_stamp='timestamp',
-                                                   lon='longitude',
-                                                   lat='latitude',
-                                                   out_directory='random_walk_package/resources/movebank_test/kernel_data')
-    print(movement_data)
+    paths, _ = processor.kernel_params_per_animal_csv(df=df_env,
+                                                      kernel_resolver=weather_terrain_params,
+                                                      start_date=start_date,
+                                                      end_date=end_date,
+                                                      time_stamp='timestamp',
+                                                      lon='longitude',
+                                                      lat='latitude',
+                                                      out_directory='random_walk_package/resources/leap_of_the_cat/kernel_data')
+    print(paths)

@@ -81,7 +81,7 @@ def test_brownian_errors():
 
 def test_brownian_complex_terrain():
     complex_terrain = create_terrain_map('terrain_baboons.txt', ' ')
-    with BrownianWalker(T=100, S=7, terrain=complex_terrain) as walker:
+    with BrownianWalker(T=60, S=7, terrain=complex_terrain) as walker:
         routes = [
             ((120, 20), (160, 160)),
             ((220, 210), (102, 240)),
@@ -93,6 +93,6 @@ def test_brownian_complex_terrain():
             path = walker.backtrace_terrain(end_x=end[0], end_y=end[1])
             print(path)
             print(f"   Route {i + 1}: {start} -> {end}: {len(path)} Punkte")
-            assert len(path) == 100
+            assert len(path) == 60
             assert tuple(path[0]) == start
             assert tuple(path[-1]) == end

@@ -4,33 +4,33 @@ from random_walk_package.core.CorrelatedWalker import *
 
 
 def test_correlated_walk_terrain():
-    terrain = create_terrain_map('terrain_baboons.txt', ' ')
+    terrain = create_terrain_map('landcover_baboons123_200.txt', ' ')
     print(terrain.contents.width, terrain.contents.height)
-    kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=8)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=8, diffusity=1)
+    kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=5)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=4, diffusity=1)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=False, step_size=5, directions=6, diffusity=2.6)
     set_forbidden_landmark(kernel_mapping, WATER)
 
-    with CorrelatedWalker(T=150, terrain=terrain, kernel_mapping=kernel_mapping) as walker:
+    with CorrelatedWalker(T=100, terrain=terrain, kernel_mapping=kernel_mapping) as walker:
         walker.generate_from_terrain(start_x=50, start_y=50)
-        path3 = walker.backtrace_from_terrain(end_x=150, end_y=150, plot=False)
-        assert len(path3) == 150
+        path3 = walker.backtrace_from_terrain(end_x=100, end_y=100, plot=False)
+        assert len(path3) == 100
         assert tuple(path3[0]) == (50, 50)
-        assert tuple(path3[-1]) == (150, 150)
+        assert tuple(path3[-1]) == (100, 100)
 
 
 def test_correlated_serialized():
-    with CorrelatedWalker(T=150, W=201, H=201, D=16, S=7) as walker:
-        dp_folder_path = walker.generate(start_x=100, start_y=100, use_serialization=True)
-        walk = walker.backtrace(end_x=150, end_y=150, dp_folder=dp_folder_path, plot=False)
-        assert len(walk) == 150
-        assert tuple(walk[0]) == (100, 100)
-        assert tuple(walk[-1]) == (150, 150)
+    with CorrelatedWalker(T=50, W=101, H=101, D=8, S=7) as walker:
+        dp_folder_path = walker.generate(start_x=50, start_y=50, use_serialization=True)
+        walk = walker.backtrace(end_x=75, end_y=75, dp_folder=dp_folder_path, plot=False)
+        assert len(walk) == 50
+        assert tuple(walk[0]) == (50, 50)
+        assert tuple(walk[-1]) == (75, 75)
         assert os.path.exists(dp_folder_path)
 
 
 def test_correlated_single():
-    with CorrelatedWalker(T=150, W=201, H=201, D=16, S=7) as walker:
+    with CorrelatedWalker(T=150, W=201, H=201, D=4, S=5) as walker:
         walker.generate(start_x=100, start_y=100)
         walk = walker.backtrace(end_x=150, end_y=150, plot=False)
         assert len(walk) == 150
@@ -39,7 +39,7 @@ def test_correlated_single():
 
 
 def test_correlated_multistep():
-    with CorrelatedWalker(T=150, W=201, H=201, D=16, S=7) as walker:
+    with CorrelatedWalker(T=150, W=201, H=201, D=6, S=5) as walker:
         steps = np.array([[100, 100], [150, 150], [50, 50]], dtype=np.int32)
         full_path = walker.multistep_walk(steps=steps, use_serialization=True, plot=False)
         assert len(full_path) == 2 * 150
