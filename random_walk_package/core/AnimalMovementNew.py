@@ -6,6 +6,8 @@ import geopandas as gpd
 import movingpandas as mpd
 from pandas import DataFrame
 from pyproj import CRS
+from importlib import resources
+
 
 from random_walk_package.bindings import parse_terrain
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties
@@ -13,7 +15,7 @@ from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
 from random_walk_package.data_sources.open_meteo_api import create_weather_csvs
-
+from random_walk_package.data_sources.ocean_cover import fetch_ocean_cover_tif
 
 @dataclass
 class MovementTrajectory:
@@ -141,8 +143,23 @@ class AnimalMovementProcessor:
 
         return nx, ny
 
-    def create_landcover_data_txt(self, resolution: int = 200, out_directory: str | None = None) -> dict[str, str]:
-        """Generate per-animal landcover data (TIFF + TXT), named with animal_id and bbox.
+    def create_landcover_data_txt(self, is_marine: bool=False, resolution: int = 200, out_directory: str | None = None) -> dict[str, str]:
+        """
+        Generate per-animal landcover data (TIFF + TXT), named with animal_id and bbox.
+        
+        Parameters
+        ----------
+        shapefile_path : str
+            Path to land boundaries shapefile. Only needed if is_marine = true (e.g., ne_10m_land.shp)    
+            
+        resolution : int, optional
+            Grid resolution identifier for file(default: 200)
+        out_directory : str, optional
+            Output directory path
+            
+        is_marine : bool, optional
+            If True, generate ocean/land cover from shapefile instead of ESA WorldCover.
+            Requires shapefile_path to be provided. (default: False)
 
         Returns:
             dict[str, str]: { animal_id: txt_path }
@@ -150,12 +167,16 @@ class AnimalMovementProcessor:
         self.resolution = resolution
         if out_directory is None:
             out_directory = "landcover"
+        
 
         out_directory = Path(out_directory, "landcover")
         out_directory.mkdir(exist_ok=True, parents=True)
+        
+        shapefile_path = resources.files("random_walk_package.resources.marine_cover") / "ne_10m_land.shp"
+
 
         results = {}
-        for traj in self.traj.trajectories:
+        for traj in self.traj.trajectories: 
             traj_id = traj.id
             # PADDED GEO BBOX (lon/lat)
             min_lon, min_lat, max_lon, max_lat = self.bbox_geo(traj_id)
@@ -171,26 +192,47 @@ class AnimalMovementProcessor:
             )
             tif_path = out_directory / f"{base_name}.tif"
             txt_path = out_directory / f"{base_name}_{resolution}.txt"
+            
 
             # only fetch TIFF if it doesn't exist yet
             if not tif_path.exists():
-                fetch_landcover_data(
+                if is_marine is True:
+                    fetch_ocean_cover_tif(
+                    shapefile_path,
                     (min_lon, min_lat, max_lon, max_lat),
                     str(tif_path),
                 )
-            # always reconstruct terrain txt files
+                else: 
+                    fetch_landcover_data(
+                    (min_lon, min_lat, max_lon, max_lat),
+                    str(tif_path),
+                )
+            
             landcover_to_discrete_txt(
                 str(tif_path),
                 nx, ny,
                 min_lon, max_lat, max_lon, min_lat,
                 str(txt_path),
             )
+            if is_marine is True:
+                with open(txt_path, 'r') as file:
+                    data = file.read()
+                OCEAN_VALUE = 0
+                LAND_VALUE = 1
+                OCEAN_VALUE_MAPPED = 80
+                LAND_VALUE_MAPPED = 10
+                # Use temporary placeholder to avoid conflicts
+                data = data.replace(str(OCEAN_VALUE), str(OCEAN_VALUE_MAPPED))
+                data = data.replace(str(LAND_VALUE), str(LAND_VALUE_MAPPED))
+            
+                with open(txt_path, 'w') as file:
+                    file.write(data)
 
             results[traj_id] = str(txt_path)
 
         self.terrain_paths = results
         return results
-
+    
     def create_movement_data(self, traj_id):
         traj_utm = self.traj_utm(traj_id)
         utm_bbox, _ = self.bbox_utm(traj_id)

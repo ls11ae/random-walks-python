@@ -108,7 +108,7 @@ def fetch_landcover_data(bbox, output_filename="landcover_aoi.tif"):
 
         # project to equiareal grid
         print("Reprojecting to UTM zone...")
-        reproject_to_utm(output_filename, output_filename)
+        reproject_to_utm(output_filename, output_filename)                                    
         return output_filename
 
     except Exception as e:
@@ -364,3 +364,37 @@ def fetch_weather_for_trajectory(coords: Coordinate_array, timestamps: list[str]
     weather_df = pd.DataFrame(weather_data)
     weather_df.to_csv(output_filename)
     return weather_df
+# --- 5. Fetch copernicus currents data ---
+
+def fetch_ocean_data(self, output_directory: str, dataset_id="cmems_mod_glo_phy_anfc_0.083deg_PT1H-m"):
+    
+        "This function is fetching the data about northward and eastward ocean currents with the hardcoded dataset_id from copernicus. Credentials are to be loaded from env file "
+        import copernicusmarine
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        max_lat = self.data["location-lat"].max()
+        max_long = self.data["location-long"].max()
+        min_lat = self.data["location-lat"].min()
+        min_long = self.data["location-long"].min()
+        start_date = self.data["timestamp"].min()
+        end_data = self.data["timestamp"].max()
+        
+        get_result_annualmean = copernicusmarine.subset(
+            dataset_id=dataset_id,
+            output_directory=output_directory,
+            username= os.getenv("COPERNICUS_USERNAME"),
+            password = os.getenv("COPERNICUS_PASSWORD"),
+            minimum_latitude=min_lat,
+            maximum_latitude=max_lat,
+            minimum_longitude=min_long,
+            maximum_longitude=max_long,
+            start_datetime=start_date,
+            end_datetime=end_data,
+            variables=["time", "latitude", "longitude", "uo", "vo"]
+        )
+        import xarray as xr
+        DS = xr.open_dataset(output_directory)
+        copernicus_marine_csv = DS.to_dataframe().to_csv()
+        return copernicus_marine_csv
+        

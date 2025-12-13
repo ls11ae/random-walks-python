@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 from scipy.stats import circmean
-
+from importlib import resources
 from random_walk_package import AnimalMovementProcessor
+from random_walk_package.data_sources.geo_fetcher import fetch_ocean_data
 
 
 def shark_data_filter(data_path):
@@ -12,10 +13,12 @@ def shark_data_filter(data_path):
     data["time"] = pd.to_datetime(data["time"]).dt.normalize()
     data["time"] = data["time"] + pd.Timedelta(hours=12)
     data = data.drop_duplicates(subset=["time"], keep="first")
-    data["tag-local-identifier"] = data["ptt"]
-    data["location-long"] = data["longitude"]
-    data["location-lat"] = data["latitude"]
-    data['timestamp'] = data["time"]
+    data = data.rename(columns={
+    "ptt": "tag-local-identifier",
+    "longitude": "location-long",
+    "latitude": "location-lat",
+    "time": "timestamp"
+    })
 
     return data
 
@@ -29,7 +32,7 @@ class MarineMovement:
 
         # Results stored
         self.data = data
-        self.processor = AnimalMovementProcessor(df=data)
+        self.processor = AnimalMovementProcessor(data=self.data, time_col= "timestamp",lon_col= "location-long", lat_col="location-lat", id_col= "tag-local-identifier", crs="EPSG:4326")
         self.dx = None
         self.dy = None
         self.step_lengths = None
@@ -41,7 +44,7 @@ class MarineMovement:
         self.directional_bias = None
 
     def terrain_data(self):
-        return self.processor.create_landcover_data_txt(resolution=250)
+        return self.processor.create_landcover_data_txt(is_marine= True, resolution=250)
 
     def coordinates_to_xy(self):
         # self.data = data
@@ -55,8 +58,8 @@ class MarineMovement:
         self.terrain_data()
         data_dict = self.processor.create_movement_data_dict()
         steps = next(iter(data_dict.values()))
-        self.data["x"] = [t[0] for t in steps]
-        self.data["y"] = [t[1] for t in steps]
+        self.data["x"] = steps.df["geo_x"].to_list()
+        self.data["y"] = steps.df["geo_y"].to_list()
 
     def compute_step_lengths(self):
         dx = np.diff(self.data["x"])
@@ -83,7 +86,7 @@ class MarineMovement:
         return self.bearings_abs, self.turning_angl
 
     def compute_time_intervals(self):
-        dates = pd.to_datetime(self.data["time"])
+        dates = pd.to_datetime(self.data["timestamp"])
         self.time_diffs = np.diff(dates).astype("timedelta64[s]").astype(float)
         return self.time_diffs
 
@@ -186,29 +189,7 @@ class MarineMovement:
         diffusivity = mean_squared_displacement / (4 * mean_time_step)
         return diffusivity
 
-    def fetch_ocean_data(self, output_directory: str, dataset_id="cmems_mod_glo_phy_anfc_0.083deg_PT1H-m"):
-        "This function is fetching the data about northward and eastward ocean currents with the hardcoded dataset_id from copernicus "
-        import copernicusmarine
-        max_lat = self.data["location-lat"].max()
-        max_long = self.data["location-long"].max()
-        min_lat = self.data["location-lat"].min()
-        min_long = self.data["location-long"].min()
-        start_date = self.data["timestamp"].min()
-        end_data = self.data["timestamp"].max()
-        get_result_annualmean = copernicusmarine.subset(
-            dataset_id=dataset_id,
-            output_directory=output_directory,
-            file_format="csv",
-            minimum_latitude=min_lat,
-            maximum_latitude=max_lat,
-            minimum_longitude=min_long,
-            maximum_longitude=max_long,
-            start_datetime=start_date,
-            end_datetime=end_data,
-            variables=["time", "latitude", "longitude", "uo", "vo"]
-        )
-
-        print(f"List of saved files: {get_result_annualmean}")
+    
 
     def compute_current_offset(self, x, y, age_class, grid_x, grid_y, currents_u, currents_v, dt, alpha_pup=0.6,
                                alpha_adult=0.4):
@@ -235,7 +216,7 @@ class MarineMovement:
 
 data_path = "/home/poiosh/movement_py/shark_13_with_currents.csv"
 data = shark_data_filter(data_path)
-
+print(data.head())
 model = MarineMovement(data=data, age_class="pup")
 
 model.coordinates_to_xy()
@@ -254,8 +235,4 @@ print(data.head())
 
 # although filtering of dates also happens in C, it makes sense to set the dates of the interval of the study here
 
-processor = AnimalMovementProcessor(data=data, lon_col='longitude', time_col='timestamp',
-                                    lat_col='latitude',
-                                    id_col="tag-local-identifier", crs="EPSG:4326")
-animal_to_traj = processor.create_movement_data_dict()
-print(animal_to_traj)
+fetch_ocean_data(data=data,output_directory="ocean_data.csv")
