@@ -49,20 +49,6 @@ dll.mixed_walk_time_compact.argtypes = [
 ]
 dll.mixed_walk_time_compact.restype = POINTER(TensorPtr)
 
-# Wrap time_walk_geo
-dll.time_walk_geo_compact.argtypes = [
-    c_ssize_t,  # T
-    c_char_p,  # csv_path
-    c_char_p,  # terrain_path
-    KernelParametersMappingPtr,  # mapping
-    c_int,  # grid_x
-    c_int,  # grid_y
-    TimedLocation,  # start dated location
-    TimedLocation,  # goal dated location
-    c_bool  # full weather influence
-]
-dll.time_walk_geo_compact.restype = Point2DArrayPtr
-
 dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainMapPtr, KernelParamsXYTPtr,
                                  TimedLocation, TimedLocation]
 dll.time_walk_custom.restype = Point2DArrayPtr
@@ -74,46 +60,6 @@ def environment_mixed_walk(T, mapping, terrain, kernel_parameters, start_date, e
     tloc_start = TimedLocation(start_dt, Point2D(start_point[0], start_point[1]))
     tloc_end = TimedLocation(end_dt, Point2D(end_point[0], end_point[1]))
     return dll.time_walk_custom(T, mapping, terrain, kernel_parameters, tloc_start, tloc_end)
-
-
-def time_walk_geo(T, csv_path, terrain_path, grid_x, grid_y, start, goal, mapping=None, full_weather_influence=False):
-    """
-    Calls the C function time_walk_geo to perform a time-dependent walk with geospatial data.
-
-    Args:
-        T (int): Number of time steps.
-        csv_path (str): Path to CSV file.
-        terrain_path (str): Path to terrain file.
-        grid_x (int): Grid width.
-        grid_y (int): Grid height.
-        start (tuple[int, int]): Start point as (x, y).
-        goal (tuple[int, int]): Goal point as (x, y).
-        mapping: Optional KernelParametersMapping; if None, defaults to create_mixed_kernel_parameters(MEDIUM, 7).
-        full_weather_influence (bool): Whether to use full weather influence.
-    Returns:
-        Point2DArrayPtr: Pointer to the resulting walk.
-    """
-    _script_dir = os.path.dirname(os.path.realpath(__file__))
-    base_project_dir = os.path.join(_script_dir, '..')
-    resources_dir = os.path.join(base_project_dir, 'resources')
-
-    terrain_path = os.path.join(resources_dir, terrain_path)
-    csv_path = os.path.join(resources_dir, csv_path)
-
-    if mapping is None:
-        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-
-    return dll.time_walk_geo_compact(
-        c_ssize_t(T),
-        csv_path.encode('utf-8'),
-        terrain_path.encode('utf-8'),
-        mapping,
-        c_int(grid_x),
-        c_int(grid_y),
-        start,
-        goal,
-        c_bool(full_weather_influence)
-    )
 
 
 def tensor_set_new(tensors):

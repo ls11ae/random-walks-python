@@ -6,7 +6,8 @@ from random_walk_package.wrapper import dll
 dll.parse_kernel_params.argtypes = [c_char_p, DateTimeIntervalPtr, POINTER(Dimensions3D)]
 dll.parse_kernel_params.restype = EnvironmentInfluenceGridPtr
 
-dll.get_kernels_environment_grid.argtypes = [TerrainMapPtr, EnvironmentInfluenceGridPtr, KernelParametersMappingPtr,
+dll.get_kernels_environment_grid.argtypes = [c_int, TerrainMapPtr, EnvironmentInfluenceGridPtr,
+                                             KernelParametersMappingPtr,
                                              c_float]
 dll.get_kernels_environment_grid.restype = KernelParamsXYTPtr
 
@@ -48,9 +49,9 @@ def free_environment_influence_grid(influence_grid: EnvironmentInfluenceGridPtr)
     dll.free_environment_influence_grid(influence_grid)
 
 
-def get_kernels_environment_grid(terrain_map: TerrainMapPtr, influence_grid: EnvironmentInfluenceGridPtr,
+def get_kernels_environment_grid(times: int, terrain_map: TerrainMapPtr, influence_grid: EnvironmentInfluenceGridPtr,
                                  mapping: KernelParametersMappingPtr, environment_weight: float) -> KernelParamsXYTPtr:
-    return dll.get_kernels_environment_grid(terrain_map, influence_grid, mapping, environment_weight)
+    return dll.get_kernels_environment_grid(times, terrain_map, influence_grid, mapping, environment_weight)
 
 
 def free_kernel_parameters_yxt(kernel_params: KernelParamsXYTPtr):

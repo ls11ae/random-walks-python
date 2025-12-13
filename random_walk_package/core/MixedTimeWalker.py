@@ -5,9 +5,9 @@ import movingpandas as mpd
 import pandas as pd
 
 from random_walk_package import KernelParamsYXT, EnvironmentInfluenceGrid, get_walk_points, dll
-from random_walk_package.bindings import parse_terrain, terrain_map_free
+from random_walk_package.bindings import parse_terrain
 from random_walk_package.bindings.data_processing.environment_handling import get_kernels_environment_grid, \
-    parse_kernel_parameters, free_kernel_parameters_yxt, free_environment_influence_grid
+    parse_kernel_parameters, free_environment_influence_grid
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.core.MixedWalker import MixedWalker
 from random_walk_package.core.WalkerHelper import WalkerHelper
@@ -58,13 +58,13 @@ class MixedTimeWalker(MixedWalker):
 
             # track segment boundaries so we can slice full_path per original segment
             segment_boundaries = [0]
-
             for i in range(len(idx) - 1):
                 # Get start/end positions and timestamps
                 start_x, start_y = steps["grid_x"].iloc[i], steps["grid_y"].iloc[i]
                 end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
                 start_date, end_date = steps["time"].iloc[i], steps["time"].iloc[i + 1]
-
+                if start_x == end_x and start_y == end_y:
+                    continue
                 # Count how many timestamps exist for the given interval
                 sub_df = pd.read_csv(self.env_paths[animal_id])
                 sub_df["timestamp"] = pd.to_datetime(sub_df["timestamp"], errors='coerce')
@@ -73,45 +73,43 @@ class MixedTimeWalker(MixedWalker):
 
                 dimensions = self.animal_proc.env_samples, self.animal_proc.env_samples, number_records
                 print(dimensions)
+                manhattan = abs(start_x - end_x) + abs(start_y - end_y)
+                T = 5 if manhattan < 5 else manhattan
 
                 environment_parameters: EnvironmentInfluenceGrid = parse_kernel_parameters(self.env_paths[animal_id],
                                                                                            start_date,
                                                                                            end_date,
                                                                                            dimensions)
 
-                kernel_environment: KernelParamsYXT = get_kernels_environment_grid(terrain_map, environment_parameters,
+                # self.mapping = create_mixed_kernel_parameters(MEDIUM, 7)
+                kernel_environment: KernelParamsYXT = get_kernels_environment_grid(T, terrain_map,
+                                                                                   environment_parameters,
                                                                                    self.mapping,
                                                                                    environment_weight=env_weight)
 
-                manhattan = abs(start_x - end_x) + abs(start_y - end_y)
-                T = 5 if manhattan < 5 else manhattan
+                # Initialize DP matrix for the current start point
+                walk_ptr = environment_mixed_walk(T, self.mapping,
+                                                  terrain_map,
+                                                  kernel_environment,
+                                                  start_date,
+                                                  end_date,
+                                                  start_point=[start_x, start_y],
+                                                  end_point=[end_x, end_y])
+                print("walk created")
+                dll.point2d_array_print(walk_ptr)
 
-                if start_x == end_x and start_y == end_y:
-                    # still record a single point segment
-                    segment = [(start_x, start_y)]
+                if walk_ptr is not None:
+                    segment = get_walk_points(walk_ptr)
                 else:
-                    # Initialize DP matrix for the current start point
-                    walk_ptr = environment_mixed_walk(T, self.mapping,
-                                                      terrain_map,
-                                                      kernel_environment,
-                                                      start_date,
-                                                      end_date,
-                                                      start_point=[start_x, start_y],
-                                                      end_point=[end_x, end_y])
+                    segment = [(start_x, start_y), (end_x, end_y)]
+                dll.point2d_array_free(walk_ptr)
+                print("walk freed")
+                print("grid freed")
+                full_path.extend(segment[:-1] if len(segment) > 1 else segment)
+                segment_boundaries.append(len(full_path))
+                free_environment_influence_grid(environment_parameters)
 
-                    if walk_ptr is not None:
-                        segment = get_walk_points(walk_ptr)
-                    else:
-                        segment = [(start_x, start_y), (end_x, end_y)]
-
-                    dll.point2d_array_free(walk_ptr)
-                    free_kernel_parameters_yxt(kernel_environment)
-                    terrain_map_free(terrain_map)
-                    free_environment_influence_grid(environment_parameters)
-
-                    full_path.extend(segment[:-1] if len(segment) > 1 else segment)
-                    segment_boundaries.append(len(full_path))
-
+            dll.terrain_map_free(terrain_map)
             # After loop, append final endpoint of last original step (to close path)
             last_row = steps_df.iloc[-1]
             last_grid = (int(last_row["grid_x"]), int(last_row["grid_y"]))
