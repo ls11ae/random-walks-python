@@ -49,17 +49,22 @@ dll.mixed_walk_time_compact.argtypes = [
 ]
 dll.mixed_walk_time_compact.restype = POINTER(TensorPtr)
 
-dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainMapPtr, KernelParamsXYTPtr,
+dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainMapPtr, c_char_p, DateTimeIntervalPtr,
+                                 POINTER(Dimensions3D),
                                  TimedLocation, TimedLocation]
 dll.time_walk_custom.restype = Point2DArrayPtr
 
 
-def environment_mixed_walk(T, mapping, terrain, kernel_parameters, start_date, end_date, start_point, end_point):
+def environment_mixed_walk(T, mapping, terrain, csv_path, dimensions, start_date, end_date,
+                           start_point, end_point):
     start_dt = DateTime(start_date.year, start_date.month, start_date.day, start_date.hour)
     end_dt = DateTime(end_date.year, end_date.month, end_date.day, end_date.hour)
+    interval_ptr = pointer(DateTimeInterval(start_dt, end_dt))
+    dimensions_ptr = pointer(Dimensions3D(*dimensions))
+    path_c = csv_path.encode('utf-8')
     tloc_start = TimedLocation(start_dt, Point2D(start_point[0], start_point[1]))
     tloc_end = TimedLocation(end_dt, Point2D(end_point[0], end_point[1]))
-    return dll.time_walk_custom(T, mapping, terrain, kernel_parameters, tloc_start, tloc_end)
+    return dll.time_walk_custom(T, mapping, terrain, path_c, interval_ptr, dimensions_ptr, tloc_start, tloc_end)
 
 
 def tensor_set_new(tensors):

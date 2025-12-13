@@ -1,4 +1,4 @@
-from random_walk_package import create_correlated_kernel_parameters
+from random_walk_package import create_correlated_kernel_parameters, MixedTimeWalker
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark
 from random_walk_package.core.MixedWalker import *
 from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed
@@ -46,7 +46,7 @@ def weather_terrain_params(landmark, row):
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
 
-"""def test_time_walker():
+def test_time_walker():
     study = 'random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv'
     df = pd.read_csv(study)
 
@@ -55,11 +55,11 @@ def weather_terrain_params(landmark, row):
 
     out_dir = os.path.dirname(study)
 
-    mapping = create_mixed_kernel_parameters(animal_type=HEAVY, base_step_size=7)
+    mapping = create_mixed_kernel_parameters(animal_type=HEAVY, base_step_size=5)
     walker = MixedTimeWalker(data=df,
                              env_data=df_env,
                              kernel_mapping=mapping,
-                             resolution=400,
+                             resolution=200,
                              out_directory=out_dir,
                              env_samples=5,
                              kernel_resolver=weather_terrain_params,
@@ -69,4 +69,4 @@ def weather_terrain_params(landmark, row):
                              id_col="tag-local-identifier",
                              crs="EPSG:4326"
                              )
-    walker.generate_walks()"""
+    walker.generate_walks()
