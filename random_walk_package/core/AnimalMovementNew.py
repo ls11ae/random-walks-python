@@ -285,7 +285,7 @@ class AnimalMovementProcessor:
         out_directory = Path(out_directory)
         out_directory.mkdir(exist_ok=True, parents=True)
         results = {}
-        times = -1
+        times = {}
         for traj in self.traj.trajectories:
             aid = traj.id
             bbox = self.bbox_geo(aid)
@@ -309,11 +309,11 @@ class AnimalMovementProcessor:
                 lon=lon,
                 lat=lat,
             )
-            times = t if t > times else times
+            times[aid] = t
 
             # Save CSV
             out_path = os.path.join(out_directory, f"{aid}_kernel_data.csv")
             df_proc.to_csv(out_path, index=False)
             results[str(aid)] = out_path
         print(f"KernelData Saved: {out_directory}")
-        return results, times
+        return results

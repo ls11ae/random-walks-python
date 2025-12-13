@@ -13,7 +13,7 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
-from tests.mixed_walk_test import test_mixed_walk
+from tests.mixed_walk_test import test_time_walker
 
 
 def weather_terrain_params(landmark, row):
@@ -99,13 +99,15 @@ def environment_pipeline_test():
 
     # free C allocated memory (i will probably do that on the C side instead, unless we need these multiple times)
     point2d_arr_free(walk)
-    free_kernel_parameters_yxt(kernel_environment)
     kernel_mapping_free(mapping)
+    free_kernel_parameters_yxt(kernel_environment)
     terrain_map_free(terrain)
     free_environment_influence_grid(environment_parameters)
 
 
 if __name__ == "__main__":
+    test_time_walker()
+    exit(0)
     test_mixed_walk()
     study = 'random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv'
     df = pd.read_csv(study)
