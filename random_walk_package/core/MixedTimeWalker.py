@@ -4,7 +4,8 @@ import geopandas as gpd
 import movingpandas as mpd
 import pandas as pd
 
-from random_walk_package import get_walk_points, dll
+from random_walk_package import dll
+from random_walk_package import get_walk_points
 from random_walk_package.bindings import parse_terrain
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.core.MixedWalker import MixedWalker
@@ -46,7 +47,6 @@ class MixedTimeWalker(MixedWalker):
         """
         steps_dict = self.animal_proc.create_movement_data_dict()
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
-
         for animal_id, trajectory in steps_dict.items():
             terrain_map = parse_terrain(file=self.animal_proc.terrain_paths[animal_id], delim=' ')
             steps = trajectory.df

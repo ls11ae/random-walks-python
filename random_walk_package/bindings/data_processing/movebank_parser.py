@@ -27,7 +27,7 @@ def compute_kernel(landmark, row):
 
 
 def df_add_properties(df: DataFrame,
-                      kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
+                      kernel_resolver,  # function (row) -> KernelParametersPtr
                       terrain: TerrainMapPtr, bbox_geo, grid_width,
                       grid_height, utm_code, start_date: datetime, end_date: datetime,
                       time_stamp='timestamp',
@@ -138,7 +138,7 @@ def df_add_properties(df: DataFrame,
 
     # your custom geo data to kernel parameters conversion
     clean_df[['is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']] = clean_df.apply(
-        lambda row: kernel_resolver(row['terrain'], row),
+        lambda row: kernel_resolver(row),
         axis=1, result_type='expand')
     # remove unnecessary columns
     clean_df = clean_df[[time_stamp, 'y', 'x', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]

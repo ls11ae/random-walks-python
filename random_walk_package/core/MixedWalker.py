@@ -6,6 +6,7 @@ import geopandas as gpd
 import movingpandas as mpd
 import pandas as pd
 
+from random_walk_package import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor

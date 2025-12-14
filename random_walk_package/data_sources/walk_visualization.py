@@ -2,9 +2,9 @@ import os.path
 from math import isclose
 from pathlib import Path
 from typing import Optional
-import movingpandas as mpd
 
 import folium
+import movingpandas as mpd
 from folium.plugins import TimestampedGeoJson
 
 
@@ -205,6 +205,55 @@ def walk_to_osm(
     m.save(out_file)
     return os.path.abspath(out_file)
 
+
+colors = [
+    "red", "blue", "green", "purple", "orange",
+    "darkred", "lightred", "beige", "darkblue",
+    "darkgreen", "cadetblue", "darkpurple", "pink",
+]
+
+
+def plot_trajectory_collection(traj_coll: mpd.TrajectoryCollection, save_path="walks/"):
+    """
+    Plot each trajectory in a MovingPandas TrajectoryCollection using Folium.
+    Saves:
+        - one HTML file per trajectory
+        - one combined map with all trajectories
+    """
+    save_path = Path(save_path)
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    if len(traj_coll.trajectories) == 0:
+        center = (0.0, 0.0)
+    else:
+        p = traj_coll.trajectories[0].df.geometry.iloc[0]
+        center = (p.y, p.x)
+
+    # combined map
+    m_all = folium.Map(location=center, zoom_start=14, tiles="OpenStreetMap")
+
+    for idx, traj in enumerate(traj_coll.trajectories):
+        traj_id = str(traj.id)
+        color = colors[idx % len(colors)]
+        coords = [(pt.y, pt.x) for pt in traj.df.geometry]
+
+        # save individual trajectory
+        m_single = folium.Map(location=coords[0], zoom_start=14, tiles="OpenStreetMap")
+        folium.PolyLine(coords, color=color, weight=4, opacity=0.8).add_to(m_single)
+        folium.Marker(coords[0], tooltip=f"{traj_id} Start").add_to(m_single)
+        folium.Marker(coords[-1], tooltip=f"{traj_id} End").add_to(m_single)
+
+        m_single.save(str(save_path / f"{traj_id}.html"))
+
+        # add to combined map
+        folium.PolyLine(coords, color=color, weight=3, opacity=0.8).add_to(m_all)
+
+    out_file = save_path / "all_trajectories.html"
+    m_all.save(str(out_file))
+
+    return out_file
+
+
 def plot_trajectory_collection_timed(traj_coll, save_path="walks/"):
     """
     Create a TimeDimension animated map for a MovingPandas TrajectoryCollection.
@@ -220,15 +269,15 @@ def plot_trajectory_collection_timed(traj_coll, save_path="walks/"):
     p = traj_coll.trajectories[0].df.geometry.iloc[0]
     center = (p.y, p.x)
 
-    m = folium.Map(location=center, zoom_start=14, tiles="OpenStreetMap")
+    m = folium.Map(location=center, zoom_start=14, tiles="Esri.WorldImagery")
 
     features = []
-
+    ci = 0
     for traj in traj_coll.trajectories:
         traj_id = str(traj.id)
 
         df = traj.df
-        coords = [(pt.x, pt.y) for pt in df.geometry]  # Note GeoJSON = [lon, lat]
+        coords = [(pt.x, pt.y) for pt in df.geometry]
         times = df.index.astype(str).tolist()
 
         feature = {
@@ -239,11 +288,12 @@ def plot_trajectory_collection_timed(traj_coll, save_path="walks/"):
             },
             "properties": {
                 "times": times,
-                "style": {"color": "red", "weight": 3},
+                "style": {"color": colors[ci], "weight": 3},
                 "icon": "circle",
                 "popup": traj_id,
             }
         }
+        ci += 1
         features.append(feature)
 
     TimestampedGeoJson(
@@ -251,7 +301,7 @@ def plot_trajectory_collection_timed(traj_coll, save_path="walks/"):
             "type": "FeatureCollection",
             "features": features,
         },
-        period="PT1S",            # 1 second per frame
+        period="PT1H",  # 1 second per frame
         add_last_point=True,
         auto_play=False,
         loop=False

@@ -1,6 +1,6 @@
 # mixed_walk.py
 
-from random_walk_package import point2d_arr_free, get_walk_points
+from random_walk_package.bindings.data_structures.point2D import point2d_arr_free, get_walk_points
 from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.wrapper import dll
 
