@@ -57,4 +57,5 @@ pythonpath = [
     ".", "random_walk_package"
 ]
 
-
+[tool.setuptools.package-data]
+random_walk_package = ["resources/**/*"]

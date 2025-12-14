@@ -106,7 +106,7 @@ def fetch_landcover_data(bbox, output_filename="landcover_aoi.tif"):
 
         # project to equiareal grid
         print("Reprojecting to UTM zone...")
-        reproject_to_utm(output_filename, output_filename)
+        reproject_to_utm(output_filename, output_filename)                                    
         return output_filename
 
     except Exception as e:
@@ -161,78 +161,121 @@ def fetch_weather_data(latitude, longitude, start_date, end_date, output_filenam
     return None
 
 
-# --- 3. Fetch Movebank Animal Location Data ---
-def fetch_movebank_data(study_id, sensor_type_id,
-                        timestamp_start_str, timestamp_end_str,
-                        bbox, output_filename="movebank_aoi.csv",
-                        username="omarc98", password="Sgtb3942"):  # Add username/password for non-public
+def fetch_ocean_data(data, output_directory: str, dataset_id="cmems_mod_glo_phy_anfc_0.083deg_PT1H-m"):
+    
+        "This function is fetching the data about northward and eastward ocean currents with the hardcoded dataset_id from copernicus. Credentials are to be loaded from env file "
+        import copernicusmarine
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        max_lat = data["location-lat"].max()
+        max_long = data["location-long"].max()
+        min_lat = data["location-lat"].min()
+        min_long = data["location-long"].min()
+        start_date = data["timestamp"].min()
+        end_data = data["timestamp"].max()
+        
+        get_result_annualmean = copernicusmarine.subset(
+            dataset_id=dataset_id,
+            output_directory=output_directory,
+            username= os.getenv("COPERNICUS_USERNAME"),
+            password = os.getenv("COPERNICUS_PASSWORD"),
+            minimum_latitude=min_lat,
+            maximum_latitude=max_lat,
+            minimum_longitude=min_long,
+            maximum_longitude=max_long,
+            start_datetime=start_date,
+            end_datetime=end_data,
+            variables=["time", "latitude", "longitude", "uo", "vo"]
+        )
+        return get_result_annualmean
+    
+def convert_nc_in_csv(file_path):
+    import xarray as xr
+    DS = xr.open_dataset(file_path)
+    copernicus_marine_csv = DS.to_dataframe().to_csv()
+    return copernicus_marine_csv
+
+def build_currents_dataframe(raw_data):
     """
-    Fetches animal location data from Movebank for a given study, time, and AOI.
-    Saves data as CSV in the desired format.
-    Handles basic authentication if username/password are provided.
+    Build a currents DataFrame suitable for per-step interpolation.
+    
+    Parameters
+    ----------
+    raw_data : pandas.DataFrame or list of dicts
+        Must contain columns:
+            - 'timestamp' (datetime or string)
+            - 'longitude' (float)
+            - 'latitude' (float)
+            - 'uo' (float, eastward current m/s)
+            - 'vo' (float, northward current m/s)
+    
+    Returns
+    -------
+    df_currents : pandas.DataFrame
+        Cleaned DataFrame with sorted timestamps and numeric columns.
     """
-    print(f"\nFetching Movebank data for Study ID: {study_id}")
-    print(f"Period: {timestamp_start_str} to {timestamp_end_str}")
-    print(f"BBOX: {bbox}")
+    
+    df = pd.DataFrame(raw_data)
 
-    base_url = "https://www.movebank.org/movebank/service/direct-read"
-    params = {
-        "study_id": str(study_id),
-        "sensor_type_id": str(sensor_type_id),
-        "timestamp_start": timestamp_start_str,
-        "timestamp_end": timestamp_end_str,
-        "bbox": ",".join(map(str, bbox)),  # lon_min,lat_min,lon_max,lat_max
-        "attributes": "event_id,visible,timestamp,location_long,location_lat,gps_satellite_count,ground_speed,heading,height_above_ellipsoid,tag_voltage,sensor_type,individual_taxon_canonical_name,tag_local_identifier,individual_local_identifier,study_name"
-    }
+    required_cols = ['time', 'longitude', 'latitude', 'uo', 'vo']
+    for col in required_cols:
+        if col not in df.columns:
+            raise ValueError(f"Missing required column: {col}")
+    
+    # Convert timestamp to pandas datetime
+    df['time'] = pd.to_datetime(df['time'])
+    
+    # Ensure numeric types
+    df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+    df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+    df['uo'] = pd.to_numeric(df['uo'], errors='coerce')
+    df['vo'] = pd.to_numeric(df['vo'], errors='coerce')
+    
+    
+    df = df.dropna(subset=required_cols)
+    df = df.sort_values(by=['time', 'latitude', 'longitude']).reset_index(drop=True)
+    
+    return df  
 
-    auth = None
-    if username and password:
-        auth = (username, password)
-        print("Using Movebank authentication.")
+def currents_df_to_grid(df_currents, lon_res=0.01, lat_res=0.01):
+    """
+    Convert currents DataFrame into a grid suitable for compute_current_offset.
+    
+    Parameters
+    ----------
+    df_currents : DataFrame
+        Columns: timestamp, longitude, latitude, uo, vo
+    lon_res : float
+        Resolution of the longitude grid (degrees)
+    lat_res : float
+        Resolution of the latitude grid (degrees)
+        
+    Returns
+    -------
+    grid_x, grid_y : 1D arrays
+        Longitude and latitude coordinates of the grid
+    currents_u, currents_v : 2D arrays
+        Eastward and northward current speeds on the grid (meters/sec)
+    """
+    import numpy as np
+    # Create unique lon/lat arrays
+    lon_min, lon_max = df_currents['longitude'].min(), df_currents['longitude'].max()
+    lat_min, lat_max = df_currents['latitude'].min(), df_currents['latitude'].max()
+    grid_x = np.arange(lon_min, lon_max + lon_res, lon_res)
+    grid_y = np.arange(lat_min, lat_max + lat_res, lat_res)
 
-    try:
-        response = requests.get(base_url, params=params, auth=auth)
+    # Initialize grids
+    currents_u = np.zeros((len(grid_y), len(grid_x)))
+    currents_v = np.zeros((len(grid_y), len(grid_x)))
 
-        if response.status_code == 403:  # Forbidden
-            if "Login required to access study" in response.text or "User not authorized" in response.text:
-                print("Error: Access to this Movebank study requires login or authorization.")
-                print("Please provide your Movebank username and password if this is your study,")
-                print("or ensure the study owner has granted you access.")
-                return None
-            else:
-                response.raise_for_status()  # Raise for other 403 errors
-        elif response.status_code == 400:  # Bad request
-            print(f"Error: Bad request to Movebank API. Response: {response.text}")
-            return None
-        else:
-            response.raise_for_status()
+    # Fill grid with nearest neighbor (simplest)
+    for i, y in enumerate(grid_y):
+        for j, x in enumerate(grid_x):
+            # Compute distance to all points
+            dist2 = (df_currents['longitude'].values - x)**2 + (df_currents['latitude'].values - y)**2
+            idx_min = np.argmin(dist2)
+            currents_u[i, j] = df_currents['uo'].values[idx_min]
+            currents_v[i, j] = df_currents['vo'].values[idx_min]
 
-        # Movebank API returns CSV data directly
-        if response.text.strip() == "" or response.text.count('\n') < 1:  # Check if empty or only header
-            print("No Movebank data returned for the given criteria.")
-            return None
-
-        with open(output_filename, 'w', encoding='utf-8') as f:
-            f.write(response.text)
-        print(f"Movebank data saved to {output_filename}")
-
-        # Optionally load into pandas for quick inspection
-        # try:
-        #     df = pd.read_csv(output_filename)
-        #     print("\nMovebank Data Snippet:")
-        #     if not df.empty:
-        #         print(df.head())
-        #     else:
-        #         print("Movebank CSV is empty after writing.")
-        # except pd.errors.EmptyDataError:
-        #     print("Movebank CSV is empty.")
-
-        return output_filename
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching Movebank data: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"Response content: {e.response.text}")
-    except Exception as e:
-        print(f"An unexpected error occurred with Movebank data: {e}")
-    return None
+    return grid_x, grid_y, currents_u, currents_v
