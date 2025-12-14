@@ -107,8 +107,8 @@ def environment_pipeline_test():
 
 if __name__ == "__main__":
     test_time_walker()
+    # test_mixed_walk()
     exit(0)
-    test_mixed_walk()
     study = 'random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv'
     df = pd.read_csv(study)
 

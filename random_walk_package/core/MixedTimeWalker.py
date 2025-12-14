@@ -62,6 +62,9 @@ class MixedTimeWalker(MixedWalker):
                 end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
                 start_date, end_date = steps["time"].iloc[i], steps["time"].iloc[i + 1]
                 if start_x == end_x and start_y == end_y:
+                    segment = [(start_x, start_y)]
+                    full_path.extend(segment)
+                    segment_boundaries.append(len(full_path))
                     continue
                 # Count how many timestamps exist for the given interval
                 sub_df = pd.read_csv(self.env_paths[animal_id])

@@ -79,7 +79,7 @@ class MixedWalker:
         all animals.
         """
         self._process_movebank_data()
-        use_cuda = self.has_cuda()
+        use_cuda = CUDA_AVAILABLE and self.has_cuda()
         steps_dict = self.animal_proc.create_movement_data_dict()
 
         serialized: bool = serialization_dir is not None

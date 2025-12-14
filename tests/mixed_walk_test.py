@@ -1,4 +1,4 @@
-from random_walk_package import create_correlated_kernel_parameters, MixedTimeWalker
+from random_walk_package import create_correlated_kernel_parameters
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark
 from random_walk_package.core.MixedWalker import *
 from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed
@@ -37,16 +37,16 @@ def test_mixed_walk():
 
 
 def weather_terrain_params(landmark, row):
-    is_brownian = True
     S = float(row["wind_speed_10m_max"]) / 2.0
-    D = int(row["wind_direction_10m_dominant"] // 45)
+    D = min(1, int(row["wind_direction_10m_dominant"] // 45))
     diffusity = float(row["cloud_cover_mean"]) / 100.0
     bias_x = int(row["precipitation_sum"] > 0.1)
     bias_y = int(landmark in (50, 80))
+    is_brownian = D == 1
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
 
-def test_time_walker():
+"""def test_time_walker():
     study = 'random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv'
     df = pd.read_csv(study)
 
@@ -55,7 +55,7 @@ def test_time_walker():
 
     out_dir = os.path.dirname(study)
 
-    mapping = create_mixed_kernel_parameters(animal_type=HEAVY, base_step_size=5)
+    mapping = create_mixed_kernel_parameters(animal_type=HEAVY, base_step_size=3)
     walker = MixedTimeWalker(data=df,
                              env_data=df_env,
                              kernel_mapping=mapping,
@@ -69,4 +69,9 @@ def test_time_walker():
                              id_col="tag-local-identifier",
                              crs="EPSG:4326"
                              )
-    walker.generate_walks()
+    trajectory_collection = walker.generate_walks()
+    walks_dir = os.path.dirname(study)
+    walks_dir = os.path.join(walks_dir, "walks")
+    os.makedirs(walks_dir, exist_ok=True)
+    leaflet_path = plot_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))
+"""

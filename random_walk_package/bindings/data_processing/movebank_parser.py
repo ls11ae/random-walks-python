@@ -163,4 +163,7 @@ def df_add_properties(df: DataFrame,
     )
 
     times = clean_df[time_stamp].nunique()
+    counts = clean_df.groupby(['y', 'x'])[time_stamp].count()
+    assert counts.nunique() == 1, "Non-uniform time series detected"
+    assert counts.index.nunique() == grid_points_per_edge ** 2
     return clean_df, times
