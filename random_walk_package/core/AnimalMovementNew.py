@@ -224,6 +224,7 @@ class AnimalMovementProcessor:
                 # Use temporary placeholder to avoid conflicts
                 data = data.replace(str(OCEAN_VALUE), str(OCEAN_VALUE_MAPPED))
                 data = data.replace(str(LAND_VALUE), str(LAND_VALUE_MAPPED))
+                data = data.replace("255", "0")
             
                 with open(txt_path, 'w') as file:
                     file.write(data)
@@ -322,6 +323,19 @@ class AnimalMovementProcessor:
             lat='location-lat',
             out_directory: str | None = None
     ):
+        """
+        This function defines the spatial grid where kernels will be evaluated, loads terrain information for the animal’s area,
+        calls a custom kernel resolver for each row in the DataFrame to generate movement kernels
+        
+        
+        :param df: Description
+        :type df: DataFrame with the environment parameters
+        :param kernel_resolver: your function that returns kernel parameters
+        :param time_stamp: the name of your time instance column
+        :param lon: the name of your longitude instance 
+        :param lat: the name of your latitude instance 
+    
+        """
         if out_directory is None:
             out_directory = "kernels"
         out_directory = Path(out_directory)

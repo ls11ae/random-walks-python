@@ -366,19 +366,19 @@ def fetch_weather_for_trajectory(coords: Coordinate_array, timestamps: list[str]
     return weather_df
 # --- 5. Fetch copernicus currents data ---
 
-def fetch_ocean_data(self, output_directory: str, dataset_id="cmems_mod_glo_phy_anfc_0.083deg_PT1H-m"):
+def fetch_ocean_data(data, output_directory: str, dataset_id="cmems_mod_glo_phy_anfc_0.083deg_PT1H-m"):
     
         "This function is fetching the data about northward and eastward ocean currents with the hardcoded dataset_id from copernicus. Credentials are to be loaded from env file "
         import copernicusmarine
         import os
         from dotenv import load_dotenv
         load_dotenv()
-        max_lat = self.data["location-lat"].max()
-        max_long = self.data["location-long"].max()
-        min_lat = self.data["location-lat"].min()
-        min_long = self.data["location-long"].min()
-        start_date = self.data["timestamp"].min()
-        end_data = self.data["timestamp"].max()
+        max_lat = data["location-lat"].max()
+        max_long = data["location-long"].max()
+        min_lat = data["location-lat"].min()
+        min_long = data["location-long"].min()
+        start_date = data["timestamp"].min()
+        end_data = data["timestamp"].max()
         
         get_result_annualmean = copernicusmarine.subset(
             dataset_id=dataset_id,
@@ -393,8 +393,94 @@ def fetch_ocean_data(self, output_directory: str, dataset_id="cmems_mod_glo_phy_
             end_datetime=end_data,
             variables=["time", "latitude", "longitude", "uo", "vo"]
         )
-        import xarray as xr
-        DS = xr.open_dataset(output_directory)
-        copernicus_marine_csv = DS.to_dataframe().to_csv()
-        return copernicus_marine_csv
+        return get_result_annualmean
+    
+def convert_nc_in_csv(file_path):
+    import xarray as xr
+    DS = xr.open_dataset(file_path)
+    copernicus_marine_csv = DS.to_dataframe().to_csv()
+    return copernicus_marine_csv
+
+def build_currents_dataframe(raw_data):
+    """
+    Build a currents DataFrame suitable for per-step interpolation.
+    
+    Parameters
+    ----------
+    raw_data : pandas.DataFrame or list of dicts
+        Must contain columns:
+            - 'timestamp' (datetime or string)
+            - 'longitude' (float)
+            - 'latitude' (float)
+            - 'uo' (float, eastward current m/s)
+            - 'vo' (float, northward current m/s)
+    
+    Returns
+    -------
+    df_currents : pandas.DataFrame
+        Cleaned DataFrame with sorted timestamps and numeric columns.
+    """
+    
+    df = pd.DataFrame(raw_data)
+
+    required_cols = ['time', 'longitude', 'latitude', 'uo', 'vo']
+    for col in required_cols:
+        if col not in df.columns:
+            raise ValueError(f"Missing required column: {col}")
+    
+    # Convert timestamp to pandas datetime
+    df['time'] = pd.to_datetime(df['time'])
+    
+    # Ensure numeric types
+    df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+    df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
+    df['uo'] = pd.to_numeric(df['uo'], errors='coerce')
+    df['vo'] = pd.to_numeric(df['vo'], errors='coerce')
+    
+    
+    df = df.dropna(subset=required_cols)
+    df = df.sort_values(by=['time', 'latitude', 'longitude']).reset_index(drop=True)
+    
+    return df  
+
+def currents_df_to_grid(df_currents, lon_res=0.01, lat_res=0.01):
+    """
+    Convert currents DataFrame into a grid suitable for compute_current_offset.
+    
+    Parameters
+    ----------
+    df_currents : DataFrame
+        Columns: timestamp, longitude, latitude, uo, vo
+    lon_res : float
+        Resolution of the longitude grid (degrees)
+    lat_res : float
+        Resolution of the latitude grid (degrees)
         
+    Returns
+    -------
+    grid_x, grid_y : 1D arrays
+        Longitude and latitude coordinates of the grid
+    currents_u, currents_v : 2D arrays
+        Eastward and northward current speeds on the grid (meters/sec)
+    """
+    import numpy as np
+    # Create unique lon/lat arrays
+    lon_min, lon_max = df_currents['longitude'].min(), df_currents['longitude'].max()
+    lat_min, lat_max = df_currents['latitude'].min(), df_currents['latitude'].max()
+    grid_x = np.arange(lon_min, lon_max + lon_res, lon_res)
+    grid_y = np.arange(lat_min, lat_max + lat_res, lat_res)
+
+    # Initialize grids
+    currents_u = np.zeros((len(grid_y), len(grid_x)))
+    currents_v = np.zeros((len(grid_y), len(grid_x)))
+
+    # Fill grid with nearest neighbor (simplest)
+    for i, y in enumerate(grid_y):
+        for j, x in enumerate(grid_x):
+            # Compute distance to all points
+            dist2 = (df_currents['longitude'].values - x)**2 + (df_currents['latitude'].values - y)**2
+            idx_min = np.argmin(dist2)
+            currents_u[i, j] = df_currents['uo'].values[idx_min]
+            currents_v[i, j] = df_currents['vo'].values[idx_min]
+
+    return grid_x, grid_y, currents_u, currents_v      

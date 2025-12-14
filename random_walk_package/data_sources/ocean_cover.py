@@ -41,6 +41,7 @@ def fetch_ocean_cover_tif(
     print(f"\nFetching ocean cover data for BBOX: {bbox}...")
     min_lon, min_lat, max_lon, max_lat = bbox
     
+    
     # Load and reproject shapefile
     land = gpd.read_file(shapefile_path).to_crs("EPSG:4326")
     print(f"Loaded {len(land)} land polygons")
@@ -101,7 +102,7 @@ def fetch_ocean_cover_tif(
 
     print(f"Ocean cover data saved to {output_tif_path}")    
     print("Reprojecting to UTM zone...")
-    reproject_to_utm(output_tif_path, output_tif_path)
+    reproject_to_utm(output_tif_path, output_tif_path) # i think the issue happens somewhwere here
     return output_tif_path    
     
 
