@@ -180,6 +180,11 @@ class WalkerHelper:
 
     @staticmethod
     def create_timed_df(steps_df, geodetic_path_df, animal_id, idx, segment_boundaries):
+        print(steps_df)
+        print(geodetic_path_df)
+        print(animal_id)
+        print(idx)
+        print(segment_boundaries)
         rows = []
         for i in range(len(idx) - 1):
             t_start = steps_df.loc[idx[i], "time"]

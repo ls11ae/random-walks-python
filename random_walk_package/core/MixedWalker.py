@@ -6,6 +6,7 @@ import geopandas as gpd
 import movingpandas as mpd
 import pandas as pd
 
+from random_walk_package import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
@@ -51,18 +52,18 @@ class MixedWalker:
         self.crs = crs
         self.resolution = resolution
         self.out_directory = out_directory
-        self.movebank_processor = None
+        self.animal_proc = None
         self.mapping = kernel_mapping
 
     def _process_movebank_data(self):
-        self.movebank_processor = AnimalMovementProcessor(data=self.data,
-                                                          time_col=self.time_col,
-                                                          lon_col=self.lon_col,
-                                                          lat_col=self.lat_col,
-                                                          id_col=self.id_col,
-                                                          crs=self.crs)
-        self.movebank_processor.create_landcover_data_txt(resolution=self.resolution,
-                                                          out_directory=self.out_directory)
+        self.animal_proc = AnimalMovementProcessor(data=self.data,
+                                                   time_col=self.time_col,
+                                                   lon_col=self.lon_col,
+                                                   lat_col=self.lat_col,
+                                                   id_col=self.id_col,
+                                                   crs=self.crs)
+        self.animal_proc.create_landcover_data_txt(resolution=self.resolution,
+                                                   out_directory=self.out_directory)
 
     @staticmethod
     def has_cuda():
@@ -72,15 +73,15 @@ class MixedWalker:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
-    def generate_movebank_walks(self, serialization_dir=None):
+    def generate_walks(self, serialization_dir=None):
         """
         Build random-walk trajectories for each animal, linear-interpolate timestamps
         for intermediate points, return a single mpd.TrajectoryCollection containing
         all animals.
         """
         self._process_movebank_data()
-        use_cuda = self.has_cuda()
-        steps_dict = self.movebank_processor.create_movement_data_dict()
+        use_cuda = CUDA_AVAILABLE and self.has_cuda()
+        steps_dict = self.animal_proc.create_movement_data_dict()
 
         serialized: bool = serialization_dir is not None
         recmp: bool = True
@@ -92,7 +93,7 @@ class MixedWalker:
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
 
         for animal_id, trajectory in steps_dict.items():
-            terrain_map = parse_terrain(file=self.movebank_processor.terrain_paths[animal_id], delim=' ')
+            terrain_map = parse_terrain(file=self.animal_proc.terrain_paths[animal_id], delim=' ')
             kernel_map = None
             steps = trajectory.df
             if serialized and recmp:
@@ -185,7 +186,7 @@ class MixedWalker:
                 full_path.append(last_grid)
 
             # convert full_path (list of (x,y)) into geodetic DataFrame
-            geodetic_path_df = self.movebank_processor.grid_to_geo_path(full_path, animal_id)
+            geodetic_path_df = self.animal_proc.grid_to_geo_path(full_path, animal_id)
             # If grid_to_geo_path returns list of tuples, convert:
             if not isinstance(geodetic_path_df, pd.DataFrame):
                 geodetic_path_df = pd.DataFrame(geodetic_path_df, columns=["longitude", "latitude"])

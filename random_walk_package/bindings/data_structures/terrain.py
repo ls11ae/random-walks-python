@@ -77,7 +77,8 @@ def kernels_map4d_free(kernels_map4d: KernelsMap4DPtr):
 
 
 def terrain_map_free(terrain_map: TerrainMapPtr):
-    dll.terrain_map_free(terrain_map)
+    if terrain_map is not None:
+        dll.terrain_map_free(terrain_map)
 
 
 def create_terrain_map(file: str, delim: str) -> TerrainMapPtr:

@@ -27,7 +27,7 @@ def compute_kernel(landmark, row):
 
 
 def df_add_properties(df: DataFrame,
-                      kernel_resolver,  # function (landmark, row) -> KernelParametersPtr
+                      kernel_resolver,  # function (row) -> KernelParametersPtr
                       terrain: TerrainMapPtr, bbox_geo, grid_width,
                       grid_height, utm_code, start_date: datetime, end_date: datetime,
                       time_stamp='timestamp',
@@ -123,8 +123,14 @@ def df_add_properties(df: DataFrame,
     # maps terrain grid coordinates to environment grid coordinates
     # typically the env grid is much smaller
     # NN-interpolation is used (later) to get the corresponding env data for a terrain grid cell
-    clean_df['x'] = [pt[0] // s_x for pt in grid_coords]
-    clean_df['y'] = [pt[1] // s_y for pt in grid_coords]
+    def to_env_grid(px, py):
+        ex = min(grid_points_per_edge - 1, px // s_x)
+        ey = min(grid_points_per_edge - 1, py // s_y)
+        return ex, ey
+
+    env_xy = [to_env_grid(px, py) for px, py in grid_coords]
+    clean_df['x'] = [p[0] for p in env_xy]
+    clean_df['y'] = [p[1] for p in env_xy]
 
     if clean_df.empty:
         print(f"No overlap between environment bbox/time interval and study bbox")
@@ -132,7 +138,7 @@ def df_add_properties(df: DataFrame,
 
     # your custom geo data to kernel parameters conversion
     clean_df[['is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']] = clean_df.apply(
-        lambda row: kernel_resolver(row['terrain'], row),
+        lambda row: kernel_resolver(row),
         axis=1, result_type='expand')
     # remove unnecessary columns
     clean_df = clean_df[[time_stamp, 'y', 'x', 'terrain', 'is_brownian', 'S', 'D', 'diffusity', 'bias_x', 'bias_y']]
@@ -140,7 +146,24 @@ def df_add_properties(df: DataFrame,
     clean_df = (clean_df.groupby([time_stamp, 'x', 'y'], as_index=False).first())
     # sort by (y, x, time)
     clean_df = clean_df.sort_values(by=['y', 'x', time_stamp], ascending=True)
+    all_times = clean_df[time_stamp].drop_duplicates().sort_values()
+
+    # for robustness, to make sure we have a perfectly cubic structure
+    def reindex_cell(g):
+        return (
+            g.set_index(time_stamp)
+            .reindex(all_times, method='nearest')
+            .reset_index()
+        )
+
+    clean_df = (
+        clean_df
+        .groupby(['y', 'x'], group_keys=False)
+        .apply(reindex_cell)
+    )
 
     times = clean_df[time_stamp].nunique()
-    print(f"Times {times}")
+    counts = clean_df.groupby(['y', 'x'])[time_stamp].count()
+    assert counts.nunique() == 1, "Non-uniform time series detected"
+    assert counts.index.nunique() == grid_points_per_edge ** 2
     return clean_df, times

@@ -22,10 +22,6 @@ dll.point2d_array_free.restype = None
 dll.point_2d_array_new_empty.argtypes = [c_size_t]
 dll.point_2d_array_new_empty.restype = Point2DArrayPtr
 
-# Wrap load_weather_grid
-dll.load_weather_grid.argtypes = [c_char_p, c_int, c_int, c_int]
-dll.load_weather_grid.restype = Point2DArrayGridPtr
-
 
 def point2d_array_new(length):
     return dll.point_2d_array_new_empty(length)
@@ -33,20 +29,6 @@ def point2d_array_new(length):
 
 def point2d_arr_free(array_ptr):
     dll.point2d_array_free(array_ptr)
-
-
-def load_weather_grid(filename_base: str, grid_y: int, grid_x: int, times: int):
-    """
-    Loads a weather grid from files with the given base filename.
-    Args:
-        filename_base (str): Base filename (without extension)
-        grid_y (int): Number of grid rows
-        grid_x (int): Number of grid columns
-        times (int): Number of time steps
-    Returns:
-        Point2DArrayGridPtr: Pointer to the loaded grid
-    """
-    return dll.load_weather_grid(filename_base.encode('utf-8'), grid_y, grid_x, times)
 
 
 def point2d_array_grid_new(height, width, times):
