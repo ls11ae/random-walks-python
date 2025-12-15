@@ -6,7 +6,6 @@ import geopandas as gpd
 import movingpandas as mpd
 import pandas as pd
 
-from random_walk_package import get_walk_points
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
@@ -44,7 +43,9 @@ class MixedWalker:
                  lat_col="latitude",
                  id_col="animal_id",
                  crs="EPSG:4326"):
-        self.data = data
+        self.data = data.dropna(
+            subset=[time_col, lon_col, lat_col, id_col]
+        )
         self.time_col = time_col
         self.lon_col = lon_col
         self.lat_col = lat_col
@@ -91,8 +92,11 @@ class MixedWalker:
             recmp = False
 
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
-
+        indd = -1
         for animal_id, trajectory in steps_dict.items():
+            indd += 1
+            if indd == 4:
+                break
             terrain_map = parse_terrain(file=self.animal_proc.terrain_paths[animal_id], delim=' ')
             kernel_map = None
             steps = trajectory.df
@@ -120,7 +124,7 @@ class MixedWalker:
                 end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
 
                 print("Start: " + str(start_x) + ", " + str(start_y))
-                manhattan = abs(start_x - end_x) + abs(start_y - end_y)
+                manhattan = (abs(start_x - end_x) + abs(start_y - end_y)) // 2
                 T = 5 if manhattan < 5 else manhattan
 
                 dp_dir = None
