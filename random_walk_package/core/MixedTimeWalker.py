@@ -73,11 +73,6 @@ class MixedTimeWalker(MixedWalker):
                 number_records = sub_df["timestamp"].nunique()
 
                 dimensions = self.animal_proc.env_samples, self.animal_proc.env_samples, number_records
-                print("start")
-                print(start_x, start_y, end_x, end_y)
-                print(start_date, end_date, number_records)
-                print(self.env_paths[animal_id])
-                print(dimensions)
                 manhattan = abs(start_x - end_x) + abs(start_y - end_y)
                 T = 5 if manhattan < 5 else manhattan
                 print(T)
