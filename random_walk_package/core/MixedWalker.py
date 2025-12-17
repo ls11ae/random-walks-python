@@ -92,11 +92,7 @@ class MixedWalker:
             recmp = False
 
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
-        indd = -1
         for animal_id, trajectory in steps_dict.items():
-            indd += 1
-            if indd == 4:
-                break
             terrain_map = parse_terrain(file=self.animal_proc.terrain_paths[animal_id], delim=' ')
             kernel_map = None
             steps = trajectory.df

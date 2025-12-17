@@ -10,6 +10,7 @@ from pyproj import CRS
 
 from random_walk_package.bindings import parse_terrain
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties
+from random_walk_package.core.hmm import preprocess_for_hmm, apply_hmm
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
@@ -72,27 +73,39 @@ class AnimalMovementProcessor:
         resolution : None
             the number of cells in the regular grid along the longer axis of the bounding box.
         """
+        # these columns must not be NaN
+        required_cols = [time_col, lon_col, lat_col, id_col]
+
+        # TrajectoryCollection
         if isinstance(data, mpd.TrajectoryCollection):
             self.traj = data
+            return
 
-        else:
-            if not isinstance(data, gpd.GeoDataFrame):
-                gdf = gpd.GeoDataFrame(
-                    data,
-                    geometry=gpd.points_from_xy(
-                        data[lon_col],
-                        data[lat_col],
-                    ),
-                    crs=crs,
+        # GeoDataFrame
+        if isinstance(data, gpd.GeoDataFrame):
+            gdf = data.copy()
+
+            # in case 'geometry' is missing
+            if gdf.geometry is None:
+                gdf = gdf.set_geometry(
+                    gpd.points_from_xy(gdf[lon_col], gdf[lat_col]),
+                    crs=crs
                 )
-            else:
-                gdf = data
 
-            self.traj = mpd.TrajectoryCollection(
-                gdf,
-                traj_id_col=id_col,
-                t=time_col,
+        # Normal df
+        else:
+            gdf = gpd.GeoDataFrame(
+                data.copy(),
+                geometry=gpd.points_from_xy(data[lon_col], data[lat_col]),
+                crs=crs,
             )
+
+        gdf = gdf.dropna(subset=required_cols)
+        self.traj = mpd.TrajectoryCollection(
+            gdf,
+            traj_id_col=id_col,
+            t=time_col,
+        )
         self.terrain_paths = {}  # terrain txt path per animal_id
         self.resolution = None
         self.env_samples = env_samples
@@ -368,3 +381,27 @@ class AnimalMovementProcessor:
             results[str(aid)] = out_path
         print(f"KernelData Saved: {out_directory}")
         return results
+
+    def add_states(self):
+        def utm_crs_from_geometry(geom):
+            lon, lat = geom.coords[0]
+            zone = int((lon + 180) // 6) + 1
+            epsg = 32600 + zone if lat >= 0 else 32700 + zone
+            return CRS.from_epsg(epsg)
+
+        self.traj.add_speed()
+        self.traj.add_direction()
+        self.traj.add_angular_difference()
+        self.traj.add_distance()
+        data_gdf = self.traj.to_point_gdf()
+        data_gdf = data_gdf.copy()
+        # UTM per individual animal
+        utm_gdfs = []
+        for traj_id, sub in data_gdf.groupby('individual-local-identifier'):
+            utm_crs = utm_crs_from_geometry(sub.geometry.iloc[0])
+            utm_gdfs.append(sub.to_crs(utm_crs))
+
+        data_gdf_utm = gpd.GeoDataFrame(pd.concat(utm_gdfs), crs=utm_gdfs[0].crs)
+
+        arrays, scaler, seq_dfs = preprocess_for_hmm(data_gdf_utm)
+        apply_hmm(arrays, seq_dfs, plot=False)

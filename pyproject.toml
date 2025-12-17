@@ -16,6 +16,8 @@ requires-python = ">=3.9"
 dependencies = [
     "numpy",
     "scipy",
+    "hmmlearn",
+    "scikit-learn",
     "geopandas",
     "movingpandas",
     "rasterio",

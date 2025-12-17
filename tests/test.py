@@ -15,8 +15,10 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
+from random_walk_package.core.MarineMovement import MarineMovement
 from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed, \
     plot_trajectory_collection
+from tests.mixed_walk_test import test_mixed_walk
 
 
 def weather_terrain_params(landmark, row):
@@ -108,17 +110,60 @@ def environment_pipeline_test():
     free_environment_influence_grid(environment_parameters)
 
 
+def save_walks_pickle(filepath, traj_coll):
+    pickle_path = os.path.join(filepath, "walks.pickle")
+    with gzip.open(pickle_path, 'wb') as f:
+        pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)
+        return pickle_path
+
+
 def load_walks_pickle(filepath):
     with gzip.open(filepath, 'rb') as f:
         return pickle.load(f)
 
 
 if __name__ == "__main__":
-    pickle_path = "random_walk_package/resources/leap_of_the_cat/walks/walks.pickle"
+    study = 'random_walk_package/resources/biology_birds/Biology of birds practical.csv'
+    data = pd.read_csv(study)
+    proc = AnimalMovementProcessor(data)
+    proc.add_states()
+    exit(0)
+    test_mixed_walk()
+    for traj in proc.traj:
+        df1 = traj.df[["location-long", "location-lat", "distance", "timedelta", "direction"]]
+        print(df1)
+    model = MarineMovement(data=data, age_class="pup")
+    model.coordinates_to_xy()
+    dx, dy, steps = model.compute_step_lengths()
+    bear, turning = model.turning_angles()
+
+    dt = model.compute_time_intervals()
+    D = model.diffusivity()
+    r, kappa = model.directional_persistance()
+    print(len(steps))
+    print(len(dt))
+    print(len(turning))
+    df = pd.DataFrame(
+        {
+            "distance": steps,
+            "timedelta": dt,
+            "direction": bear
+        }
+    )
+    print(df)
+    exit(0)
+
+    print("steps", steps, "\nbear", bear, "\nturning", turning, "\ndt", dt)
+
+    mean_v = model.behavioural_speed()
+
+    print(data.head())
+    resources_dir = os.path.dirname("random_walk_package/resources/leap_of_the_cat/walks")
+    traj_coll = test_mixed_walk()
+    pickle_path = save_walks_pickle(resources_dir, traj_coll)
     trj_coll = load_walks_pickle(pickle_path)
     leaflet_path = plot_trajectory_collection_timed(traj_coll=trj_coll, save_path=str(os.path.dirname(pickle_path)))
     plot_trajectory_collection(trj_coll, save_path=str(os.path.dirname(pickle_path)))
-
     exit(0)
     # test_time_walker()
     # test_mixed_walk()
