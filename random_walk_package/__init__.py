@@ -50,7 +50,7 @@ from .core.BrownianWalker import BrownianWalker
 from .core.MixedTimeWalker import MixedTimeWalker
 from .core.MixedWalker import MixedWalker
 from .core.BiasedWalker import BiasedWalker
-from .core.AnimalMovementNew import AnimalMovementProcessor
+from .core.AnimalMovement import AnimalMovementProcessor
 
 # --------------------------------------------------
 # Define __all__ for clean public API

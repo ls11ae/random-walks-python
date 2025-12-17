@@ -8,7 +8,7 @@ import pandas as pd
 
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
-from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
+from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 from random_walk_package.core.WalkerHelper import WalkerHelper
 
 try:

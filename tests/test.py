@@ -123,6 +123,7 @@ def load_walks_pickle(filepath):
 
 
 if __name__ == "__main__":
+    study = "random_walk_package/resources/baboon_SA_study/Baboon group movement, South Africa (data from Bonnell et al. 2016).csv"
     study = 'random_walk_package/resources/biology_birds/Biology of birds practical.csv'
     data = pd.read_csv(study)
     proc = AnimalMovementProcessor(data)

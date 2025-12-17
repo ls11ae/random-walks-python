@@ -10,7 +10,7 @@ from pyproj import CRS
 
 from random_walk_package.bindings import parse_terrain
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties
-from random_walk_package.core.hmm import preprocess_for_hmm, apply_hmm
+from random_walk_package.core.KernelFactory import KernelFactory
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
@@ -403,5 +403,6 @@ class AnimalMovementProcessor:
 
         data_gdf_utm = gpd.GeoDataFrame(pd.concat(utm_gdfs), crs=utm_gdfs[0].crs)
 
-        arrays, scaler, seq_dfs = preprocess_for_hmm(data_gdf_utm)
-        apply_hmm(arrays, seq_dfs, plot=False)
+        hmmthingy = KernelFactory(data_gdf_utm)
+        arrays, scaler, seq_dfs = hmmthingy.preprocess()
+        hmmthingy.apply_hmm(arrays, seq_dfs, plot=False)

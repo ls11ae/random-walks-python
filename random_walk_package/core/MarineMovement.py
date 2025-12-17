@@ -1,9 +1,8 @@
 import numpy as np
 import pandas as pd
 from scipy.stats import circmean
-from importlib import resources
-from random_walk_package import AnimalMovementProcessor
-from random_walk_package.data_sources.geo_fetcher import fetch_ocean_data
+
+from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
 
 
 def shark_data_filter(data_path):
@@ -14,10 +13,10 @@ def shark_data_filter(data_path):
     data["time"] = data["time"] + pd.Timedelta(hours=12)
     data = data.drop_duplicates(subset=["time"], keep="first")
     data = data.rename(columns={
-    "ptt": "tag-local-identifier",
-    "longitude": "location-long",
-    "latitude": "location-lat",
-    "time": "timestamp"
+        "ptt": "tag-local-identifier",
+        "longitude": "location-long",
+        "latitude": "location-lat",
+        "time": "timestamp"
     })
 
     return data
@@ -32,7 +31,8 @@ class MarineMovement:
 
         # Results stored
         self.data = data
-        self.processor = AnimalMovementProcessor(data=self.data, time_col= "timestamp",lon_col= "location-long", lat_col="location-lat", id_col= "tag-local-identifier", crs="EPSG:4326")
+        self.processor = AnimalMovementProcessor(data=self.data, time_col="timestamp", lon_col="location-long",
+                                                 lat_col="location-lat", id_col="tag-local-identifier", crs="EPSG:4326")
         self.dx = None
         self.dy = None
         self.step_lengths = None
@@ -42,10 +42,10 @@ class MarineMovement:
         self.mean_velocity = None
         self.diffusivity_value = None
         self.directional_bias = None
-        self.resolution = resolution 
+        self.resolution = resolution
 
     def terrain_data(self):
-        return self.processor.create_landcover_data_txt(is_marine= True, resolution=1000)
+        return self.processor.create_landcover_data_txt(is_marine=True, resolution=1000)
 
     def coordinates_to_xy(self):
         # self.data = data
@@ -97,7 +97,7 @@ class MarineMovement:
         return self.time_diffs
 
     def effective_speed(self, use_lit_prior=True, prior_weight=0.5,
-                          literature_cruising_min_ms=0.67, literature_cruising_max_ms=1.34):
+                        literature_cruising_min_ms=0.67, literature_cruising_max_ms=1.34):
         """
         Calculate mean behavioral velocity with optional literature prior. Calculate
         velocities based on some predefined step_length and time-diffs. To avoid unrealistic estimate, can be optionally validated
@@ -197,8 +197,6 @@ class MarineMovement:
         diffusivity = mean_squared_displacement / (4 * mean_time_step)
         return diffusivity
 
-    
-
     def compute_current_offset(self, x, y, grid_x, grid_y, currents_u, currents_v, dt):
         """
         ASSUMES TRAVELING STATE i.e current-positive, not avoiding or actively resisting 
@@ -226,7 +224,7 @@ class MarineMovement:
             Displacement in meters for this time step
             
         """
-        
+
         ix = np.argmin(np.abs(grid_x - x))
         iy = np.argmin(np.abs(grid_y - y))
 
@@ -234,7 +232,8 @@ class MarineMovement:
         v = currents_v[iy, ix]  # northward
         _, effective_speed = self.effective_speed()
         bearing, _ = self.turning_angles
-        swim_x = effective_speed * np.cos(bearing) # The shark moves in the direction it intends to go, rather than perpendicular or randomly, at some swimming speed. 
+        swim_x = effective_speed * np.cos(
+            bearing)  # The shark moves in the direction it intends to go, rather than perpendicular or randomly, at some swimming speed.
         swim_y = effective_speed * np.sin(bearing)
 
         offset_x = (u + swim_x) * dt
@@ -242,11 +241,9 @@ class MarineMovement:
 
         return offset_x, offset_y
 
-    
-    def oceanic_kernel_resolver(self, landmark, row, mode_directions="dynamic", is_brownian = False, min_D=1, max_D=36):
-       
-       
-        bias_x, bias_y = self.compute_current_offset() # Movement charcteristics
+    def oceanic_kernel_resolver(self, landmark, row, mode_directions="dynamic", is_brownian=False, min_D=1, max_D=36):
+
+        bias_x, bias_y = self.compute_current_offset()  # Movement charcteristics
         effective_speed = self.effective_speed()
         bear, turning = self.turning_angles()
         dt = self.compute_time_intervals()
@@ -254,29 +251,28 @@ class MarineMovement:
         r, kappa = self.directional_persistance()
         _, _, step_lengths = self.compute_step_lengths()
         S = np.mean(step_lengths)
-        S = int(np.ceil(S/self.resolution))
-        #set a flag if you want to calculate the number of directions at each step or globally for the whole trajectory 
+        S = int(np.ceil(S / self.resolution))
+        # set a flag if you want to calculate the number of directions at each step or globally for the whole trajectory
         abs_turning = np.abs(turning)
         abs_turning[abs_turning < 1e-6] = 1e-6
         mean_turn = np.median(abs_turning)
-        
+
         def D_calc_step(turning_divisor):
             D_raw = 2 * np.pi / turning_divisor
-            D_estimated = 2 ** np.ceil(np.log2(D_raw)) #  # Round UP to next power of 2
+            D_estimated = 2 ** np.ceil(np.log2(D_raw))  # # Round UP to next power of 2
             D_estimated = np.clip(D_estimated, min_D, max_D)
             return D_estimated.astype(int)
-            
+
         if mode_directions == "dynamic":
             D = D_calc_step(abs_turning)
-        
+
         if mode_directions == "static":
             D = D_calc_step(mean_turn)
-                
-        if is_brownian:
-            D=1
-   
-        return [is_brownian, S, D, diffusivity, bias_x, bias_y]
 
+        if is_brownian:
+            D = 1
+
+        return [is_brownian, S, D, diffusivity, bias_x, bias_y]
 
 
 data_path = "/home/poiosh/movement_py/shark_13_with_currents.csv"
@@ -300,4 +296,4 @@ print(data.head())
 
 # although filtering of dates also happens in C, it makes sense to set the dates of the interval of the study here
 
-#fetch_ocean_data(data=data,output_directory="ocean_data.csv")
+# fetch_ocean_data(data=data,output_directory="ocean_data.csv")

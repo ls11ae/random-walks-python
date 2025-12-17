@@ -1,23 +1,23 @@
 import math
 
-from random_walk_package import create_correlated_kernel_parameters
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import set_forbidden_landmark
+from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
 from random_walk_package.core.MixedWalker import *
 from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed
 
 studies = ["turtles_study/Striped Mud Turtles (Kinosternon baurii) Lakeland, FL.csv",
            "movebank_test/The Leap of the Cat.csv",
-           "Boars_Austria/",
-           "Cranes Kazakhstan/"]
+           "leap_of_the_cat/The Leap of the Cat.csv",
+           "ruby_throat_china/Siberian rubythroat tracking from Qinghai, China.csv"
+           ]
 
 
 def test_mixed_walk():
     resources_dir = os.path.dirname("random_walk_package/resources/")
-    study = os.path.join(resources_dir, studies[1])
+    study = os.path.join(resources_dir, studies[2])
     df = pd.read_csv(study)
-    kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=3)
-    """set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=4, directions=8, diffusity=1)
-    set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
+    kernel_mapping = create_correlated_kernel_parameters(animal_type=AIRBORNE, base_step_size=5)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=4, directions=8, diffusity=1)
+    """set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=4,
                          directions=1,
                          diffusity=2.6)"""
@@ -33,9 +33,11 @@ def test_mixed_walk():
                          lat_col="location-lat",
                          id_col="individual-local-identifier",
                          crs="EPSG:4326")
-    walks_dir = out_dir
+    walks_dir = os.path.join(out_dir, "walks")
+    os.makedirs(walks_dir, exist_ok=True)
     trajectory_collection = walker.generate_walks()
-    leaflet_path = plot_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))
+    plot_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))
+    return trajectory_collection
 
 
 def weather_terrain_params(row):
