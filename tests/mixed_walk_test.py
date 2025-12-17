@@ -15,8 +15,8 @@ def test_mixed_walk():
     resources_dir = os.path.dirname("random_walk_package/resources/")
     study = os.path.join(resources_dir, studies[2])
     df = pd.read_csv(study)
-    kernel_mapping = create_correlated_kernel_parameters(animal_type=AIRBORNE, base_step_size=5)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=4, directions=8, diffusity=1)
+    kernel_mapping = create_correlated_kernel_parameters(animal_type=AIRBORNE, base_step_size=3)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=3, directions=8, diffusity=1)
     """set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=4,
                          directions=1,
@@ -26,7 +26,7 @@ def test_mixed_walk():
     out_dir = os.path.dirname(study)
     walker = MixedWalker(data=df,
                          kernel_mapping=kernel_mapping,
-                         resolution=200,
+                         resolution=150,
                          out_directory=out_dir,
                          time_col="timestamp",
                          lon_col="location-long",

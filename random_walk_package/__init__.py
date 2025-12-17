@@ -46,11 +46,11 @@ from .bindings import MEDIUM, LIGHT, TREE_COVER, GRASSLAND, WATER, create_terrai
 # --------------------------------------------------
 # Core walkers
 # --------------------------------------------------
+from .core.AnimalMovement import AnimalMovementProcessor
 from .core.BrownianWalker import BrownianWalker
 from .core.MixedTimeWalker import MixedTimeWalker
 from .core.MixedWalker import MixedWalker
 from .core.BiasedWalker import BiasedWalker
-from .core.AnimalMovement import AnimalMovementProcessor
 
 # --------------------------------------------------
 # Define __all__ for clean public API

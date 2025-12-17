@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import circmean
 
-from random_walk_package.core.AnimalMovement import AnimalMovementProcessor
+from random_walk_package import AnimalMovementProcessor
 
 
 def shark_data_filter(data_path):

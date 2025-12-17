@@ -6,6 +6,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from random_walk_package import AnimalMovementProcessor
 from random_walk_package import create_terrain_map, set_forbidden_landmark, WATER, KernelParamsYXT, \
     EnvironmentInfluenceGrid, dll, point2d_arr_free, MixedTimeWalker
 from random_walk_package.bindings import create_mixed_kernel_parameters, HEAVY, get_walk_points, terrain_map_free
@@ -14,8 +15,6 @@ from random_walk_package.bindings.data_processing.environment_handling import pa
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import kernel_mapping_free
 from random_walk_package.bindings.mixed_walk import environment_mixed_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
-from random_walk_package.core.AnimalMovementNew import AnimalMovementProcessor
-from random_walk_package.core.MarineMovement import MarineMovement
 from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed, \
     plot_trajectory_collection
 from tests.mixed_walk_test import test_mixed_walk

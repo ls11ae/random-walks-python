@@ -404,5 +404,4 @@ class AnimalMovementProcessor:
         data_gdf_utm = gpd.GeoDataFrame(pd.concat(utm_gdfs), crs=utm_gdfs[0].crs)
 
         hmmthingy = KernelFactory(data_gdf_utm)
-        arrays, scaler, seq_dfs = hmmthingy.preprocess()
-        hmmthingy.apply_hmm(arrays, seq_dfs, plot=False)
+        hmmthingy.apply_hmm(0.5, range=400, reso=200)
