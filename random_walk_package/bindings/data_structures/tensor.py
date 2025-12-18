@@ -3,7 +3,7 @@ import ctypes
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll
 
-dll.tensor_set_new.argtypes = [ctypes.c_ssize_t, ]
+dll.tensor_set_new.argtypes = [ctypes.c_ssize_t, POINTER(TensorPtr)]
 dll.tensor_set_new.restype = TensorSetPtr
 
 # Core Tensor operations

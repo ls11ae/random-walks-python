@@ -126,7 +126,7 @@ if __name__ == "__main__":
     study = 'random_walk_package/resources/biology_birds/Biology of birds practical.csv'
     data = pd.read_csv(study)
     proc = AnimalMovementProcessor(data)
-    proc.add_states(0.2, 400)
+    proc.get_hmm_kernels(0.2, 400)
     exit(0)
     test_mixed_walk()
     for traj in proc.traj:

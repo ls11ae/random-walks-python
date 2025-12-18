@@ -31,6 +31,20 @@ def generate_correlated_kernels(width: int, dirs: int) -> TensorPtr:
     return dll.generate_correlated_kernels(dirs, width)
 
 
+def clip_kernel(Z, radius):
+    cx = Z.shape[0] // 2
+    cy = Z.shape[1] // 2
+    return Z[cx - radius:cx + radius + 1,
+    cy - radius:cy + radius + 1]
+
+
+def normalize_kernel(Z):
+    s = Z.sum()
+    if s > 0:
+        return Z / s
+    return Z
+
+
 def correlated_kernels_from_matrix(array: np.ndarray, width: int, height: int, directions: int) -> TensorPtr:
     matrix_c = kernel_from_array(array, width, height)
     result = dll.generate_kernels_from_matrix(matrix_c, directions)

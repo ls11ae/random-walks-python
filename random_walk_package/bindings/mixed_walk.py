@@ -1,4 +1,5 @@
 # mixed_walk.py
+import numpy as np
 
 from random_walk_package.bindings.data_structures.point2D import point2d_arr_free, get_walk_points
 from random_walk_package.bindings.data_structures.terrain import *
@@ -53,6 +54,10 @@ dll.time_walk_custom.argtypes = [c_ssize_t, KernelParametersMappingPtr, TerrainM
                                  POINTER(Dimensions3D),
                                  TimedLocation, TimedLocation]
 dll.time_walk_custom.restype = Point2DArrayPtr
+
+dll.state_dep_walk.argtypes = [c_ssize_t, POINTER(c_int), TensorSetPtr, KernelParametersMappingPtr, TerrainMapPtr,
+                               c_ssize_t, c_ssize_t, c_ssize_t, c_ssize_t]
+dll.state_dep_walk.restype = Point2DArrayPtr
 
 
 def environment_mixed_walk(T, mapping, terrain, csv_path, dimensions, start_date, end_date,
@@ -119,36 +124,51 @@ def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bo
     return walk_np
 
 
-def time_walk_init(W, H, terrain, tensormap, T, start_x, start_y, use_serialized=False, serialization_path='',
-                   mapping=None):
-    if mapping is None:
-        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-    return dll.mixed_walk_time(
-        c_ssize_t(W), c_ssize_t(H),
-        terrain,
-        mapping,
-        tensormap,
-        c_ssize_t(T),
-        c_ssize_t(start_x),
-        c_ssize_t(start_y),
-        c_bool(use_serialized),
-        serialization_path.encode('utf-8')
-    )
+def numpy_to_matrix(Z: np.ndarray) -> Matrix:
+    Z = np.ascontiguousarray(Z, dtype=np.float64)
+
+    data_ptr = Z.ctypes.data_as(POINTER(c_double))
+
+    mat = Matrix()
+    mat.width = Z.shape[1]
+    mat.height = Z.shape[0]
+    mat.len = Z.size
+    mat.data.points = data_ptr
+
+    return mat
 
 
-def time_walk_backtrace(dp, T, terrain, kernels_map, end_x, end_y, init_dir, use_serialized=False,
-                        serialization_path='', mapping=None):
-    if mapping is None:
-        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
-    return dll.backtrace_time_walk(
-        dp,
-        c_ssize_t(T),
-        terrain,
-        mapping,
-        kernels_map,
-        c_ssize_t(end_x),
-        c_ssize_t(end_y),
-        c_ssize_t(init_dir),
-        c_bool(use_serialized),
-        serialization_path.encode('utf-8')
-    )
+def build_state_tensor(Z: np.ndarray) -> Tensor:
+    mat = numpy_to_matrix(Z)
+
+    mats = (POINTER(Matrix) * 1)()
+    mats[0] = pointer(mat)
+
+    tensor = Tensor()
+    tensor.len = 1
+    tensor.data = mats
+
+    tensor._mat_ref = mat  # GC protection
+    return tensor
+
+
+def state_dep_walk(T, state, kernels, mapping, terrain, start_x, start_y, end_x, end_y):
+    tensors = (POINTER(Tensor) * 3)()
+    Za = kernels[0]
+    Zb = kernels[1]
+    Zc = kernels[2]
+
+    t0 = build_state_tensor(Za)
+    t1 = build_state_tensor(Zb)
+    t2 = build_state_tensor(Zc)
+
+    tensors[0] = pointer(t0)
+    tensors[1] = pointer(t1)
+    tensors[2] = pointer(t2)
+
+    tensor_set = dll.tensor_set_new(tensors, 3)
+    tensor_set._tensor_refs = [t0, t1, t2]
+
+    timeline = np.full(T, state, dtype=np.int32)
+    timeline_ptr = timeline.ctypes.data_as(POINTER(c_int))
+    return dll.state_dep_walk(T, timeline_ptr, tensor_set, mapping, terrain, start_x, start_y, end_x, end_y)

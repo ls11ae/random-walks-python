@@ -384,7 +384,7 @@ class AnimalMovementProcessor:
         print(f"KernelData Saved: {out_directory}")
         return results
 
-    def add_states(self, dt_tolerance, range):
+    def get_hmm_kernels(self, dt_tolerance, range):
         def utm_crs_from_geometry(geom):
             lon, lat = geom.coords[0]
             zone = int((lon + 180) // 6) + 1
@@ -418,3 +418,4 @@ class AnimalMovementProcessor:
             traj_id_col=self.id_col,
             t=self.time_col,
         )
+        return kernelA, kernelB, kernelC
