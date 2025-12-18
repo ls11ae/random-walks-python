@@ -67,3 +67,56 @@ def calculate_durations(animal_trajectories):
             time_diff = entries[i][2] - entries[i - 1][2]
             durations.append(time_diff.total_seconds() // 60)  # Convert to minutes
     return durations
+
+
+def merge_states_to_gdf(gdf, seq_dfs, columns):
+    # extract states
+    state_dict = {}
+    for seq in seq_dfs:
+        if 'state' in seq.columns and 'timestamp' in seq.columns:
+            for _, row in seq.iterrows():
+                timestamp = row['timestamp']
+                state = row['state']
+                state_dict[timestamp] = state
+
+    print(f"Anzahl States gefunden: {len(state_dict)}")
+
+    if not state_dict:
+        gdf['state'] = -1
+        return gdf
+
+    gdf_with_states = gdf.copy()
+
+    # assign states
+    state_count = 0
+    for idx, row in gdf_with_states.iterrows():
+        if idx in state_dict:
+            gdf_with_states.at[idx, 'state'] = state_dict[idx]
+            state_count += 1
+
+    print(f"States zugewiesen: {state_count} von {len(gdf_with_states)} Punkten")
+
+    # temporary gdf
+    temp_df = gdf_with_states.reset_index()
+    temp_df['state'] = temp_df['state'].astype('float')  # für NaN-Handling
+
+    # sort by animal and time
+    temp_df = temp_df.sort_values(by=[columns.id_col, columns.time_col])
+
+    # Interpolation per animal
+    temp_df['state'] = temp_df.groupby(columns.id_col)['state'].ffill()
+    temp_df['state'] = temp_df.groupby(columns.id_col)['state'].bfill()
+
+    temp_df['state'] = temp_df['state'].fillna(-1).astype(int)
+    import geopandas as gpd
+    gdf_with_states = gpd.GeoDataFrame(
+        temp_df.drop(columns='geometry'),
+        geometry=temp_df['geometry'],
+        crs=gdf.crs
+    )
+    gdf_with_states = gdf_with_states.set_index(columns.time_col)
+
+    print(f"\nFinal State-Distribution:")
+    print(gdf_with_states['state'].value_counts().sort_index())
+
+    return gdf_with_states

@@ -2,7 +2,7 @@ import numpy as np
 from hmmlearn.hmm import GaussianHMM
 from sklearn.mixture import GaussianMixture
 
-from random_walk_package.core.hmm.preprocessing import process_bettongs
+from random_walk_package.core.hmm.preprocessing import process_trajectories
 
 
 def apply_hmm(arrays, seq_dfs, n_components=3):
@@ -31,6 +31,13 @@ def apply_hmm(arrays, seq_dfs, n_components=3):
     order = np.argsort(state_speeds)
     model_state_mapping = {old: new for new, old in enumerate(order)}
 
+    state_mappings = {
+        'model_state_mapping': model_state_mapping,
+        'state_speeds': state_speeds,
+        'order': order,
+        'state_names': {0: 'resting', 1: 'foraging', 2: 'traveling'}
+    }
+
     # add state column to sequence dataframes
     state_seqs = []
     for arr in arrays:
@@ -42,8 +49,8 @@ def apply_hmm(arrays, seq_dfs, n_components=3):
         df["state"] = states
 
     # sum of gaussians for transition matrix creation
-    animal_trajectories, dt_threshold = process_bettongs(seq_dfs)
-    return animal_trajectories, dt_threshold
+    animal_trajectories, dt_threshold = process_trajectories(seq_dfs)
+    return animal_trajectories, dt_threshold, state_mappings
 
 
 def fit_data(axs, steps, rnge, reso):

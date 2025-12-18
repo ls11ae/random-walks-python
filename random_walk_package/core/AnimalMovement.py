@@ -111,6 +111,8 @@ class AnimalMovementProcessor:
         self.env_samples = env_samples
         self.longitude_col = lon_col
         self.latitude_col = lat_col
+        self.time_col = time_col
+        self.id_col = id_col
         self.start_dt = {str(traj.id): traj.get_start_time() for traj in self.traj.trajectories}
         self.end_dt = {str(traj.id): traj.get_end_time() for traj in self.traj.trajectories}
 
@@ -382,7 +384,7 @@ class AnimalMovementProcessor:
         print(f"KernelData Saved: {out_directory}")
         return results
 
-    def add_states(self):
+    def add_states(self, dt_tolerance, range):
         def utm_crs_from_geometry(geom):
             lon, lat = geom.coords[0]
             zone = int((lon + 180) // 6) + 1
@@ -402,6 +404,17 @@ class AnimalMovementProcessor:
             utm_gdfs.append(sub.to_crs(utm_crs))
 
         data_gdf_utm = gpd.GeoDataFrame(pd.concat(utm_gdfs), crs=utm_gdfs[0].crs)
+        print(data_gdf_utm.head())
 
         hmmthingy = KernelFactory(data_gdf_utm)
-        hmmthingy.apply_hmm(0.5, range=400, reso=200)
+        gdf = hmmthingy.apply_hmm()
+        kernelA, kernelB, kernelC = hmmthingy.get_state_kernels(dt_tolerance, range, 2 * range + 1)
+        gdf = gdf.set_geometry(
+            gpd.points_from_xy(gdf[self.longitude_col], gdf[self.latitude_col]),
+            crs=CRS.from_epsg(4326)
+        )
+        self.traj = mpd.TrajectoryCollection(
+            gdf,
+            traj_id_col=self.id_col,
+            t=self.time_col,
+        )

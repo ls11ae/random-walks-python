@@ -24,9 +24,9 @@ def preprocess_hmm(gdf, columns: ColumnConfig, scale=True):
     id_cols = columns.id_col
     provided_dir_col = columns.provided_dir_col
     feature_cols = columns.feature_cols
-    df = gdf
+
+    df = gdf.copy()
     df = df.reset_index()
-    df[time_col] = pd.to_datetime(df[time_col])
     df[time_col] = pd.to_datetime(df[time_col])
     df = df.dropna(subset=[time_col, geom_col])
 
@@ -34,7 +34,7 @@ def preprocess_hmm(gdf, columns: ColumnConfig, scale=True):
     print(f'Found {len(grouped)} animals')
     seq_dfs = []
     for group_id, group in grouped:
-        group = group.sort_values(time_col).reset_index(drop=True)
+        group = group.sort_values(time_col)
         # delta t (s)
         group[time_col] = pd.to_datetime(group[time_col])
         group['dt'] = group[time_col].diff().dt.total_seconds().fillna(0.0)
@@ -88,7 +88,7 @@ def preprocess_hmm(gdf, columns: ColumnConfig, scale=True):
     return arrays, scaler, seq_dfs
 
 
-def process_bettongs(data_list: list[pd.DataFrame]):
+def process_trajectories(data_list: list[pd.DataFrame]):
     animal_trajectories = {}
     # Iterate over each row in the DataFrame
     print("Length" + str(len(data_list)))
