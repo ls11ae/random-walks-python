@@ -59,6 +59,9 @@ dll.state_dep_walk.argtypes = [c_ssize_t, POINTER(c_int), TensorSetPtr, KernelPa
                                c_ssize_t, c_ssize_t, c_ssize_t, c_ssize_t]
 dll.state_dep_walk.restype = Point2DArrayPtr
 
+dll.single_state_walk.argtypes = [c_ssize_t, TensorPtr, KernelParametersMappingPtr, TerrainMapPtr,
+                                  c_ssize_t, c_ssize_t, c_ssize_t, c_ssize_t]
+
 
 def environment_mixed_walk(T, mapping, terrain, csv_path, dimensions, start_date, end_date,
                            start_point, end_point):
@@ -152,6 +155,12 @@ def build_state_tensor(Z: np.ndarray) -> Tensor:
     return tensor
 
 
+def single_state_walk(T, kernel, mapping, terrain, start_x, start_y, end_x, end_y):
+    t = build_state_tensor(kernel)
+    tensor = pointer(t)
+    return dll.single_state_walk(T, tensor, mapping, terrain, start_x, start_y, end_x, end_y)
+
+
 def state_dep_walk(T, state, kernels, mapping, terrain, start_x, start_y, end_x, end_y):
     tensors = (POINTER(Tensor) * 3)()
     Za = kernels[0]
@@ -166,7 +175,7 @@ def state_dep_walk(T, state, kernels, mapping, terrain, start_x, start_y, end_x,
     tensors[1] = pointer(t1)
     tensors[2] = pointer(t2)
 
-    tensor_set = dll.tensor_set_new(tensors, 3)
+    tensor_set = dll.tensor_set_new(3, tensors)
     tensor_set._tensor_refs = [t0, t1, t2]
 
     timeline = np.full(T, state, dtype=np.int32)
