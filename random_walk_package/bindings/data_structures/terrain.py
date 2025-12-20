@@ -6,6 +6,7 @@ import rasterio
 from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll, script_dir
 from .kernel_terrain_mapping import create_mixed_kernel_parameters
+from ..mixed_walk import build_state_tensor
 
 # landcover types
 TREE_COVER = 10
@@ -149,14 +150,10 @@ def parse_terrain(file: str, delim: str) -> TerrainMap:
     c_file = file.encode('ascii')
     c_delim = c_char(delim.encode('ascii')[0])
 
-    terrain = TerrainMap()
+    result = dll.create_terrain_map(c_file, c_delim)
+    print(f"Parsed terrain map from {file} with dimensions {result.contents.width}x{result.contents.height}")
 
-    result = dll.parse_terrain_map(c_file, byref(terrain), c_delim)
-    if result != 0:
-        raise RuntimeError(f"parse_terrain_map failed with error code {result}")
-    print(f"Parsed terrain map from {file} with dimensions {terrain.width}x{terrain.height}")
-
-    return terrain
+    return result
 
 
 def terrain_at(terrain, x, y):

@@ -59,7 +59,6 @@ def get_walk_points(walk) -> np.ndarray:
         raise ValueError("NULL points array in walk")
 
     length = walk_data.length
-    print(f"Debug: walk.length = {length}")  # Log length
 
     points = []
     for i in range(length):

@@ -1,22 +1,16 @@
 # debugging: gdb --args python -m tests.test
 import gzip
-import os
 import pickle
 from datetime import datetime
 
-import pandas as pd
-
-from random_walk_package import AnimalMovementProcessor
-from random_walk_package import create_terrain_map, set_forbidden_landmark, WATER, KernelParamsYXT, \
-    EnvironmentInfluenceGrid, dll, point2d_arr_free, MixedTimeWalker
-from random_walk_package.bindings import create_mixed_kernel_parameters, HEAVY, get_walk_points, terrain_map_free
+from random_walk_package import set_forbidden_landmark, MixedTimeWalker
 from random_walk_package.bindings.data_processing.environment_handling import parse_kernel_parameters, \
     get_kernels_environment_grid, free_environment_influence_grid, free_kernel_parameters_yxt
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import kernel_mapping_free
-from random_walk_package.bindings.mixed_walk import environment_mixed_walk
-from random_walk_package.bindings.plotter import plot_combined_terrain
-from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed, \
-    plot_trajectory_collection
+from random_walk_package.core.MixedWalker import *
+from random_walk_package.core.StateDependentWalker import StateDependentWalker
+from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed, \
+    save_trajectory_coll_leaflet
 from tests.mixed_walk_test import test_mixed_walk
 
 
@@ -109,8 +103,8 @@ def environment_pipeline_test():
     free_environment_influence_grid(environment_parameters)
 
 
-def save_walks_pickle(filepath, traj_coll):
-    pickle_path = os.path.join(filepath, "walks.pickle")
+def save_walks_pickle(filepath, traj_coll, pickle_name="walks.pickle"):
+    pickle_path = os.path.join(filepath, pickle_name)
     with gzip.open(pickle_path, 'wb') as f:
         pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)
         return pickle_path
@@ -122,11 +116,21 @@ def load_walks_pickle(filepath):
 
 
 if __name__ == "__main__":
-    study = "random_walk_package/resources/baboon_SA_study/Baboon group movement, South Africa (data from Bonnell et al. 2016).csv"
-    study = 'random_walk_package/resources/biology_birds/Biology of birds practical.csv'
-    data = pd.read_csv(study)
-    proc = AnimalMovementProcessor(data)
-    proc.get_hmm_kernels(0.2, 400)
+    test_mixed_walk()
+    exit(0)
+    study = "random_walk_package/resources/biology_birds/Biology of birds practical.csv"
+    study_dir = os.path.dirname(study)
+
+    df = pd.read_csv(study)
+    from random_walk_package.bindings.data_structures.terrain import AIRBORNE, MANGROVES
+
+    mapping = create_mixed_kernel_parameters(AIRBORNE, 7)
+    # set_forbidden_landmark(mapping, MANGROVES)
+    behavioral_walker = StateDependentWalker(data=df, mapping=mapping, out_directory=study_dir, resolution=600)
+    trajectory_collection = behavioral_walker.generate_walks("")
+    save_walks_pickle(study_dir, trajectory_collection, "state_walk.pickle")
+    traj_coll = load_walks_pickle(os.path.join(study_dir, "state_walk.pickle"))
+    save_trajectory_coll_leaflet(traj_coll, study_dir)
     exit(0)
     test_mixed_walk()
     for traj in proc.traj:
@@ -162,8 +166,8 @@ if __name__ == "__main__":
     traj_coll = test_mixed_walk()
     pickle_path = save_walks_pickle(resources_dir, traj_coll)
     trj_coll = load_walks_pickle(pickle_path)
-    leaflet_path = plot_trajectory_collection_timed(traj_coll=trj_coll, save_path=str(os.path.dirname(pickle_path)))
-    plot_trajectory_collection(trj_coll, save_path=str(os.path.dirname(pickle_path)))
+    leaflet_path = save_trajectory_collection_timed(traj_coll=trj_coll, save_path=str(os.path.dirname(pickle_path)))
+    save_trajectory_coll_leaflet(trj_coll, save_path=str(os.path.dirname(pickle_path)))
     exit(0)
     # test_time_walker()
     # test_mixed_walk()

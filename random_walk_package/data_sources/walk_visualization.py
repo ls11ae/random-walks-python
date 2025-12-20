@@ -213,7 +213,7 @@ colors = [
 ]
 
 
-def plot_trajectory_collection(traj_coll: mpd.TrajectoryCollection, save_path="walks/"):
+def save_trajectory_coll_leaflet(traj_coll: mpd.TrajectoryCollection, save_path="walks/"):
     """
     Plot each trajectory in a MovingPandas TrajectoryCollection using Folium.
     Saves:
@@ -254,7 +254,7 @@ def plot_trajectory_collection(traj_coll: mpd.TrajectoryCollection, save_path="w
     return out_file
 
 
-def plot_trajectory_collection_timed(traj_coll, save_path="walks/"):
+def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
     """
     Create a TimeDimension animated map for a MovingPandas TrajectoryCollection.
     One animated layer per trajectory.

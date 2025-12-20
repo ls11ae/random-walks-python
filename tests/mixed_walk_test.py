@@ -1,8 +1,13 @@
 import math
+import os
 
+import pandas as pd
+
+from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER
 from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
-from random_walk_package.core.MixedWalker import *
-from random_walk_package.data_sources.walk_visualization import plot_trajectory_collection_timed
+from random_walk_package.bindings import AIRBORNE
+from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed, \
+    save_trajectory_coll_leaflet
 
 studies = ["turtles_study/Striped Mud Turtles (Kinosternon baurii) Lakeland, FL.csv",
            "movebank_test/The Leap of the Cat.csv",
@@ -17,16 +22,16 @@ def test_mixed_walk():
     df = pd.read_csv(study)
     kernel_mapping = create_correlated_kernel_parameters(animal_type=AIRBORNE, base_step_size=3)
     set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=3, directions=8, diffusity=1)
-    """set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
+    set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=4,
                          directions=1,
-                         diffusity=2.6)"""
+                         diffusity=2.6)
     set_forbidden_landmark(kernel_mapping, WATER)
 
     out_dir = os.path.dirname(study)
     walker = MixedWalker(data=df,
                          kernel_mapping=kernel_mapping,
-                         resolution=150,
+                         resolution=200,
                          out_directory=out_dir,
                          time_col="timestamp",
                          lon_col="location-long",
@@ -36,7 +41,8 @@ def test_mixed_walk():
     walks_dir = os.path.join(out_dir, "walks")
     os.makedirs(walks_dir, exist_ok=True)
     trajectory_collection = walker.generate_walks()
-    plot_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))
+    save_trajectory_coll_leaflet(trajectory_collection, save_path=walks_dir)
+    save_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))
     return trajectory_collection
 
 

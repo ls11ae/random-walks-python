@@ -59,8 +59,9 @@ dll.state_dep_walk.argtypes = [c_ssize_t, POINTER(c_int), TensorSetPtr, KernelPa
                                c_ssize_t, c_ssize_t, c_ssize_t, c_ssize_t]
 dll.state_dep_walk.restype = Point2DArrayPtr
 
-dll.single_state_walk.argtypes = [c_ssize_t, TensorPtr, KernelParametersMappingPtr, TerrainMapPtr,
+dll.single_state_walk.argtypes = [c_ssize_t, KernelsMap3DPtr, TerrainMapPtr,
                                   c_ssize_t, c_ssize_t, c_ssize_t, c_ssize_t]
+dll.single_state_walk.restype = Point2DArrayPtr
 
 
 def environment_mixed_walk(T, mapping, terrain, csv_path, dimensions, start_date, end_date,
@@ -155,10 +156,17 @@ def build_state_tensor(Z: np.ndarray) -> Tensor:
     return tensor
 
 
-def single_state_walk(T, kernel, mapping, terrain, start_x, start_y, end_x, end_y):
-    t = build_state_tensor(kernel)
-    tensor = pointer(t)
-    return dll.single_state_walk(T, tensor, mapping, terrain, start_x, start_y, end_x, end_y)
+dll.kernels_map_single.argtypes = [TerrainMapPtr, TensorPtr, KernelParametersMappingPtr]
+dll.kernels_map_single.restype = KernelsMap3DPtr
+
+
+def kernels_map_single(terrain, kernel, mapping):
+    tensor_ptr = build_state_tensor(kernel)
+    return dll.kernels_map_single(terrain, tensor_ptr, mapping)
+
+
+def single_state_walk(T, kmap, terrain, start_x, start_y, end_x, end_y):
+    return dll.single_state_walk(T, kmap, terrain, start_x, start_y, end_x, end_y)
 
 
 def state_dep_walk(T, state, kernels, mapping, terrain, start_x, start_y, end_x, end_y):

@@ -1,14 +1,10 @@
 import os.path
 import subprocess
-from pathlib import Path
 
-import geopandas as gpd
-import movingpandas as mpd
-import pandas as pd
-
-from random_walk_package import AnimalMovementProcessor
+from random_walk_package.bindings.data_structures.terrain import *
 from random_walk_package.bindings.mixed_walk import *
 from random_walk_package.bindings.plotter import plot_combined_terrain
+from random_walk_package.core.AnimalMovement import *
 from random_walk_package.core.WalkerHelper import WalkerHelper
 
 try:
@@ -39,9 +35,9 @@ class MixedWalker:
                  resolution,
                  out_directory,
                  time_col="timestamp",
-                 lon_col="longitude",
-                 lat_col="latitude",
-                 id_col="animal_id",
+                 lon_col="location-long",
+                 lat_col="location-lat",
+                 id_col="tag-local-identifier",
                  crs="EPSG:4326"):
         self.data = data.dropna(
             subset=[time_col, lon_col, lat_col, id_col]
@@ -106,8 +102,8 @@ class MixedWalker:
 
             kernel_pool = preprocess_mixed_gpu(kernel_map, terrain_map) if use_cuda else None
 
-            width = terrain_map.width
-            height = terrain_map.height
+            width = terrain_map.contents.width
+            height = terrain_map.contents.height
             full_path = []
             steps_df = steps_dict[animal_id].df
             idx = steps_df.index
@@ -120,7 +116,7 @@ class MixedWalker:
                 end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
 
                 print("Start: " + str(start_x) + ", " + str(start_y))
-                manhattan = (abs(start_x - end_x) + abs(start_y - end_y)) // 2
+                manhattan = (abs(start_x - end_x) + abs(start_y - end_y))
                 T = 5 if manhattan < 5 else manhattan
 
                 dp_dir = None

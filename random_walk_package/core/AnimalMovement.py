@@ -5,6 +5,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import movingpandas as mpd
+import numpy as np
 from pandas import DataFrame
 from pyproj import CRS
 
@@ -244,7 +245,7 @@ class AnimalMovementProcessor:
         self.terrain_paths = results
         return results
 
-    def create_movement_data(self, traj_id):
+    def create_movement_data(self, traj_id, has_states):
         traj_utm = self.traj_utm(traj_id)
         utm_bbox, _ = self.bbox_utm(traj_id)
         xmin, ymin, xmax, ymax = utm_bbox
@@ -252,27 +253,29 @@ class AnimalMovementProcessor:
         nx, ny = self._grid_shape_from_bbox(utm_bbox, self.resolution)
         df = traj_utm.df.copy()
 
-        df["grid_x"] = ((df.geometry.x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
-        df["grid_y"] = ((df.geometry.y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
+        df["grid_x"] = np.round((df.geometry.x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
+        df["grid_y"] = np.round((df.geometry.y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
         df["geo_x"] = self.traj.get_trajectory(traj_id).df[self.longitude_col]
         df["geo_y"] = self.traj.get_trajectory(traj_id).df[self.latitude_col]
         df["time"] = df.index
+        if has_states:
+            df["state"] = self.traj.get_trajectory(traj_id).df["state"]
 
         return MovementTrajectory(traj_id=traj_id, df=df)
 
-    def create_movement_data_dict(self):
+    def create_movement_data_dict(self, has_states=False):
         return {
-            traj.id: self.create_movement_data(traj.id)
+            traj.id: self.create_movement_data(traj.id, has_states)
             for traj in self.traj.trajectories
         }
 
     @staticmethod
-    def grid_to_geo(x, y, utm_bbox, width, height, epsg) -> tuple[float, float]:
+    def grid_to_geo(x, y, utm_bbox, width, height, epsg):
         min_x, min_y, max_x, max_y = utm_bbox
-        utm_x = min_x + (x / (width - 1)) * (max_x - min_x)
-        utm_y = max_y - (y / (height - 1)) * (max_y - min_y)
 
-        # UTM -> Geodetic
+        utm_x = min_x + ((x + 0.5) / width) * (max_x - min_x)
+        utm_y = min_y + ((y + 0.5) / height) * (max_y - min_y)
+
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat
 

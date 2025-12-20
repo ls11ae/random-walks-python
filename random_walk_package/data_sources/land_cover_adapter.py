@@ -2,6 +2,8 @@ import os
 
 import rasterio
 
+from random_walk_package import TREE_COVER
+from random_walk_package.bindings import MOSS_AND_LICHEN
 from random_walk_package.data_sources.geo_fetcher import lonlat_bbox_to_utm, utm_bbox_to_lonlat
 
 landcover_classes = {
@@ -89,7 +91,7 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, min_lat, max_lon
                         c = max(col_start, min(c, col_stop))
                         c = min(c, array_width - 1)
 
-                        pixel_value = landcover_array[r, c]
+                        pixel_value = max(TREE_COVER, min(landcover_array[r, c], MOSS_AND_LICHEN))
                         row_values.append(str(pixel_value))
 
                     # Write the row as a space-separated string
