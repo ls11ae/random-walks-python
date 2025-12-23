@@ -10,7 +10,7 @@ from pandas import DataFrame
 from pyproj import CRS
 
 from random_walk_package.bindings import parse_terrain
-from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties
+from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties, df_add_properties2
 from random_walk_package.core.KernelFactory import KernelFactory
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
@@ -235,7 +235,7 @@ class AnimalMovementProcessor:
                 # Use temporary placeholder to avoid conflicts
                 data = data.replace(str(OCEAN_VALUE), str(OCEAN_VALUE_MAPPED))
                 data = data.replace(str(LAND_VALUE), str(LAND_VALUE_MAPPED))
-                data = data.replace("255", "0")
+                data = data.replace("255", str(OCEAN_VALUE_MAPPED))
 
                 with open(txt_path, 'w') as file:
                     file.write(data)
@@ -386,6 +386,84 @@ class AnimalMovementProcessor:
             results[str(aid)] = out_path
         print(f"KernelData Saved: {out_directory}")
         return results
+
+    def kernel_params_per_animal_csv2(
+            self,
+            env_path: str,
+            kernel_resolver,  # function (row) -> KernelParametersPtr
+            time_stamp='timestamp',
+            lon='location-long',
+            lat='location-lat',
+            out_directory: str | None = None
+    ):
+        """
+        :param env_path: path to environment data
+        :param kernel_resolver: your function that returns kernel parameters from a row of your env dataframe
+        :param time_stamp: the name of your time instance column
+        :param lon: the name of your longitude instance
+        :param lat: the name of your latitude instance
+        :param out_directory: path to output directory
+
+        """
+        # prepare outer folder for kernels
+        if out_directory is None:
+            out_directory = "kernels"
+        out_directory = Path(out_directory) / "kernels"
+        out_directory.mkdir(exist_ok=True, parents=True)
+
+        # for each animal trajectory
+        for traj in self.traj.trajectories:
+            # set intervals from original study [(t0,t1)(t1,t2)...(t_n-1, t_n)]
+            intervals = []
+            times = traj.df.index
+            for i in range(len(times) - 1):
+                intervals.append((times[i], times[i + 1]))
+            # compute / parse bbox and terrain for that animal
+            aid = traj.id
+            bbox = self.bbox_geo(aid)
+            utm_bbox, epsg = self.bbox_utm(aid)
+            width, height = self._grid_shape_from_bbox(utm_bbox, self.resolution)
+            print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
+            terrain_pth = self.terrain_paths.get(aid)
+            terrain_map = parse_terrain(file=terrain_pth, delim=' ')
+            index = 0
+            # for each time interval we create kernel parameters instead of one big ahh csv
+            for (t_start, t_end) in intervals:
+                interval_parts = []
+                print(f"[KERNEL PARAMETERS] Processing interval {t_start} to {t_end} ({index} of {len(intervals)})")
+                # load in chunks
+                for chunk in pd.read_csv(env_path, chunksize=1_000_000, parse_dates=["time"]):
+                    sub = chunk[(chunk.time >= t_start) & (chunk.time <= t_end)]
+                    if not sub.empty:
+                        interval_parts.append(sub)
+
+                if not interval_parts:
+                    continue
+                # df can cross multiple chunks so concat here
+                interval_df = pd.concat(interval_parts, ignore_index=True)
+                print(f"[KERNEL PARAMETERS] Intervals collected -> Create CSV for {t_start} to {t_end}")
+                # create a csv per interval, later a serialized binary of the env grid is passed to the walker for each step
+                df_proc, _ = df_add_properties2(
+                    df=interval_df,
+                    kernel_resolver=kernel_resolver,
+                    terrain=terrain_map,
+                    bbox_geo=bbox,
+                    grid_width=width,
+                    grid_height=height,
+                    utm_code=epsg,
+                    time_stamp=time_stamp,
+                    grid_points_per_edge=self.env_samples,
+                    lon=lon,
+                    lat=lat,
+                )
+
+                # Save CSV
+                aid_out = Path(out_directory) / str(aid)
+                aid_out.mkdir(parents=True, exist_ok=True)
+                out_path = os.path.join(aid_out, f"{aid}_kernel_data_{t_start}-{t_end}.csv")
+                df_proc.to_csv(out_path, index=False)
+                print(f"[KERNEL PARAMETERS] Save CSV to {out_path}")
+                index += 1
 
     def get_hmm_kernels(self, dt_tolerance, range):
         def utm_crs_from_geometry(geom):

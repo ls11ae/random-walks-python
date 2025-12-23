@@ -1,9 +1,11 @@
+import gzip
 import math
 import os
+import pickle
 
 import pandas as pd
 
-from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER
+from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, MixedTimeWalker
 from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
 from random_walk_package.bindings import AIRBORNE
 from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed, \
@@ -137,4 +139,6 @@ def weather_terrain_params(row):
     with gzip.open(pickle_path, 'wb') as f:
         pickle.dump(trajectory_collection, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-    leaflet_path = plot_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))"""
+    save_trajectory_collection_timed(trajectory_collection, walks_dir)
+    print(f"walks saved at {walks_dir}")
+    """

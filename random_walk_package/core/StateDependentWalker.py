@@ -3,9 +3,9 @@ import movingpandas as mpd
 import pandas as pd
 
 from random_walk_package import MixedWalker, get_walk_points, dll
-from random_walk_package.bindings import parse_terrain, terrain_map_free, kernels_map_single, kernels_map3d_free
+from random_walk_package.bindings import parse_terrain, terrain_map_free, kernels_map3d_free
 from random_walk_package.bindings.data_structures.kernels import normalize_kernel, clip_kernel
-from random_walk_package.bindings.mixed_walk import single_state_walk
+from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single
 from random_walk_package.core.WalkerHelper import WalkerHelper
 
 

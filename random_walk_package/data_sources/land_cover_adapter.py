@@ -91,7 +91,7 @@ def landcover_to_discrete_txt(file_path, res_x, res_y, min_lon, min_lat, max_lon
                         c = max(col_start, min(c, col_stop))
                         c = min(c, array_width - 1)
 
-                        pixel_value = max(TREE_COVER, min(landcover_array[r, c], MOSS_AND_LICHEN))
+                        pixel_value = landcover_array[r, c]
                         row_values.append(str(pixel_value))
 
                     # Write the row as a space-separated string

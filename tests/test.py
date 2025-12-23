@@ -1,7 +1,11 @@
 # debugging: gdb --args python -m tests.test
 import gzip
+import os.path
 import pickle
+import random
 from datetime import datetime
+
+import pandas as pd
 
 from random_walk_package import set_forbidden_landmark, MixedTimeWalker
 from random_walk_package.bindings.data_processing.environment_handling import parse_kernel_parameters, \
@@ -115,8 +119,106 @@ def load_walks_pickle(filepath):
         return pickle.load(f)
 
 
+# map row of your csv to kernel params, terrain is always part of a row, so is x,y,t if needed
+# keep in mind that NaN values can (and almost always) appear so must be handled here (unless you filled them earlier)
+def marine_params(row):
+    uo = row.get("uo")
+    vo = row.get("vo")
+
+    if pd.isna(uo) or pd.isna(vo):
+        bias_x = 0
+        bias_y = 0
+        is_brownian = False
+        diffusity = 1.0
+    else:
+        bias_x = int(np.round(float(uo) * 10))
+        bias_y = int(np.round(float(vo) * 10))
+        is_brownian = row.get("depth", 0) < 0.2
+        diffusity = 0.9
+
+    S = random.randint(3, 7)
+    D = 8
+
+    return [
+        bool(is_brownian),
+        float(S),
+        int(D),
+        float(diffusity),
+        int(bias_x),
+        int(bias_y),
+    ]
+
+
 if __name__ == "__main__":
-    test_mixed_walk()
+    study_path = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
+    study_df = pd.read_csv(study_path)
+    env_samples = 5
+    T = 25
+    # i took the original csv but this also works for your processed csv with additional data, just adapt the kernel resolver
+    env_path = '/home/omar/Downloads/current_filename.csv'
+    processor = AnimalMovementProcessor(study_df, env_samples=env_samples)
+    processor.create_landcover_data_txt(is_marine=True, resolution=1000, out_directory=os.path.dirname(study_path))
+    processor.kernel_params_per_animal_csv2(env_path=env_path,
+                                            kernel_resolver=marine_params,
+                                            time_stamp="time", lon="longitude", lat="latitude",
+                                            out_directory=os.path.dirname(study_path))
+
+    kernel_path = 'random_walk_package/resources/tiger_sharks/kernels/204413/204413_kernel_data_2024-09-12 12:00:00-2024-09-13 12:00:00.csv'
+    kernel_df = pd.read_csv(kernel_path)
+    kernel_df["time"] = pd.to_datetime(kernel_df["time"])
+    kernel_df = kernel_df.sort_values(["y", "x", "time"])  # eig unnötig noch mal zu sortieren aber sicher ist sicher
+
+    import struct
+
+    DT_FMT = "<4i"  # 4 ints
+    KP_FMT = "<?qqfqq"  # bool, 2 x size_t, float, 2 x size_t
+    DIMS_FMT = "<qqq"  # 3 x size_t
+    binary_dir = os.path.join(os.path.dirname(study_path), "env_2024-09-12_10_11.bin")
+    with open(binary_dir, "wb") as f:
+        # write dimensions
+        f.write(struct.pack(
+            DIMS_FMT,
+            env_samples,
+            env_samples,
+            T
+        ))
+
+        for y in range(env_samples):
+            for x in range(env_samples):
+                cell = kernel_df[(kernel_df["y"] == y) & (kernel_df["x"] == x)]
+
+                for _, row in cell.iterrows():
+                    t = row["time"]
+
+                    # DateTime
+                    f.write(struct.pack(
+                        DT_FMT,
+                        t.year,
+                        t.month,
+                        t.day,
+                        t.hour
+                    ))
+
+                    # KernelParameters
+                    f.write(struct.pack(
+                        KP_FMT,
+                        bool(row["is_brownian"]),
+                        int(row["S"]),
+                        int(row["D"]),
+                        float(row["diffusity"]),
+                        int(row["bias_x"]),
+                        int(row["bias_y"])
+                    ))
+
+                    # landmark
+                    f.write(struct.pack("<i", int(row["terrain"])))
+        print(
+            struct.calcsize(DIMS_FMT) +
+            env_samples * env_samples * T *
+            (struct.calcsize(DT_FMT) + struct.calcsize(KP_FMT) + 4)
+        )
+        print(
+            f"check if your {binary_dir} size matches the previous print in bytes, with stat -c {"%s"} <test.txt> in Linux")
     exit(0)
     study = "random_walk_package/resources/biology_birds/Biology of birds practical.csv"
     study_dir = os.path.dirname(study)
