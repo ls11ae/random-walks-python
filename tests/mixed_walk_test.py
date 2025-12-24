@@ -2,12 +2,13 @@ import gzip
 import math
 import os
 import pickle
+import pytest
 
 import pandas as pd
 
-from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, MixedTimeWalker
+from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, MixedTimeWalker, MEDIUM
 from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
-from random_walk_package.bindings import AIRBORNE
+from random_walk_package.bindings import AIRBORNE, create_mixed_kernel_parameters
 from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed, \
     save_trajectory_coll_leaflet
 
@@ -106,18 +107,18 @@ def weather_terrain_params(row):
             float(bias_x), float(bias_y)]
 
 
-"""def test_time_walker():
+@pytest.mark.skip(reason="takes too long")
+def test_time_walker():
     study = 'random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv'
     df = pd.read_csv(study)
 
     environment_csv = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
-    df_env = pd.read_csv(environment_csv)
-
     out_dir = os.path.dirname(study)
 
     mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=5)
+    set_forbidden_landmark(mapping, WATER)
     walker = MixedTimeWalker(data=df,
-                             env_data=df_env,
+                             env_data=environment_csv,
                              kernel_mapping=mapping,
                              resolution=400,
                              out_directory=out_dir,
@@ -141,4 +142,3 @@ def weather_terrain_params(row):
 
     save_trajectory_collection_timed(trajectory_collection, walks_dir)
     print(f"walks saved at {walks_dir}")
-    """

@@ -183,7 +183,7 @@ def df_add_properties2(df: DataFrame,
     # filter by bounding box
     clean_df = df[
         (df[lon] >= min_lon) & (df[lon] <= max_lon) &
-        (df[lat] >= min_lat) & (df[lat] <= max_lat)]
+        (df[lat] >= min_lat) & (df[lat] <= max_lat)].copy()
     if clean_df.empty:
         return None, 0
 
@@ -262,13 +262,6 @@ def df_add_properties2(df: DataFrame,
         .groupby(["y", "x"], sort=False)[cols]
         .transform(lambda s: s.ffill().bfill())
     )
-
-    # fallback defaults (edge case)
-    clean_df["is_brownian"].fillna(True, inplace=True)
-    clean_df["S"].fillna(5, inplace=True)
-    clean_df["D"].fillna(8, inplace=True)
-    clean_df["diffusity"].fillna(0.9, inplace=True)
-    clean_df[["bias_x", "bias_y"]].fillna(0, inplace=True)
 
     # final order for C backend
     clean_df = clean_df[

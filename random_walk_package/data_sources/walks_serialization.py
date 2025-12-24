@@ -1,3 +1,4 @@
+import os
 import struct
 
 import pandas as pd
@@ -45,3 +46,32 @@ def serialize_env_grid(binary_dir, kernel_df: pd.DataFrame, time_col, env_sample
 
                     # landmark
                     f.write(struct.pack("<i", int(row["terrain"])))
+
+
+import json
+
+
+def serialize_kernel_paths_json(binary_paths, out_directory):
+    with open(os.path.join(out_directory, "kernels.json"), "w") as f:
+        json.dump(
+            [
+                {
+                    "key": list(k),  # [str, str, str] as (animal_id, start_dt, end_dt)
+                    "path": v
+                }
+                for k, v in binary_paths.items()
+            ],
+            f,
+            indent=2
+        )
+
+
+def deserialize_kernel_paths_json(path):
+    with open(path) as f:
+        data = json.load(f)
+
+    binary_paths = {
+        tuple(entry["key"]): entry["path"]
+        for entry in data
+    }
+    return binary_paths

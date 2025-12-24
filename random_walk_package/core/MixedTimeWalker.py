@@ -7,7 +7,7 @@ import pandas as pd
 from random_walk_package import dll
 from random_walk_package import get_walk_points
 from random_walk_package.bindings import parse_terrain, terrain_map_free
-from random_walk_package.bindings.mixed_walk import environment_mixed_walk
+from random_walk_package.bindings.mixed_walk import environment_mixed_walk, env_mixed_walk
 from random_walk_package.core.MixedWalker import MixedWalker
 from random_walk_package.core.WalkerHelper import WalkerHelper
 
@@ -23,7 +23,7 @@ class MixedTimeWalker(MixedWalker):
                  ):
         super().__init__(data, kernel_mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs)
         self.env_data = env_data
-        self.env_paths: dict[str, str] = {}
+        self.env_paths: dict[tuple[str, str, str], str] = {}
         self.kernel_resolver = kernel_resolver
         self.env_samples = env_samples
         self._process_movebank_data()
@@ -32,12 +32,13 @@ class MixedTimeWalker(MixedWalker):
         super()._process_movebank_data()
         self.animal_proc.env_samples = self.env_samples
         kernel_dir = os.path.join(self.out_directory, 'kernel_data')
-        self.env_paths = self.animal_proc.kernel_params_per_animal_csv(df=self.env_data,
-                                                                       kernel_resolver=self.kernel_resolver,
-                                                                       time_stamp='timestamp',
-                                                                       lon='longitude',
-                                                                       lat='latitude',
-                                                                       out_directory=kernel_dir)
+        self.env_paths = self.animal_proc.kernel_params_per_animal_binary(env_path=self.env_data,
+                                                                          kernel_resolver=self.kernel_resolver,
+                                                                          time_stamp='timestamp',
+                                                                          lon='longitude',
+                                                                          lat='latitude',
+                                                                          out_directory=kernel_dir)
+        print(f"[PREPROCESSING] kernel params loaded]")
 
     def generate_walks(self, env_weight=0.5):
         """
@@ -61,30 +62,26 @@ class MixedTimeWalker(MixedWalker):
                 start_x, start_y = steps["grid_x"].iloc[i], steps["grid_y"].iloc[i]
                 end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
                 start_date, end_date = steps["time"].iloc[i], steps["time"].iloc[i + 1]
+                ts = pd.Timestamp(start_date).strftime("%Y%m%dT%H")
+                te = pd.Timestamp(end_date).strftime("%Y%m%dT%H")
                 if start_x == end_x and start_y == end_y:
                     segment = [(start_x, start_y)]
                     full_path.extend(segment)
                     segment_boundaries.append(len(full_path))
                     continue
-                # Count how many timestamps exist for the given interval
-                sub_df = pd.read_csv(self.env_paths[animal_id])
-                sub_df["timestamp"] = pd.to_datetime(sub_df["timestamp"], errors='coerce')
-                sub_df = sub_df[(sub_df["timestamp"] >= start_date) & (sub_df["timestamp"] <= end_date)]
-                number_records = sub_df["timestamp"].nunique()
 
-                dimensions = self.animal_proc.env_samples, self.animal_proc.env_samples, number_records
                 manhattan = abs(start_x - end_x) + abs(start_y - end_y)
                 T = 5 if manhattan < 5 else manhattan
                 print(T)
                 # Initialize DP matrix for the current start point
-                walk_ptr = environment_mixed_walk(T=T, mapping=self.mapping,
-                                                  terrain=terrain_map,
-                                                  csv_path=self.env_paths[animal_id],
-                                                  dimensions=dimensions,
-                                                  start_date=start_date,
-                                                  end_date=end_date,
-                                                  start_point=[start_x, start_y],
-                                                  end_point=[end_x, end_y])
+                walk_ptr = env_mixed_walk(T=T, mapping=self.mapping,
+                                          terrain=terrain_map,
+                                          csv_path=self.env_paths[
+                                              str(animal_id), str(ts), str(te)],
+                                          start_date=start_date,
+                                          end_date=end_date,
+                                          start_point=[start_x, start_y],
+                                          end_point=[end_x, end_y], env_weight=env_weight)
                 print("walk created")
                 dll.point2d_array_print(walk_ptr)
 

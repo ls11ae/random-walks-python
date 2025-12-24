@@ -71,6 +71,7 @@ dll.single_state_walk.restype = Point2DArrayPtr
 
 def environment_mixed_walk(T, mapping, terrain, csv_path, dimensions, start_date, end_date,
                            start_point, end_point, env_weight: float = 0.5):
+    """Performs time‑based custom walk using environment data as csv"""
     start_dt = DateTime(start_date.year, start_date.month, start_date.day, start_date.hour)
     end_dt = DateTime(end_date.year, end_date.month, end_date.day, end_date.hour)
     interval_ptr = pointer(DateTimeInterval(start_dt, end_dt))
@@ -84,7 +85,7 @@ def environment_mixed_walk(T, mapping, terrain, csv_path, dimensions, start_date
 
 def env_mixed_walk(T, mapping, terrain, csv_path, start_date, end_date,
                    start_point, end_point, env_weight: float = 0.5):
-    """Performs time‑based custom walk using environment data"""
+    """Performs time‑based custom walk using environment data as binary"""
     start_dt = DateTime(start_date.year, start_date.month, start_date.day, start_date.hour)
     end_dt = DateTime(end_date.year, end_date.month, end_date.day, end_date.hour)
     path_c = csv_path.encode('utf-8')

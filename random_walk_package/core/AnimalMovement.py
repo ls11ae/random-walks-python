@@ -9,7 +9,7 @@ import numpy as np
 from pandas import DataFrame
 from pyproj import CRS
 
-from random_walk_package.bindings import parse_terrain
+from random_walk_package.bindings import parse_terrain, terrain_map_free
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties, df_add_properties2
 from random_walk_package.core.KernelFactory import KernelFactory
 from random_walk_package.data_sources.geo_fetcher import *
@@ -17,7 +17,7 @@ from random_walk_package.data_sources.land_cover_adapter import landcover_to_dis
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
 from random_walk_package.data_sources.ocean_cover import fetch_ocean_cover_tif
 from random_walk_package.data_sources.open_meteo_api import create_weather_csvs
-from random_walk_package.data_sources.walks_serialization import serialize_env_grid
+from random_walk_package.data_sources.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
 
 
 @dataclass
@@ -412,7 +412,7 @@ class AnimalMovementProcessor:
         out_directory = Path(out_directory) / "kernels"
         out_directory.mkdir(exist_ok=True, parents=True)
 
-        binary_paths: dict[tuple[str, pd.Timestamp, pd.Timestamp], str] = {}
+        binary_paths: dict[tuple[str, str, str], str] = {}
 
         # for each animal trajectory
         for traj in self.traj.trajectories:
@@ -468,13 +468,15 @@ class AnimalMovementProcessor:
                 te = pd.Timestamp(t_end).strftime("%Y%m%dT%H")
                 out_path_bin = os.path.join(aid_out, f"{aid}_kernels_{ts}-{te}.bin")
                 serialize_env_grid(out_path_bin, df_proc, time_stamp, self.env_samples, T)
-                binary_paths[(aid, ts, te)] = out_path_bin
+                binary_paths[str(aid), ts, te] = out_path_bin
 
                 # save as csv
                 out_path_csv = os.path.join(aid_out, f"{aid}_kernels_{ts}-{te}.csv")
                 df_proc.to_csv(out_path_csv, index=False)
                 print(f"[KERNEL PARAMETERS] Save CSV and Binary to {aid_out}")
                 index += 1
+            terrain_map_free(terrain_map)
+        serialize_kernel_paths_json(binary_paths, out_directory)
         return binary_paths
 
     def get_hmm_kernels(self, dt_tolerance, range):
