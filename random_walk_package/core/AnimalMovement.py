@@ -17,6 +17,7 @@ from random_walk_package.data_sources.land_cover_adapter import landcover_to_dis
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
 from random_walk_package.data_sources.ocean_cover import fetch_ocean_cover_tif
 from random_walk_package.data_sources.open_meteo_api import create_weather_csvs
+from random_walk_package.data_sources.walks_serialization import serialize_env_grid
 
 
 @dataclass
@@ -387,7 +388,7 @@ class AnimalMovementProcessor:
         print(f"KernelData Saved: {out_directory}")
         return results
 
-    def kernel_params_per_animal_csv2(
+    def kernel_params_per_animal_binary(
             self,
             env_path: str,
             kernel_resolver,  # function (row) -> KernelParametersPtr
@@ -411,6 +412,8 @@ class AnimalMovementProcessor:
         out_directory = Path(out_directory) / "kernels"
         out_directory.mkdir(exist_ok=True, parents=True)
 
+        binary_paths: dict[tuple[str, pd.Timestamp, pd.Timestamp], str] = {}
+
         # for each animal trajectory
         for traj in self.traj.trajectories:
             # set intervals from original study [(t0,t1)(t1,t2)...(t_n-1, t_n)]
@@ -432,8 +435,8 @@ class AnimalMovementProcessor:
                 interval_parts = []
                 print(f"[KERNEL PARAMETERS] Processing interval {t_start} to {t_end} ({index} of {len(intervals)})")
                 # load in chunks
-                for chunk in pd.read_csv(env_path, chunksize=1_000_000, parse_dates=["time"]):
-                    sub = chunk[(chunk.time >= t_start) & (chunk.time <= t_end)]
+                for chunk in pd.read_csv(env_path, chunksize=1_000_000, parse_dates=[time_stamp]):
+                    sub = chunk[(chunk[time_stamp] >= t_start) & (chunk[time_stamp] <= t_end)]
                     if not sub.empty:
                         interval_parts.append(sub)
 
@@ -443,7 +446,7 @@ class AnimalMovementProcessor:
                 interval_df = pd.concat(interval_parts, ignore_index=True)
                 print(f"[KERNEL PARAMETERS] Intervals collected -> Create CSV for {t_start} to {t_end}")
                 # create a csv per interval, later a serialized binary of the env grid is passed to the walker for each step
-                df_proc, _ = df_add_properties2(
+                df_proc, T = df_add_properties2(
                     df=interval_df,
                     kernel_resolver=kernel_resolver,
                     terrain=terrain_map,
@@ -457,15 +460,26 @@ class AnimalMovementProcessor:
                     lat=lat,
                 )
 
-                # Save CSV
+                # Save environment grid
                 aid_out = Path(out_directory) / str(aid)
                 aid_out.mkdir(parents=True, exist_ok=True)
-                out_path = os.path.join(aid_out, f"{aid}_kernel_data_{t_start}-{t_end}.csv")
-                df_proc.to_csv(out_path, index=False)
-                print(f"[KERNEL PARAMETERS] Save CSV to {out_path}")
+                # reformat dt and save binary path
+                ts = pd.Timestamp(t_start).strftime("%Y%m%dT%H")
+                te = pd.Timestamp(t_end).strftime("%Y%m%dT%H")
+                out_path_bin = os.path.join(aid_out, f"{aid}_kernels_{ts}-{te}.bin")
+                serialize_env_grid(out_path_bin, df_proc, time_stamp, self.env_samples, T)
+                binary_paths[(aid, ts, te)] = out_path_bin
+
+                # save as csv
+                out_path_csv = os.path.join(aid_out, f"{aid}_kernels_{ts}-{te}.csv")
+                df_proc.to_csv(out_path_csv, index=False)
+                print(f"[KERNEL PARAMETERS] Save CSV and Binary to {aid_out}")
                 index += 1
+        return binary_paths
 
     def get_hmm_kernels(self, dt_tolerance, range):
+        """Computes HMM kernels from trajectory data"""
+
         def utm_crs_from_geometry(geom):
             lon, lat = geom.coords[0]
             zone = int((lon + 180) // 6) + 1
