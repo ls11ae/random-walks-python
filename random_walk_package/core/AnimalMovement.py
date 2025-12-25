@@ -391,7 +391,7 @@ class AnimalMovementProcessor:
     def kernel_params_per_animal_binary(
             self,
             env_path: str,
-            kernel_resolver,  # function (row) -> KernelParametersPtr
+            kernel_resolver,  # function (df row) -> KernelParametersPtr
             time_stamp='timestamp',
             lon='location-long',
             lat='location-lat',
@@ -404,8 +404,8 @@ class AnimalMovementProcessor:
         :param lon: the name of your longitude instance
         :param lat: the name of your latitude instance
         :param out_directory: path to output directory
-
         """
+
         # prepare outer folder for kernels
         if out_directory is None:
             out_directory = "kernels"
@@ -416,36 +416,56 @@ class AnimalMovementProcessor:
 
         # for each animal trajectory
         for traj in self.traj.trajectories:
-            # set intervals from original study [(t0,t1)(t1,t2)...(t_n-1, t_n)]
-            intervals = []
+            # build time intervals [(t0,t1), (t1,t2), ...]
             times = traj.df.index
-            for i in range(len(times) - 1):
-                intervals.append((times[i], times[i + 1]))
-            # compute / parse bbox and terrain for that animal
+            intervals = [(times[i], times[i + 1]) for i in range(len(times) - 1)]
+
             aid = traj.id
             bbox = self.bbox_geo(aid)
             utm_bbox, epsg = self.bbox_utm(aid)
             width, height = self._grid_shape_from_bbox(utm_bbox, self.resolution)
             print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
+
             terrain_pth = self.terrain_paths.get(aid)
             terrain_map = parse_terrain(file=terrain_pth, delim=' ')
-            index = 0
-            # for each time interval we create kernel parameters instead of one big ahh csv
-            for (t_start, t_end) in intervals:
-                interval_parts = []
+
+            aid_out = out_directory / str(aid)
+            aid_out.mkdir(parents=True, exist_ok=True)
+
+            for index, (t_start, t_end) in enumerate(intervals):
+                ts = pd.Timestamp(t_start).strftime("%Y%m%dT%H")
+                te = pd.Timestamp(t_end).strftime("%Y%m%dT%H")
+
+                out_path_bin = aid_out / f"{aid}_kernels_{ts}-{te}.bin"
+                out_path_csv = aid_out / f"{aid}_kernels_{ts}-{te}.csv"
+
+                # skip if outputs already exist
+                if out_path_bin.exists() and out_path_csv.exists():
+                    print(
+                        f"[KERNEL PARAMETERS] Skip interval {t_start} to {t_end} ({index} of {len(intervals)}): already exists")
+                    binary_paths[str(aid), ts, te] = str(out_path_bin)
+                    continue
+
                 print(f"[KERNEL PARAMETERS] Processing interval {t_start} to {t_end} ({index} of {len(intervals)})")
-                # load in chunks
-                for chunk in pd.read_csv(env_path, chunksize=1_000_000, parse_dates=[time_stamp]):
+
+                interval_parts = []
+                # load environment data in chunks
+                for chunk in pd.read_csv(
+                        env_path,
+                        chunksize=1_000_000,
+                        parse_dates=[time_stamp]
+                ):
                     sub = chunk[(chunk[time_stamp] >= t_start) & (chunk[time_stamp] <= t_end)]
                     if not sub.empty:
                         interval_parts.append(sub)
 
                 if not interval_parts:
+                    print(f"[KERNEL PARAMETERS] No environment data for interval {t_start} to {t_end}, skipping")
                     continue
-                # df can cross multiple chunks so concat here
+
                 interval_df = pd.concat(interval_parts, ignore_index=True)
-                print(f"[KERNEL PARAMETERS] Intervals collected -> Create CSV for {t_start} to {t_end}")
-                # create a csv per interval, later a serialized binary of the env grid is passed to the walker for each step
+                print(f"[KERNEL PARAMETERS] Intervals collected → Create CSV/Binary for {t_start} to {t_end}")
+
                 df_proc, T = df_add_properties2(
                     df=interval_df,
                     kernel_resolver=kernel_resolver,
@@ -460,22 +480,21 @@ class AnimalMovementProcessor:
                     lat=lat,
                 )
 
-                # Save environment grid
-                aid_out = Path(out_directory) / str(aid)
-                aid_out.mkdir(parents=True, exist_ok=True)
-                # reformat dt and save binary path
-                ts = pd.Timestamp(t_start).strftime("%Y%m%dT%H")
-                te = pd.Timestamp(t_end).strftime("%Y%m%dT%H")
-                out_path_bin = os.path.join(aid_out, f"{aid}_kernels_{ts}-{te}.bin")
-                serialize_env_grid(out_path_bin, df_proc, time_stamp, self.env_samples, T)
-                binary_paths[str(aid), ts, te] = out_path_bin
-
-                # save as csv
-                out_path_csv = os.path.join(aid_out, f"{aid}_kernels_{ts}-{te}.csv")
+                # save binary
+                serialize_env_grid(
+                    binary_dir=str(out_path_bin),
+                    kernel_df=df_proc,
+                    time_col=time_stamp,
+                    env_samples=self.env_samples,
+                    T=T
+                )
+                # save csv
                 df_proc.to_csv(out_path_csv, index=False)
-                print(f"[KERNEL PARAMETERS] Save CSV and Binary to {aid_out}")
-                index += 1
+                binary_paths[str(aid), ts, te] = str(out_path_bin)
+                print(f"[KERNEL PARAMETERS] Saved CSV and Binary to {aid_out}")
+
             terrain_map_free(terrain_map)
+
         serialize_kernel_paths_json(binary_paths, out_directory)
         return binary_paths
 
@@ -503,9 +522,9 @@ class AnimalMovementProcessor:
         data_gdf_utm = gpd.GeoDataFrame(pd.concat(utm_gdfs), crs=utm_gdfs[0].crs)
         print(data_gdf_utm.head())
 
-        hmmthingy = KernelFactory(data_gdf_utm)
-        gdf = hmmthingy.apply_hmm()
-        kernelA, kernelB, kernelC = hmmthingy.get_state_kernels(dt_tolerance, range, 2 * range + 1)
+        hmm_thingy = KernelFactory(data_gdf_utm)
+        gdf = hmm_thingy.apply_hmm()
+        kernelA, kernelB, kernelC = hmm_thingy.get_state_kernels(dt_tolerance, range, 2 * range + 1)
         gdf = gdf.set_geometry(
             gpd.points_from_xy(gdf[self.longitude_col], gdf[self.latitude_col]),
             crs=CRS.from_epsg(4326)
