@@ -7,7 +7,8 @@ import pandas as pd
 from random_walk_package import dll
 from random_walk_package import get_walk_points
 from random_walk_package.bindings import parse_terrain, terrain_map_free
-from random_walk_package.bindings.mixed_walk import environment_mixed_walk, env_mixed_walk
+from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
+from random_walk_package.bindings.mixed_walk import env_mixed_walk
 from random_walk_package.core.MixedWalker import MixedWalker
 from random_walk_package.core.WalkerHelper import WalkerHelper
 
@@ -40,12 +41,14 @@ class MixedTimeWalker(MixedWalker):
                                                                           out_directory=kernel_dir)
         print(f"[PREPROCESSING] kernel params loaded]")
 
-    def generate_walks(self, env_weight=0.5):
+    def generate_walks(self, env_weights: EnvWeights | None = None) -> mpd.TrajectoryCollection:
         """
         Build random-walk trajectories for each animal, linear-interpolate timestamps
         for intermediate points, return a single mpd.TrajectoryCollection containing
         all animals.
         """
+        if env_weights is None:
+            env_weights = EnvWeights.bias_only()
         steps_dict = self.animal_proc.create_movement_data_dict()
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
         for animal_id, trajectory in steps_dict.items():
@@ -71,17 +74,18 @@ class MixedTimeWalker(MixedWalker):
                     continue
 
                 manhattan = abs(start_x - end_x) + abs(start_y - end_y)
+                # todo: implement MovementPolicy for actually reasonable S/T
                 T = 5 if manhattan < 5 else manhattan
+                S = None
                 print(T)
                 # Initialize DP matrix for the current start point
                 walk_ptr = env_mixed_walk(T=T, mapping=self.mapping,
                                           terrain=terrain_map,
-                                          csv_path=self.env_paths[
-                                              str(animal_id), str(ts), str(te)],
+                                          csv_path=self.env_paths[str(animal_id), str(ts), str(te)],
                                           start_date=start_date,
                                           end_date=end_date,
                                           start_point=[start_x, start_y],
-                                          end_point=[end_x, end_y], env_weight=env_weight)
+                                          end_point=[end_x, end_y], env_weights=env_weights.ptr)
                 print("walk created")
                 dll.point2d_array_print(walk_ptr)
 

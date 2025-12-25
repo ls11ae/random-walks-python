@@ -161,6 +161,18 @@ class KernelParameters(Structure):
 KernelParametersPtr = POINTER(KernelParameters)
 
 
+class EnvWeightProfile(Structure):
+    _fields_ = [("override_mode", c_bool),
+                ("S", c_float),
+                ("D", c_float),
+                ("diffusivity", c_float),
+                ("bias_x", c_float),
+                ("bias_y", c_float)]
+
+
+EnvWeightProfilePtr = POINTER(EnvWeightProfile)
+
+
 class TimedKernelParameters(Structure):
     _fields_ = [("date_time", DateTimePtr),
                 ("params", KernelParametersPtr),

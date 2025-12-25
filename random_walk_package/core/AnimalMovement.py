@@ -128,9 +128,11 @@ class AnimalMovementProcessor:
     def traj_utm(self, traj_id):
         # we dont save utm bboxes anymore, we compute them on the fly
         traj = self.traj.get_trajectory(traj_id)
+        lon, lat = traj.df.geometry.iloc[0].x, traj.df.geometry.iloc[0].y
 
-        lon, lat = traj.df.geometry.iloc[0].coords[0]
-        utm_crs = CRS.from_epsg(32600 + int((lon + 180) // 6) + 1)
+        zone = int((lon + 180) // 6) + 1
+        epsg = 32600 + zone if lat >= 0 else 32700 + zone
+        utm_crs = CRS.from_epsg(epsg)
 
         return traj.to_crs(utm_crs)
 
@@ -256,8 +258,12 @@ class AnimalMovementProcessor:
 
         df["grid_x"] = np.round((df.geometry.x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
         df["grid_y"] = np.round((df.geometry.y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
-        df["geo_x"] = self.traj.get_trajectory(traj_id).df[self.longitude_col]
-        df["geo_y"] = self.traj.get_trajectory(traj_id).df[self.latitude_col]
+        traj = self.traj.get_trajectory(traj_id)
+        df["geo_x"] = traj.df.geometry.x
+        df["geo_y"] = traj.df.geometry.y
+        utm_traj = self.traj_utm(traj_id)
+        df["utm_x"] = utm_traj.df.geometry.x
+        df["utm_y"] = utm_traj.df.geometry.y
         df["time"] = df.index
         if has_states:
             df["state"] = self.traj.get_trajectory(traj_id).df["state"]

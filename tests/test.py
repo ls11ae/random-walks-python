@@ -46,17 +46,17 @@ def marine_params(row):
 
 
 if __name__ == "__main__":
-    test_time_walker()
-    exit()
-    study_path = 'random_walk_package/resources/movebank_test/The Leap of the Cat.csv'
+    study_path = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
     study_df = pd.read_csv(study_path)
     env_samples = 5
     # i took the original csv but this also works for your processed csv with additional data, just adapt the kernel resolver
-    # env_path = '/home/omar/Downloads/current_filename.csv'
-    env_path = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
+    env_path = '/home/omar/Downloads/current_filename.csv'
+    # env_path = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
     processor = AnimalMovementProcessor(study_df, env_samples=env_samples)
-    processor.create_landcover_data_txt(is_marine=False, resolution=600, out_directory=os.path.dirname(study_path))
+    processor.create_landcover_data_txt(is_marine=True, resolution=1000, out_directory=os.path.dirname(study_path))
     processor.kernel_params_per_animal_binary(env_path=env_path,
-                                              kernel_resolver=weather_terrain_params,
-                                              time_stamp="timestamp", lon="longitude", lat="latitude",
+                                              kernel_resolver=marine_params,
+                                              time_stamp="time", lon="longitude", lat="latitude",
                                               out_directory=os.path.dirname(study_path))
+    exit()
+    test_time_walker()
