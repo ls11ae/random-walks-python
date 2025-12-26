@@ -29,20 +29,38 @@ dll.get_parameters_of_terrain.restype = KernelParametersPtr
 dll.kernel_parameters_mapping_free.argtypes = [KernelParametersMappingPtr]
 dll.kernel_parameters_mapping_free.restype = None
 
+dll.create_default_marine_mapping.argtypes = [c_int, c_ssize_t, c_float]
+dll.create_default_marine_mapping.restype = KernelParametersMappingPtr
 
-def kernel_mapping_free(kernel_parameters_map: KernelParametersMappingPtr): # pyright: ignore[reportInvalidTypeForm]
+dll.update_mapping.argtypes = [KernelParametersMappingPtr, c_int, c_int, c_ssize_t, c_float]
+dll.update_mapping.restype = None
+
+
+def marine_kernels_baseline(step_size: int, directions: int, diffusity: float) -> KernelParametersMappingPtr:
+    return dll.create_default_marine_mapping(step_size, directions, diffusity)
+
+
+def update_kernels_mapping(mapping: KernelParametersMappingPtr, landmark: int, stepsize: int, directions: int,
+                           diffusity: float):
+    dll.update_mapping(mapping, landmark, stepsize, directions, diffusity)
+
+
+def kernel_mapping_free(kernel_parameters_map: KernelParametersMappingPtr):  # pyright: ignore[reportInvalidTypeForm]
     dll.kernel_parameters_mapping_free(kernel_parameters_map)
 
 
-def create_mixed_kernel_parameters(animal_type: int, base_step_size: int) -> KernelParametersMappingPtr: # pyright: ignore[reportInvalidTypeForm]
+def create_mixed_kernel_parameters(animal_type: int,
+                                   base_step_size: int) -> KernelParametersMappingPtr:  # pyright: ignore[reportInvalidTypeForm]
     return dll.create_default_mixed_mapping(animal_type, base_step_size)
 
 
-def create_brownian_kernel_parameters(animal_type: int, base_step_size: int) -> KernelParametersMappingPtr: # pyright: ignore[reportInvalidTypeForm]
+def create_brownian_kernel_parameters(animal_type: int,
+                                      base_step_size: int) -> KernelParametersMappingPtr:  # pyright: ignore[reportInvalidTypeForm]
     return dll.create_default_brownian_mapping(animal_type, base_step_size)
 
 
-def create_correlated_kernel_parameters(animal_type: int, base_step_size: int) -> KernelParametersMappingPtr: # pyright: ignore[reportInvalidTypeForm]
+def create_correlated_kernel_parameters(animal_type: int,
+                                        base_step_size: int) -> KernelParametersMappingPtr:  # pyright: ignore[reportInvalidTypeForm]
     return dll.create_default_correlated_mapping(animal_type, base_step_size)
 
 

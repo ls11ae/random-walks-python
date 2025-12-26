@@ -27,6 +27,7 @@ AMPHIBIAN = 1
 LIGHT = 2
 MEDIUM = 3
 HEAVY = 4
+MARINE = 5
 
 dll.get_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
 dll.get_terrain_map.restype = TerrainMapPtr

@@ -10,6 +10,7 @@ from random_walk_package.bindings import parse_terrain, terrain_map_free
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
 from random_walk_package.bindings.mixed_walk import env_mixed_walk
 from random_walk_package.core.MixedWalker import MixedWalker
+from random_walk_package.core.MovementPolicy import MovementPolicy, TimeStepPolicy
 from random_walk_package.core.WalkerHelper import WalkerHelper
 
 
@@ -41,7 +42,9 @@ class MixedTimeWalker(MixedWalker):
                                                                           out_directory=kernel_dir)
         print(f"[PREPROCESSING] kernel params loaded]")
 
-    def generate_walks(self, env_weights: EnvWeights | None = None) -> mpd.TrajectoryCollection:
+    def generate_walks(self,
+                       env_weights: EnvWeights | None = None,
+                       movement_policy: MovementPolicy = None) -> mpd.TrajectoryCollection:
         """
         Build random-walk trajectories for each animal, linear-interpolate timestamps
         for intermediate points, return a single mpd.TrajectoryCollection containing
@@ -49,6 +52,8 @@ class MixedTimeWalker(MixedWalker):
         """
         if env_weights is None:
             env_weights = EnvWeights.bias_only()
+        if movement_policy is None:
+            movement_policy = TimeStepPolicy(timestep_s=3600)  # one hour per step
         steps_dict = self.animal_proc.create_movement_data_dict()
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
         for animal_id, trajectory in steps_dict.items():
@@ -73,10 +78,10 @@ class MixedTimeWalker(MixedWalker):
                     segment_boundaries.append(len(full_path))
                     continue
 
-                manhattan = abs(start_x - end_x) + abs(start_y - end_y)
-                # todo: implement MovementPolicy for actually reasonable S/T
-                T = 5 if manhattan < 5 else manhattan
-                S = None
+                T, S = movement_policy.resolve(start_point=[start_x, start_y],
+                                               end_point=[end_x, end_y],
+                                               start_time=start_date,
+                                               end_time=end_date)
                 print(T)
                 # Initialize DP matrix for the current start point
                 walk_ptr = env_mixed_walk(T=T, mapping=self.mapping,

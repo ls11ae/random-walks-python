@@ -1,6 +1,8 @@
 # debugging: gdb --args python -m tests.test
 import random
 
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
+    update_kernels_mapping
 from random_walk_package.core.MixedWalker import *
 from tests.mixed_walk_test import test_time_walker
 
@@ -58,5 +60,10 @@ if __name__ == "__main__":
                                               kernel_resolver=marine_params,
                                               time_stamp="time", lon="longitude", lat="latitude",
                                               out_directory=os.path.dirname(study_path))
+    # example mapping for marine animals. Water is the only allowed landmark, motion is always correlated
+    kernels_mapping = marine_kernels_baseline(step_size=5, directions=8, diffusity=2.1)
+    # update the mapping parameters
+    update_kernels_mapping(kernels_mapping, landmark=WATER, stepsize=7, directions=6, diffusity=1.5)
+
     exit()
     test_time_walker()

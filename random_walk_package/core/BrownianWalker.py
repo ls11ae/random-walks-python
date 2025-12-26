@@ -192,7 +192,6 @@ class BrownianWalker:
             raise ValueError("Walker not properly initialized for multistep walk")
         try:
             result = brownian_backtrace_multiple(self.kernels, steps, self.T, self.W, self.H)
-            print("dkfj")
         except Exception as e:
             logger.error(f"Failed to generate multistep walk: {e}")
             raise

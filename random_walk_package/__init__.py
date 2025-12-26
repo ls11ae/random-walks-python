@@ -2,6 +2,7 @@
 # --------------------------------------------------
 # Load the shared library first
 # --------------------------------------------------
+from .wrapper import dll
 # --------------------------------------------------
 # Data processing helpers
 # --------------------------------------------------
@@ -27,7 +28,6 @@ from .bindings.data_structures.point2D import *
 from .bindings.data_structures.point2D import Point2DArrayPtr, point2d_arr_free
 from .bindings.data_structures.point2D import get_walk_points
 from .bindings.data_structures.tensor import *
-from .wrapper import dll
 
 # --------------------------------------------------
 # Optional GPU helpers
