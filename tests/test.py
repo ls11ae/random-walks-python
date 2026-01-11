@@ -48,6 +48,9 @@ def marine_params(row):
 
 
 if __name__ == "__main__":
+    test_time_walker()
+    exit()
+
     study_path = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
     study_df = pd.read_csv(study_path)
     env_samples = 5

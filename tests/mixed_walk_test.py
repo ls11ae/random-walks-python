@@ -9,6 +9,9 @@ import pandas as pd
 from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, MixedTimeWalker, MEDIUM
 from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
 from random_walk_package.bindings import AIRBORNE, create_mixed_kernel_parameters
+from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline
+from random_walk_package.core.MovementPolicy import TimeStepPolicy
 from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed, \
     save_trajectory_coll_leaflet
 
@@ -109,18 +112,17 @@ def weather_terrain_params(row):
 
 @pytest.mark.skip(reason="takes too long")
 def test_time_walker():
-    study = 'random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv'
+    study = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
     df = pd.read_csv(study)
 
-    environment_csv = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
+    environment_csv = '/home/omar/Downloads/current_filename.csv'
     out_dir = os.path.dirname(study)
 
-    mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=5)
-    set_forbidden_landmark(mapping, WATER)
+    mapping = marine_kernels_baseline(step_size=5, directions=8, diffusity=2)
     walker = MixedTimeWalker(data=df,
                              env_data=environment_csv,
                              kernel_mapping=mapping,
-                             resolution=400,
+                             resolution=1000,
                              out_directory=out_dir,
                              env_samples=5,
                              kernel_resolver=weather_terrain_params,
@@ -128,9 +130,12 @@ def test_time_walker():
                              lon_col="location-long",
                              lat_col="location-lat",
                              id_col="tag-local-identifier",
-                             crs="EPSG:4326"
+                             crs="EPSG:4326",
+                             is_marine=True
                              )
-    trajectory_collection = walker.generate_walks()
+    movement_policy = TimeStepPolicy(timestep_s=3600)  # one hour per step
+    bias_only = EnvWeights.bias_only()
+    trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
 
     walks_dir = os.path.dirname(study)
     walks_dir = os.path.join(walks_dir, "walks")

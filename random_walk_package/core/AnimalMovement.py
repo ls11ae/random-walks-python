@@ -415,7 +415,7 @@ class AnimalMovementProcessor:
         # prepare outer folder for kernels
         if out_directory is None:
             out_directory = "kernels"
-        out_directory = Path(out_directory) / "kernels"
+        out_directory = Path(out_directory)
         out_directory.mkdir(exist_ok=True, parents=True)
 
         binary_paths: dict[tuple[str, str, str], str] = {}
@@ -444,6 +444,9 @@ class AnimalMovementProcessor:
 
                 out_path_bin = aid_out / f"{aid}_kernels_{ts}-{te}.bin"
                 out_path_csv = aid_out / f"{aid}_kernels_{ts}-{te}.csv"
+
+                print(f"{out_path_bin} Processing interval {t_start} to {t_end}")
+                print(f"{out_path_csv} Processing interval {t_start} to {t_end}")
 
                 # skip if outputs already exist
                 if out_path_bin.exists() and out_path_csv.exists():

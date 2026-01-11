@@ -4,13 +4,15 @@ import geopandas as gpd
 import movingpandas as mpd
 import pandas as pd
 
-from random_walk_package import dll
+from random_walk_package import dll, WATER, walk_to_json
 from random_walk_package import get_walk_points
 from random_walk_package.bindings import parse_terrain, terrain_map_free
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
+    update_kernels_mapping
 from random_walk_package.bindings.mixed_walk import env_mixed_walk
 from random_walk_package.core.MixedWalker import MixedWalker
-from random_walk_package.core.MovementPolicy import MovementPolicy, TimeStepPolicy
+from random_walk_package.core.MovementPolicy import MovementPolicy, TimeStepPolicy, manhattan, SpeedBasedPolicy
 from random_walk_package.core.WalkerHelper import WalkerHelper
 
 
@@ -21,9 +23,11 @@ class MixedTimeWalker(MixedWalker):
                  lon_col="location-long",
                  lat_col="location-lat",
                  id_col="tag-local-identifier",
-                 crs="EPSG:4326"
+                 crs="EPSG:4326",
+                 is_marine="False"
                  ):
-        super().__init__(data, kernel_mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs)
+        super().__init__(data, kernel_mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs,
+                         is_marine)
         self.env_data = env_data
         self.env_paths: dict[tuple[str, str, str], str] = {}
         self.kernel_resolver = kernel_resolver
@@ -33,10 +37,10 @@ class MixedTimeWalker(MixedWalker):
     def _process_movebank_data(self):
         super()._process_movebank_data()
         self.animal_proc.env_samples = self.env_samples
-        kernel_dir = os.path.join(self.out_directory, 'kernel_data')
+        kernel_dir = os.path.join(self.out_directory, 'kernels')
         self.env_paths = self.animal_proc.kernel_params_per_animal_binary(env_path=self.env_data,
                                                                           kernel_resolver=self.kernel_resolver,
-                                                                          time_stamp='timestamp',
+                                                                          time_stamp='time',
                                                                           lon='longitude',
                                                                           lat='latitude',
                                                                           out_directory=kernel_dir)
@@ -53,7 +57,7 @@ class MixedTimeWalker(MixedWalker):
         if env_weights is None:
             env_weights = EnvWeights.bias_only()
         if movement_policy is None:
-            movement_policy = TimeStepPolicy(timestep_s=3600)  # one hour per step
+            movement_policy = SpeedBasedPolicy(timestep_s=3600)  # one hour per step
         steps_dict = self.animal_proc.create_movement_data_dict()
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
         for animal_id, trajectory in steps_dict.items():
@@ -70,6 +74,10 @@ class MixedTimeWalker(MixedWalker):
                 start_x, start_y = steps["grid_x"].iloc[i], steps["grid_y"].iloc[i]
                 end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
                 start_date, end_date = steps["time"].iloc[i], steps["time"].iloc[i + 1]
+
+                print(f"start {start_x}, {start_y}\n")
+                print(f"end {end_x}, {end_y}\n")
+                print(f"start date {start_date}, end date {end_date}\n")
                 ts = pd.Timestamp(start_date).strftime("%Y%m%dT%H")
                 te = pd.Timestamp(end_date).strftime("%Y%m%dT%H")
                 if start_x == end_x and start_y == end_y:
@@ -81,8 +89,19 @@ class MixedTimeWalker(MixedWalker):
                 T, S = movement_policy.resolve(start_point=[start_x, start_y],
                                                end_point=[end_x, end_y],
                                                start_time=start_date,
-                                               end_time=end_date)
-                print(T)
+                                               end_time=end_date,
+                                               diffusity=2)
+
+                print(f"T {T} - S {S}")
+                D = 8
+                if manhattan([start_x, start_y], [end_x, end_y]) < 5:
+                    D = 1
+                if max(abs(start_x - start_y), abs(end_x - end_y)) > T * S:
+                    S = T / max(abs(start_x - start_y), abs(end_x - end_y))
+                    S = int(S * 1.5)
+
+                update_kernels_mapping(mapping=self.mapping, landmark=WATER, stepsize=S, directions=D, diffusity=2)
+                # update_kernels_mapping(self.mapping, WATER, stepsize=S, directions=D, diffusity=2)
                 # Initialize DP matrix for the current start point
                 walk_ptr = env_mixed_walk(T=T, mapping=self.mapping,
                                           terrain=terrain_map,
