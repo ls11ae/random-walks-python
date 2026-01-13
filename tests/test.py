@@ -4,7 +4,7 @@ import random
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
     update_kernels_mapping
 from random_walk_package.core.MixedWalker import *
-from tests.mixed_walk_test import test_time_walker
+from tests.mixed_walk_test import test_marine_walker, test_time_walker
 
 
 def weather_terrain_params(row):
@@ -17,38 +17,9 @@ def weather_terrain_params(row):
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
 
-# map row of your csv to kernel params, terrain is always part of a row, so is x,y,t if needed
-# keep in mind that NaN values can (and almost always) appear so must be handled here (unless you filled them earlier)
-def marine_params(row):
-    uo = row.get("uo")
-    vo = row.get("vo")
-
-    if pd.isna(uo) or pd.isna(vo):
-        bias_x = 0
-        bias_y = 0
-        is_brownian = False
-        diffusity = 1.0
-    else:
-        bias_x = int(np.round(float(uo) * 10))
-        bias_y = int(np.round(float(vo) * 10))
-        is_brownian = row.get("depth", 0) < 0.2
-        diffusity = 0.9
-
-    S = random.randint(3, 7)
-    D = 8
-
-    return [
-        bool(is_brownian),
-        float(S),
-        int(D),
-        float(diffusity),
-        int(bias_x),
-        int(bias_y),
-    ]
-
-
 if __name__ == "__main__":
     test_time_walker()
+    # test_marine_walker()
     exit()
 
     study_path = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
@@ -69,4 +40,4 @@ if __name__ == "__main__":
     update_kernels_mapping(kernels_mapping, landmark=WATER, stepsize=7, directions=6, diffusity=1.5)
 
     exit()
-    test_time_walker()
+    test_marine_walker()

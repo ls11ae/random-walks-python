@@ -2,6 +2,9 @@ import gzip
 import math
 import os
 import pickle
+import random
+
+import numpy as np
 import pytest
 
 import pandas as pd
@@ -110,30 +113,97 @@ def weather_terrain_params(row):
             float(bias_x), float(bias_y)]
 
 
+# map row of your csv to kernel params, terrain is always part of a row, so is x,y,t if needed
+# keep in mind that NaN values can (and almost always) appear so must be handled here (unless you filled them earlier)
+def marine_params(row):
+    uo = row.get("uo")
+    vo = row.get("vo")
+
+    if pd.isna(uo) or pd.isna(vo):
+        bias_x = 0
+        bias_y = 0
+        is_brownian = False
+        diffusity = 1.0
+    else:
+        bias_x = int(np.round(float(uo) * 10))
+        bias_y = int(np.round(float(vo) * 10))
+        is_brownian = row.get("depth", 0) < 0.2
+        diffusity = 0.9
+
+    S = random.randint(3, 7)
+    D = 8
+
+    return [
+        bool(is_brownian),
+        float(S),
+        int(D),
+        float(diffusity),
+        int(bias_x),
+        int(bias_y),
+    ]
+
+
 @pytest.mark.skip(reason="takes too long")
-def test_time_walker():
-    study = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
+def test_marine_walker():
+    study = 'random_walk_package/resources/tiger_sharks/shark_13_filtered_full.csv'
     df = pd.read_csv(study)
 
     environment_csv = '/home/omar/Downloads/current_filename.csv'
     out_dir = os.path.dirname(study)
 
-    mapping = marine_kernels_baseline(step_size=5, directions=8, diffusity=2)
+    mapping = marine_kernels_baseline(step_size=5, directions=16, diffusity=2)
     walker = MixedTimeWalker(data=df,
                              env_data=environment_csv,
                              kernel_mapping=mapping,
-                             resolution=1000,
+                             resolution=300,
                              out_directory=out_dir,
                              env_samples=5,
-                             kernel_resolver=weather_terrain_params,
+                             kernel_resolver=marine_params,
                              time_col="timestamp",
                              lon_col="location-long",
                              lat_col="location-lat",
                              id_col="tag-local-identifier",
                              crs="EPSG:4326",
-                             is_marine=True
-                             )
+                             is_marine=True)
     movement_policy = TimeStepPolicy(timestep_s=3600)  # one hour per step
+    bias_only = EnvWeights.bias_only()
+    trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
+
+    walks_dir = os.path.dirname(study)
+    walks_dir = os.path.join(walks_dir, "walks")
+    os.makedirs(walks_dir, exist_ok=True)
+    # serialize trajectory collection
+    pickle_path = os.path.join(walks_dir, "walks.pickle")
+    with gzip.open(pickle_path, 'wb') as f:
+        pickle.dump(trajectory_collection, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    save_trajectory_collection_timed(trajectory_collection, walks_dir)
+    print(f"walks saved at {walks_dir}")
+
+
+@pytest.mark.skip(reason="takes too long")
+def test_time_walker():
+    study = 'random_walk_package/resources/movebank_test/The Leap of the Cat.csv'
+    df = pd.read_csv(study)
+
+    environment_csv = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
+    out_dir = os.path.dirname(study)
+
+    mapping = create_mixed_kernel_parameters(MEDIUM, 5)
+    walker = MixedTimeWalker(data=df,
+                             env_data=environment_csv,
+                             kernel_mapping=mapping,
+                             resolution=500,
+                             out_directory=out_dir,
+                             env_samples=5,
+                             kernel_resolver=marine_params,
+                             time_col="timestamp",
+                             lon_col="location-long",
+                             lat_col="location-lat",
+                             id_col="tag-local-identifier",
+                             crs="EPSG:4326",
+                             is_marine=False)
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 12)  # one hour per step
     bias_only = EnvWeights.bias_only()
     trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
 

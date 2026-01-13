@@ -4,13 +4,14 @@ import geopandas as gpd
 import movingpandas as mpd
 import pandas as pd
 
-from random_walk_package import dll, WATER, walk_to_json
+from random_walk_package import dll, WATER, walk_to_json, create_point2d_array, MEDIUM
 from random_walk_package import get_walk_points
-from random_walk_package.bindings import parse_terrain, terrain_map_free
+from random_walk_package.bindings import parse_terrain, terrain_map_free, create_mixed_kernel_parameters
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
     update_kernels_mapping
 from random_walk_package.bindings.mixed_walk import env_mixed_walk
+from random_walk_package.bindings.plotter import plot_walk_from_json
 from random_walk_package.core.MixedWalker import MixedWalker
 from random_walk_package.core.MovementPolicy import MovementPolicy, TimeStepPolicy, manhattan, SpeedBasedPolicy
 from random_walk_package.core.WalkerHelper import WalkerHelper
@@ -57,14 +58,17 @@ class MixedTimeWalker(MixedWalker):
         if env_weights is None:
             env_weights = EnvWeights.bias_only()
         if movement_policy is None:
-            movement_policy = SpeedBasedPolicy(timestep_s=3600)  # one hour per step
+            movement_policy = TimeStepPolicy(timestep_s=3600)  # one hour per step
         steps_dict = self.animal_proc.create_movement_data_dict()
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
         for animal_id, trajectory in steps_dict.items():
+            all_walk_points = []
             terrain_map = parse_terrain(file=self.animal_proc.terrain_paths[animal_id], delim=' ')
             steps = trajectory.df
             full_path = []
             steps_df = steps_dict[animal_id].df
+            steps_list = list(zip(steps_df["grid_x"], steps_df["grid_y"]))
+            steps_ptr = create_point2d_array(steps_list)
             idx = steps_df.index
 
             # track segment boundaries so we can slice full_path per original segment
@@ -84,6 +88,7 @@ class MixedTimeWalker(MixedWalker):
                     segment = [(start_x, start_y)]
                     full_path.extend(segment)
                     segment_boundaries.append(len(full_path))
+                    all_walk_points.extend(segment)
                     continue
 
                 T, S = movement_policy.resolve(start_point=[start_x, start_y],
@@ -92,24 +97,30 @@ class MixedTimeWalker(MixedWalker):
                                                end_time=end_date,
                                                diffusity=2)
 
-                print(f"T {T} - S {S}")
-                D = 8
-                if manhattan([start_x, start_y], [end_x, end_y]) < 5:
-                    D = 1
-                if max(abs(start_x - start_y), abs(end_x - end_y)) > T * S:
-                    S = T / max(abs(start_x - start_y), abs(end_x - end_y))
-                    S = int(S * 1.5)
+                D = 16
 
-                update_kernels_mapping(mapping=self.mapping, landmark=WATER, stepsize=S, directions=D, diffusity=2)
+                print(f"T {T} - S {S} - D {D}")
+                # paranoia check
+                if max(abs(start_x - end_x), abs(start_y - end_y)) > T * S:  # Chebyshev Distance
+                    S = T / max(abs(start_x - start_y), abs(end_x - end_y))
+                    S = int(S * 2)
+                    print(f"new S {S}")
+                # todo: better updating logic, doesnt rly work with self.mapping,
+                mapping = marine_kernels_baseline(S, D, 2.0) if self.is_marine else create_mixed_kernel_parameters(
+                    MEDIUM, S)
+
                 # update_kernels_mapping(self.mapping, WATER, stepsize=S, directions=D, diffusity=2)
                 # Initialize DP matrix for the current start point
-                walk_ptr = env_mixed_walk(T=T, mapping=self.mapping,
+                walk_ptr = env_mixed_walk(T=T,
+                                          mapping=mapping,
                                           terrain=terrain_map,
                                           csv_path=self.env_paths[str(animal_id), str(ts), str(te)],
                                           start_date=start_date,
                                           end_date=end_date,
                                           start_point=[start_x, start_y],
                                           end_point=[end_x, end_y], env_weights=env_weights.ptr)
+                dll.kernel_parameters_mapping_free(mapping)
+
                 print("walk created")
                 dll.point2d_array_print(walk_ptr)
 
@@ -117,12 +128,17 @@ class MixedTimeWalker(MixedWalker):
                     segment = get_walk_points(walk_ptr)
                 else:
                     segment = [(start_x, start_y), (end_x, end_y)]
+                all_walk_points.extend(segment)
                 dll.point2d_array_free(walk_ptr)
                 print("walk freed")
                 print("grid freed")
                 full_path.extend(segment[:-1] if len(segment) > 1 else segment)
                 segment_boundaries.append(len(full_path))
 
+            segPath = f"{animal_id}"
+            json_path = os.path.join(self.out_directory, 'kernels', segPath, ".json")
+            walk_to_json(create_point2d_array(all_walk_points), json_path, steps_ptr, terrain_map)
+            # plot_walk_from_json(json_path, f"walk {animal_id}")
             terrain_map_free(terrain_map)
             # After loop, append final endpoint of last original step (to close path)
             last_row = steps_df.iloc[-1]
