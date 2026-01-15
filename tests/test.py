@@ -3,6 +3,7 @@ import random
 
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
     update_kernels_mapping
+from random_walk_package.bindings.plotter import plot_walk_from_json
 from random_walk_package.core.MixedWalker import *
 from tests.mixed_walk_test import test_marine_walker, test_time_walker
 
@@ -18,7 +19,10 @@ def weather_terrain_params(row):
 
 
 if __name__ == "__main__":
-    test_time_walker()
+    test_marine_walker()
+    plot_walk_from_json(
+        "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/tiger_sharks/kernels/204413/.json")
+
     # test_marine_walker()
     exit()
 
@@ -35,7 +39,7 @@ if __name__ == "__main__":
                                               time_stamp="time", lon="longitude", lat="latitude",
                                               out_directory=os.path.dirname(study_path))
     # example mapping for marine animals. Water is the only allowed landmark, motion is always correlated
-    kernels_mapping = marine_kernels_baseline(step_size=5, directions=8, diffusity=2.1)
+    kernels_mapping = marine_kernels_baseline(step_size=5, directions=8, angle_diffusity=0.3, len_diffusivity=1)
     # update the mapping parameters
     update_kernels_mapping(kernels_mapping, landmark=WATER, stepsize=7, directions=6, diffusity=1.5)
 

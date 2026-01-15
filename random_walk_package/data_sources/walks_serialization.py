@@ -6,7 +6,7 @@ import pandas as pd
 
 def serialize_env_grid(binary_dir, kernel_df: pd.DataFrame, time_col, env_samples: int, T: int):
     DT_FMT = "<4i"  # 4 ints
-    KP_FMT = "<?qqfqq"  # bool, 2 x size_t, float, 2 x size_t
+    KP_FMT = "<?qqffqq"  # bool, 2 x size_t, 2 x float, 2 x size_t
     DIMS_FMT = "<qqq"  # 3 x size_t
     with open(binary_dir, "wb") as f:
         # write dimensions
@@ -39,7 +39,8 @@ def serialize_env_grid(binary_dir, kernel_df: pd.DataFrame, time_col, env_sample
                         bool(row["is_brownian"]),
                         int(row["S"]),
                         int(row["D"]),
-                        float(row["diffusity"]),
+                        float(row["len_diffusity"]),
+                        float(row["angle_diffusity"]),
                         int(row["bias_x"]),
                         int(row["bias_y"])
                     ))

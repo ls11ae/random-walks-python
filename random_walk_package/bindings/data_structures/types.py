@@ -153,7 +153,8 @@ class KernelParameters(Structure):
     _fields_ = [("is_brownian", c_bool),
                 ("S", c_ssize_t),
                 ("D", c_ssize_t),
-                ("diffusity", c_float),
+                ("sigma_length", c_float),
+                ("sigma_angle", c_float),
                 ("bias_x", c_ssize_t),
                 ("bias_y", c_ssize_t)]
 
@@ -165,7 +166,8 @@ class EnvWeightProfile(Structure):
     _fields_ = [("override_mode", c_bool),
                 ("S", c_float),
                 ("D", c_float),
-                ("diffusivity", c_float),
+                ("sigma_length", c_float),
+                ("sigma_angle", c_float),
                 ("bias_x", c_float),
                 ("bias_y", c_float)]
 

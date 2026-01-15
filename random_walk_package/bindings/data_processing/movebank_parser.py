@@ -12,19 +12,18 @@ dll.kernel_parameters_create.argtypes = [c_bool,  # is brownian?
                                          c_ssize_t,  # step size
                                          c_ssize_t,  # directions
                                          c_float,  # diffusity
+                                         c_float,  # diffusity
                                          c_ssize_t,  # max bias x
                                          c_ssize_t]  # max bias y
 dll.kernel_parameters_create.restype = KernelParametersPtr
 
 
-def create_kernel_parameters(is_brownian: bool, step_size: int, directions: int, diffusity: float, max_bias_x: int,
-                             max_bias_y: int) -> KernelParametersPtr:
-    return dll.kernel_parameters_create(is_brownian, step_size, directions, diffusity, max_bias_y, max_bias_x)
-
-
-def compute_kernel(landmark, row):
-    x, y, t, is_brownian, S, D, diffusity, bias_x, bias_y = 0, 1, 2, 3, 4, 5, 6, 7, 8
-    return x, y, t, is_brownian, S, D, diffusity, bias_x, bias_y
+def create_kernel_parameters(is_brownian: bool, step_size: int, directions: int, len_diffusity: float = 1.0,
+                             angle_diff: float = 0.3,
+                             max_bias_x: int = 0,
+                             max_bias_y: int = 0) -> KernelParametersPtr:
+    return dll.kernel_parameters_create(is_brownian, step_size, directions, len_diffusity, angle_diff, max_bias_y,
+                                        max_bias_x)
 
 
 def df_add_properties(df: DataFrame,
@@ -248,15 +247,15 @@ def df_add_properties2(df: DataFrame,
         result_type="expand"
     )
     # apply kernel params
-    clean_df[["is_brownian", "S", "D", "diffusity", "bias_x", "bias_y"]] = kp
+    clean_df[["is_brownian", "S", "D", "len_diffusity", "angle_diffusity", "bias_x", "bias_y"]] = kp
 
-    # fill missing via NN (forward/backward fill)
     clean_df.sort_values(
         by=["y", "x", time_stamp],
         inplace=True
     )
 
-    cols = ["is_brownian", "S", "D", "diffusity", "bias_x", "bias_y"]
+    # fill missing via NN (forward/backward fill)
+    cols = ["is_brownian", "S", "D", "len_diffusity", "angle_diffusity", "bias_x", "bias_y"]
     clean_df[cols] = (
         clean_df
         .groupby(["y", "x"], sort=False)[cols]
@@ -266,7 +265,7 @@ def df_add_properties2(df: DataFrame,
     # final order for C backend
     clean_df = clean_df[
         [time_stamp, "y", "x", "terrain",
-         "is_brownian", "S", "D", "diffusity", "bias_x", "bias_y"]
+         "is_brownian", "S", "D", "len_diffusity", "angle_diffusity", "bias_x", "bias_y"]
     ]
     # sort to match C grid y,x,t order
     clean_df.sort_values(

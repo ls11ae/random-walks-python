@@ -96,17 +96,26 @@ class MixedTimeWalker(MixedWalker):
                                                start_time=start_date,
                                                end_time=end_date,
                                                diffusity=2)
-
-                D = 16
+                D = 10
+                # todo: replace with parameters per step passed as arrays
+                if S > 160:
+                    S //= 4
+                    T *= 4
+                    D = 6
+                elif S > 100:
+                    S //= 2
+                    T *= 2
+                    D = 8
 
                 print(f"T {T} - S {S} - D {D}")
                 # paranoia check
                 if max(abs(start_x - end_x), abs(start_y - end_y)) > T * S:  # Chebyshev Distance
-                    S = T / max(abs(start_x - start_y), abs(end_x - end_y))
+                    S = T // max(abs(start_x - start_y), abs(end_x - end_y))
                     S = int(S * 2)
                     print(f"new S {S}")
                 # todo: better updating logic, doesnt rly work with self.mapping,
-                mapping = marine_kernels_baseline(S, D, 2.0) if self.is_marine else create_mixed_kernel_parameters(
+                mapping = marine_kernels_baseline(S, D, angle_diffusity=0.3,
+                                                  len_diffusivity=1) if self.is_marine else create_mixed_kernel_parameters(
                     MEDIUM, S)
 
                 # update_kernels_mapping(self.mapping, WATER, stepsize=S, directions=D, diffusity=2)

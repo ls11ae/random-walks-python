@@ -210,9 +210,9 @@ class AnimalMovementProcessor:
 
             # only fetch TIFF if it doesn't exist yet
             if not tif_path.exists():
-                if is_marine is True:
+                if is_marine:
                     fetch_ocean_cover_tif(
-                        shapefile_path,
+                        str(shapefile_path),
                         (min_lon, min_lat, max_lon, max_lat),
                         str(tif_path),
                     )
@@ -394,6 +394,40 @@ class AnimalMovementProcessor:
         print(f"KernelData Saved: {out_directory}")
         return results
 
+    @staticmethod
+    def load_env_interval(t_start, t_end, parquet_dir, time_col):
+
+        df = pd.read_parquet(
+            parquet_dir,
+            filters=[
+                (time_col, ">=", t_start),
+                (time_col, "<=", t_end),
+            ],
+            engine="pyarrow"
+        )
+
+        return df
+
+    @staticmethod
+    def convert_env_csv_to_parquet(env_csv, out_dir, time_col):
+        print("Converting env csv to parquet...")
+        out_dir = Path(out_dir)
+        out_dir.mkdir(exist_ok=True)
+
+        for chunk in pd.read_csv(
+                env_csv,
+                chunksize=1_000_000,
+                parse_dates=[time_col]
+        ):
+            chunk["date"] = chunk[time_col].dt.strftime("%Y-%m-%d")
+            chunk.to_parquet(
+                out_dir,
+                engine="pyarrow",
+                partition_cols=["date"],
+                compression="zstd"
+            )
+        print(f"Parquet Saved: {out_dir}")
+
     def kernel_params_per_animal_binary(
             self,
             env_path: str,
@@ -404,7 +438,7 @@ class AnimalMovementProcessor:
             out_directory: str | None = None
     ):
         """
-        :param env_path: path to environment data
+        :param env_path: path to environment data CSV
         :param kernel_resolver: your function that returns kernel parameters from a row of your env dataframe
         :param time_stamp: the name of your time instance column
         :param lon: the name of your longitude instance
@@ -420,9 +454,11 @@ class AnimalMovementProcessor:
 
         binary_paths: dict[tuple[str, str, str], str] = {}
 
+        parquet_root = out_directory / "env_parquet"
+        parquet_root.mkdir(exist_ok=True, parents=True)
+        # AnimalMovementProcessor.convert_env_csv_to_parquet(env_path, parquet_root, time_col=time_stamp)
         # for each animal trajectory
         for traj in self.traj.trajectories:
-            # build time intervals [(t0,t1), (t1,t2), ...]
             times = traj.df.index
             intervals = [(times[i], times[i + 1]) for i in range(len(times) - 1)]
 
@@ -441,38 +477,17 @@ class AnimalMovementProcessor:
             for index, (t_start, t_end) in enumerate(intervals):
                 ts = pd.Timestamp(t_start).strftime("%Y%m%dT%H")
                 te = pd.Timestamp(t_end).strftime("%Y%m%dT%H")
-
                 out_path_bin = aid_out / f"{aid}_kernels_{ts}-{te}.bin"
                 out_path_csv = aid_out / f"{aid}_kernels_{ts}-{te}.csv"
+                binary_paths[str(aid), ts, te] = str(out_path_bin)
 
-                print(f"{out_path_bin} Processing interval {t_start} to {t_end}")
-                print(f"{out_path_csv} Processing interval {t_start} to {t_end}")
+                interval_df = AnimalMovementProcessor.load_env_interval(
+                    t_start, t_end, parquet_root, time_col=time_stamp
+                )
 
-                # skip if outputs already exist
-                if out_path_bin.exists() and out_path_csv.exists():
-                    print(
-                        f"[KERNEL PARAMETERS] Skip interval {t_start} to {t_end} ({index} of {len(intervals)}): already exists")
-                    binary_paths[str(aid), ts, te] = str(out_path_bin)
+                if interval_df.empty:
                     continue
 
-                print(f"[KERNEL PARAMETERS] Processing interval {t_start} to {t_end} ({index} of {len(intervals)})")
-
-                interval_parts = []
-                # load environment data in chunks
-                for chunk in pd.read_csv(
-                        env_path,
-                        chunksize=1_000_000,
-                        parse_dates=[time_stamp]
-                ):
-                    sub = chunk[(chunk[time_stamp] >= t_start) & (chunk[time_stamp] <= t_end)]
-                    if not sub.empty:
-                        interval_parts.append(sub)
-
-                if not interval_parts:
-                    print(f"[KERNEL PARAMETERS] No environment data for interval {t_start} to {t_end}, skipping")
-                    continue
-
-                interval_df = pd.concat(interval_parts, ignore_index=True)
                 print(f"[KERNEL PARAMETERS] Intervals collected → Create CSV/Binary for {t_start} to {t_end}")
 
                 df_proc, T = df_add_properties2(
@@ -499,7 +514,6 @@ class AnimalMovementProcessor:
                 )
                 # save csv
                 df_proc.to_csv(out_path_csv, index=False)
-                binary_paths[str(aid), ts, te] = str(out_path_bin)
                 print(f"[KERNEL PARAMETERS] Saved CSV and Binary to {aid_out}")
 
             terrain_map_free(terrain_map)
@@ -507,7 +521,7 @@ class AnimalMovementProcessor:
         serialize_kernel_paths_json(binary_paths, out_directory)
         return binary_paths
 
-    def get_hmm_kernels(self, dt_tolerance, range):
+    def get_hmm_kernels(self, dt_tolerance, rnge):
         """Computes HMM kernels from trajectory data"""
 
         def utm_crs_from_geometry(geom):
@@ -533,7 +547,7 @@ class AnimalMovementProcessor:
 
         hmm_thingy = KernelFactory(data_gdf_utm)
         gdf = hmm_thingy.apply_hmm()
-        kernelA, kernelB, kernelC = hmm_thingy.get_state_kernels(dt_tolerance, range, 2 * range + 1)
+        kernelA, kernelB, kernelC = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1)
         gdf = gdf.set_geometry(
             gpd.points_from_xy(gdf[self.longitude_col], gdf[self.latitude_col]),
             crs=CRS.from_epsg(4326)

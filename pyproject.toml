@@ -24,6 +24,7 @@ dependencies = [
     "matplotlib",
     "PyQt6",
     "rioxarray",
+    "pyarrow",
     "xarray",
     "requests",
     "pandas",

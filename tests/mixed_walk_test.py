@@ -84,8 +84,9 @@ def weather_terrain_params(row):
     precipitation = float(row.get("precipitation_sum", 0))
     cloud_diffusion = cloud_cover / 100.0
     precip_diffusion = min(1.0, precipitation * 2.0)
-    diffusity = 0.3 + 0.5 * max(cloud_diffusion, precip_diffusion) + 0.2 * env_stochasticity
-    diffusity = min(0.95, diffusity)
+    angle_diffusivity = 0.5 * max(cloud_diffusion, precip_diffusion) + 0.1 * env_stochasticity
+    angle_diffusivity = min(0.95, angle_diffusivity)
+    len_diffusivity = 0.9
 
     wind_rad = math.radians(wind_dir_deg)
     wind_x_bias = math.sin(wind_rad)
@@ -107,9 +108,9 @@ def weather_terrain_params(row):
     if weather_code in [95, 96, 99]:
         is_brownian = True
         D = 1
-        diffusity = 0.9
+        angle_diffusivity = 0.9
 
-    return [bool(is_brownian), float(S), int(D), float(diffusity),
+    return [bool(is_brownian), float(S), int(D), float(len_diffusivity), float(angle_diffusivity),
             float(bias_x), float(bias_y)]
 
 
@@ -138,6 +139,7 @@ def marine_params(row):
         float(S),
         int(D),
         float(diffusity),
+        float(0.4),
         int(bias_x),
         int(bias_y),
     ]
@@ -151,11 +153,11 @@ def test_marine_walker():
     environment_csv = '/home/omar/Downloads/current_filename.csv'
     out_dir = os.path.dirname(study)
 
-    mapping = marine_kernels_baseline(step_size=5, directions=16, diffusity=2)
+    mapping = marine_kernels_baseline(step_size=5, directions=16, angle_diffusity=0.3, len_diffusivity=1)
     walker = MixedTimeWalker(data=df,
                              env_data=environment_csv,
                              kernel_mapping=mapping,
-                             resolution=300,
+                             resolution=400,
                              out_directory=out_dir,
                              env_samples=5,
                              kernel_resolver=marine_params,
@@ -165,8 +167,10 @@ def test_marine_walker():
                              id_col="tag-local-identifier",
                              crs="EPSG:4326",
                              is_marine=True)
+
     movement_policy = TimeStepPolicy(timestep_s=3600)  # one hour per step
     bias_only = EnvWeights.bias_only()
+
     trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
 
     walks_dir = os.path.dirname(study)
@@ -190,20 +194,22 @@ def test_time_walker():
     out_dir = os.path.dirname(study)
 
     mapping = create_mixed_kernel_parameters(MEDIUM, 5)
+    set_landmark_mapping(mapping, GRASSLAND, is_brownian=False, step_size=3, directions=12, len_diffusity=0.7,
+                         angle_diffusity=0.2)
     walker = MixedTimeWalker(data=df,
                              env_data=environment_csv,
                              kernel_mapping=mapping,
-                             resolution=500,
+                             resolution=600,
                              out_directory=out_dir,
                              env_samples=5,
-                             kernel_resolver=marine_params,
+                             kernel_resolver=weather_terrain_params,
                              time_col="timestamp",
                              lon_col="location-long",
                              lat_col="location-lat",
                              id_col="tag-local-identifier",
                              crs="EPSG:4326",
                              is_marine=False)
-    movement_policy = TimeStepPolicy(timestep_s=3600 * 12)  # one hour per step
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 4)  # one hour per step
     bias_only = EnvWeights.bias_only()
     trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
 

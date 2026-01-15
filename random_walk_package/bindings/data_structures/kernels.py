@@ -11,7 +11,7 @@ dll.kernel_from_array.restype = POINTER(Matrix)
 dll.generate_kernels_from_matrix.argtypes = [POINTER(Matrix), c_ssize_t]
 dll.generate_kernels_from_matrix.restype = TensorPtr
 
-dll.generate_correlated_kernels.argtypes = [c_ssize_t, c_ssize_t]
+dll.generate_correlated_kernels.argtypes = [c_ssize_t, c_ssize_t, c_double, c_double]
 dll.generate_correlated_kernels.restype = TensorPtr
 
 dll.generate_chi_kernel.argtypes = [
@@ -27,8 +27,8 @@ def kernel_from_array(array: np.ndarray, width: int, height: int) -> MatrixPtr:
     return dll.kernel_from_array(array.ctypes.data_as(POINTER(c_double)), width, height)
 
 
-def generate_correlated_kernels(width: int, dirs: int) -> TensorPtr:
-    return dll.generate_correlated_kernels(dirs, width)
+def generate_correlated_kernels(width: int, dirs: int, angle_diff=0.3, len_diff=1.0) -> TensorPtr:
+    return dll.generate_correlated_kernels(dirs, width, angle_diff, len_diff)
 
 
 def clip_kernel(Z, radius):

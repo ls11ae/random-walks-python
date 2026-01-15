@@ -29,15 +29,16 @@ dll.get_parameters_of_terrain.restype = KernelParametersPtr
 dll.kernel_parameters_mapping_free.argtypes = [KernelParametersMappingPtr]
 dll.kernel_parameters_mapping_free.restype = None
 
-dll.create_default_marine_mapping.argtypes = [c_int, c_ssize_t, c_float]
+dll.create_default_marine_mapping.argtypes = [c_int, c_ssize_t, c_float, c_float]
 dll.create_default_marine_mapping.restype = KernelParametersMappingPtr
 
 dll.update_mapping.argtypes = [KernelParametersMappingPtr, c_int, c_int, c_ssize_t, c_float]
 dll.update_mapping.restype = None
 
 
-def marine_kernels_baseline(step_size: int, directions: int, diffusity: float) -> KernelParametersMappingPtr:
-    return dll.create_default_marine_mapping(step_size, directions, diffusity)
+def marine_kernels_baseline(step_size: int, directions: int, angle_diffusity,
+                            len_diffusivity: float) -> KernelParametersMappingPtr:
+    return dll.create_default_marine_mapping(step_size, directions, len_diffusivity, angle_diffusity)
 
 
 def update_kernels_mapping(mapping: KernelParametersMappingPtr, landmark: int, stepsize: int, directions: int,
@@ -65,14 +66,16 @@ def create_correlated_kernel_parameters(animal_type: int,
 
 
 def set_landmark_mapping(kernel_parameters_map: KernelParametersPtr, landmark: int,
-                         is_brownian: bool, step_size: int, directions: int, diffusity: float,
+                         is_brownian: bool, step_size: int, directions: int, len_diffusity: float = 1.0,
+                         angle_diffusity: float = 0.3,
                          max_bias_x: int | None = None, max_bias_y: int | None = None) -> None:
     if is_brownian:
         directions = 1  # Direction must be 1 for Brownian motion
     kernel_parameters = create_kernel_parameters(is_brownian=is_brownian,
                                                  step_size=step_size,
                                                  directions=directions,
-                                                 diffusity=diffusity,
+                                                 len_diffusity=len_diffusity,
+                                                 angle_diff=angle_diffusity,
                                                  max_bias_x=max_bias_x if max_bias_x is not None else 0,
                                                  max_bias_y=max_bias_y if max_bias_y is not None else 0)
     dll.set_landmark_mapping(kernel_parameters_map, landmark, kernel_parameters)

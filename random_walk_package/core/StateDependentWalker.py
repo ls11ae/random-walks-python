@@ -22,7 +22,7 @@ class StateDependentWalker(MixedWalker):
         super()._process_movebank_data()
         MAX_T = 50
         KERNEL_RADIUS_CELLS = 10
-        Za, Zb, Zc = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance, range=rnge)
+        Za, Zb, Zc = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance, rnge=rnge)
         dx_meter = dy_meter = Za.dx
         reso = Za.reso
         rnge = Za.rnge
