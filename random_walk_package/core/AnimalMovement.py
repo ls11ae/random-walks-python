@@ -281,7 +281,7 @@ class AnimalMovementProcessor:
         min_x, min_y, max_x, max_y = utm_bbox
 
         utm_x = min_x + ((x + 0.5) / width) * (max_x - min_x)
-        utm_y = max_y - ((y + 0.5) / height) * (max_y - min_y)
+        utm_y = (min_y + ((y + 0.5) / height) * (max_y - min_y))
 
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat

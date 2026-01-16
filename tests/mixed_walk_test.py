@@ -29,12 +29,11 @@ def test_mixed_walk():
     resources_dir = os.path.dirname("random_walk_package/resources/")
     study = os.path.join(resources_dir, studies[2])
     df = pd.read_csv(study)
-    kernel_mapping = create_correlated_kernel_parameters(animal_type=AIRBORNE, base_step_size=3)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=3, directions=8, diffusity=1)
+    kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=3)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=3, directions=8)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=4,
-                         directions=1,
-                         diffusity=2.6)
+                         directions=4)
     set_forbidden_landmark(kernel_mapping, WATER)
 
     out_dir = os.path.dirname(study)

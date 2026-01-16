@@ -1,11 +1,14 @@
 # debugging: gdb --args python -m tests.test
 import random
 
+from random_walk_package import create_correlated_kernel_parameters
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
     update_kernels_mapping
 from random_walk_package.bindings.plotter import plot_walk_from_json
 from random_walk_package.core.MixedWalker import *
-from tests.mixed_walk_test import test_marine_walker, test_time_walker
+from random_walk_package.core.StateDependentWalker import StateDependentWalker
+from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed
+from tests.mixed_walk_test import test_marine_walker, test_time_walker, test_mixed_walk
 
 
 def weather_terrain_params(row):
@@ -19,6 +22,16 @@ def weather_terrain_params(row):
 
 
 if __name__ == "__main__":
+    study = "random_walk_package/resources/biology_birds/Biology of birds practical.csv"
+    df = pd.read_csv(study)
+    out_dir = os.path.dirname(study)
+    mapping = create_correlated_kernel_parameters(AIRBORNE, 5)
+    walker = StateDependentWalker(data=df, animal_type=AIRBORNE, resolution=1200, out_directory=out_dir)
+    traj_coll = walker.generate_walks(dt_tolerance=0.5, rnge=200)
+    walk_dir = os.path.join(out_dir, "walks")
+    os.makedirs(walk_dir, exist_ok=True)
+    save_trajectory_collection_timed(traj_coll, str(walk_dir))
+    exit()
     test_marine_walker()
     plot_walk_from_json(
         "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/tiger_sharks/kernels/204413/.json")

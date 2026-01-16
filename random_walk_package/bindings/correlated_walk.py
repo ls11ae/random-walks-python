@@ -44,10 +44,11 @@ def correlated_walk_init(kernel, width=100, height=100, time=50, start_x=None, s
     if kernel is None:
         raise ValueError("Kernel is None.")
     return dll.correlated_init(width, height, kernel, time, start_x, start_y, use_serialization,
-                               output_folder.encode('utf-8'))
+                               output_folder.encode('utf-8') if output_folder is not None else "".encode('utf-8'))
 
 
-def correlated_backtrace(dp_mat, T, kernels, end_x, end_y, direction=0, use_serialization=False, dp_folder=None):
+def correlated_backtrace(dp_mat, T, kernels, end_x, end_y, direction=0, use_serialization=False, dp_folder=None,
+                         out_ptr=False):
     if dp_mat is None and use_serialization is False:
         raise ValueError("DP matrix is None.")
     if kernels is None:
@@ -60,6 +61,8 @@ def correlated_backtrace(dp_mat, T, kernels, end_x, end_y, direction=0, use_seri
                                         dp_folder.encode('utf-8') if dp_folder is not None else None, T, kernels, end_x,
                                         end_y,
                                         direction)
+    if out_ptr:
+        return walk_ptr
     if walk_ptr is None:
         raise ValueError("Walk failed to backtrace. Maybe try again with higher T?")
     walk_np = get_walk_points(walk_ptr)
