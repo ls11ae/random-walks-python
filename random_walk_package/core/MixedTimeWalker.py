@@ -115,8 +115,7 @@ class MixedTimeWalker(MixedWalker):
                     print(f"new S {S}")
                 # todo: better updating logic, doesnt rly work with self.mapping,
                 mapping = marine_kernels_baseline(S, D, angle_diffusity=0.3,
-                                                  len_diffusivity=1) if self.is_marine else create_mixed_kernel_parameters(
-                    MEDIUM, S)
+                                                  len_diffusivity=1) if self.is_marine else create_mixed_kernel_parameters(MEDIUM, S)
 
                 # update_kernels_mapping(self.mapping, WATER, stepsize=S, directions=D, diffusity=2)
                 # Initialize DP matrix for the current start point

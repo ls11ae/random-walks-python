@@ -460,7 +460,9 @@ class AnimalMovementProcessor:
         # for each animal trajectory
         for traj in self.traj.trajectories:
             times = traj.df.index
+            points = traj.df.geometry           # (lon, lat)
             intervals = [(times[i], times[i + 1]) for i in range(len(times) - 1)]
+            point_pairs = [(points[i], points[i + 1]) for i in range(len(points) - 1)]
 
             aid = traj.id
             bbox = self.bbox_geo(aid)
@@ -488,7 +490,8 @@ class AnimalMovementProcessor:
                 if interval_df.empty:
                     continue
 
-                print(f"[KERNEL PARAMETERS] Intervals collected → Create CSV/Binary for {t_start} to {t_end}")
+                start_x, start_y = point_pairs[index][0].x, point_pairs[index][0].y
+                end_x, end_y = point_pairs[index][1].x, point_pairs[index][1].y
 
                 df_proc, T = df_add_properties2(
                     df=interval_df,
@@ -502,6 +505,8 @@ class AnimalMovementProcessor:
                     grid_points_per_edge=self.env_samples,
                     lon=lon,
                     lat=lat,
+                    start=(start_x, start_y),
+                    end=(end_x, end_y),
                 )
 
                 # save binary

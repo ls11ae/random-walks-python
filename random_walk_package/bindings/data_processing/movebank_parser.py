@@ -170,13 +170,14 @@ def df_add_properties(df: DataFrame,
 
 
 def df_add_properties2(df: DataFrame,
-                       kernel_resolver,  # function (row) -> KernelParametersPtr
+                       kernel_resolver,  # function (row, start, end) -> KernelParametersPtr
                        terrain: TerrainMapPtr, bbox_geo, grid_width,
                        grid_height, utm_code,
                        time_stamp='timestamp',
                        grid_points_per_edge=5,
                        lon='location-long',
-                       lat='location-lat') -> (pd.DataFrame, int):
+                       lat='location-lat',
+                       start = None, end = None) -> (pd.DataFrame, int):
     min_lon, min_lat, max_lon, max_lat = bbox_geo
 
     # filter by bounding box
@@ -242,7 +243,7 @@ def df_add_properties2(df: DataFrame,
 
     # compute kernel parameters
     kp = clean_df.apply(
-        lambda row: kernel_resolver(row),
+        lambda row: kernel_resolver(row, start, end),
         axis=1,
         result_type="expand"
     )
