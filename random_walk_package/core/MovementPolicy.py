@@ -6,7 +6,10 @@ import pandas as pd
 
 
 def manhattan(start_point, end_point):
-    return abs(start_point[0] - end_point[0]) + abs(start_point[1] - end_point[1])
+    return max(abs(start_point[0] - end_point[0]), abs(start_point[1] - end_point[1]))
+
+def chebyshev(start_point, end_point):
+    return max(abs(start_point[0] - end_point[0]),  abs(start_point[1] - end_point[1]))
 
 
 def euclidean(start_point, end_point):
@@ -44,7 +47,7 @@ class TimeStepPolicy(MovementPolicy):
     def __init__(self, timestep_s):
         super().__init__(timestep_s)
 
-    def resolve(self, start_point, end_point, start_time, end_time, diffusity: float = 1.5):
+    def resolve(self, start_point, end_point, start_time, end_time, movement_diffusivity: float = 1.5):
         """
         Calculate T as number of time steps and S as step size in grid cells
 
@@ -53,7 +56,7 @@ class TimeStepPolicy(MovementPolicy):
             end_point (tuple): Coordinates of the ending point as (x, y) in grid coordinates
             start_time (str or pd.Timestamp): The start time of the traversal.
             end_time (str or pd.Timestamp): The end time of the traversal.
-            diffusity (float, optional): A factor influencing how much walk deviates from a straight line connection
+            movement_diffusivity (float, optional): A factor influencing how much walk deviates from a straight line connection
 
         Returns:
             tuple: A tuple containing:
@@ -67,7 +70,7 @@ class TimeStepPolicy(MovementPolicy):
         end_time = pd.to_datetime(end_time)
         dt_seconds = int((end_time - start_time).total_seconds())
 
-        grid_dist = int(manhattan(start_point, end_point) * diffusity)
+        grid_dist = int(chebyshev(start_point, end_point) * movement_diffusivity)
         T = max(1, int(np.round(dt_seconds / self.timestep_s)))
         S = max(1, int(np.round(grid_dist / T)))
         return T, S
