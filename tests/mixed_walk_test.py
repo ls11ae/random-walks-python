@@ -143,6 +143,30 @@ def marine_params(row):
         int(bias_y),
     ]
 
+def marine_resolver(row, start, end): #start end
+    ref_speed = 1.5
+    is_brownian = False
+    S =1
+    D = 4
+    length_diffusity= 0.5 #to discuss
+    angle_diffusity = 0.5
+    current_vec = np.array([
+        row["uo"],   # x-current
+        row["vo"]    # y-current
+    ])
+    curr_norm = np.linalg.norm(current_vec)
+    creature_vector = np.array([end[0]- start[0], end[1]- start[1]])
+    creature_norm = np.linalg.norm(creature_vector)
+    creature_vector= creature_vector / creature_norm #check norm func
+    creature_vecror = ref_speed * creature_vector
+
+    bias_x = 0
+    bias_y = 0
+
+    #correct dir and reff speed
+    # we need to normalize by speed but by the constant, norm the creature vector to have unit length and mult by the lit.speed and
+    return [bool(is_brownian), float(S), int(D), float(length_diffusity),float(angle_diffusity),
+        float(bias_x), float(bias_y)]
 
 @pytest.mark.skip(reason="takes too long")
 def test_marine_walker():
