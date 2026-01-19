@@ -2,6 +2,8 @@ import json
 from collections import Counter
 
 import numpy as np
+import pandas as pd
+import geopandas as gpd
 
 
 def to_json(density, num_directions=8, name="test"):
@@ -71,52 +73,48 @@ def calculate_durations(animal_trajectories):
 
 def merge_states_to_gdf(gdf, seq_dfs, columns):
     # extract states
-    state_dict = {}
+    state_rows = []
     for seq in seq_dfs:
-        if 'state' in seq.columns and 'timestamp' in seq.columns:
-            for _, row in seq.iterrows():
-                timestamp = row['timestamp']
-                state = row['state']
-                state_dict[timestamp] = state
+        if {'timestamp', 'state'}.issubset(seq.columns):
+            state_rows.append(seq[['timestamp', 'state']])
 
-    print(f"Anzahl States gefunden: {len(state_dict)}")
-
-    if not state_dict:
+    if not state_rows:
         gdf['state'] = -1
         return gdf
 
-    gdf_with_states = gdf.copy()
-
-    # assign states
-    state_count = 0
-    for idx, row in gdf_with_states.iterrows():
-        if idx in state_dict:
-            gdf_with_states.at[idx, 'state'] = state_dict[idx]
-            state_count += 1
-
-    print(f"States zugewiesen: {state_count} von {len(gdf_with_states)} Punkten")
-
-    # temporary gdf
-    temp_df = gdf_with_states.reset_index()
-    temp_df['state'] = temp_df['state'].astype('float')  # für NaN-Handling
-
-    # sort by animal and time
-    temp_df = temp_df.sort_values(by=[columns.id_col, columns.time_col])
-
-    # Interpolation per animal
-    temp_df['state'] = temp_df.groupby(columns.id_col)['state'].ffill()
-    temp_df['state'] = temp_df.groupby(columns.id_col)['state'].bfill()
-
-    temp_df['state'] = temp_df['state'].fillna(-1).astype(int)
-    import geopandas as gpd
-    gdf_with_states = gpd.GeoDataFrame(
-        temp_df.drop(columns='geometry'),
-        geometry=temp_df['geometry'],
-        crs=gdf.crs
+    states_df = (
+        pd.concat(state_rows, ignore_index=True)
+        .drop_duplicates(subset='timestamp')
     )
-    gdf_with_states = gdf_with_states.set_index(columns.time_col)
 
-    print(f"\nFinal State-Distribution:")
-    print(gdf_with_states['state'].value_counts().sort_index())
+    gdf_tmp = gdf.reset_index()
+    gdf_tmp = gdf_tmp.merge(
+        states_df,
+        on='timestamp',
+        how='left'
+    )
+    assigned = gdf_tmp['state'].notna().sum()
+    print(f"States zugewiesen: {assigned} von {len(gdf_tmp)} Punkten")
 
-    return gdf_with_states
+    gdf_tmp = gdf_tmp.sort_values(
+        by=[columns.id_col, columns.time_col]
+    )
+
+    gdf_tmp['state'] = (
+        gdf_tmp
+        .groupby(columns.id_col)['state']
+        .ffill()
+        .bfill()
+        .fillna(-1)
+        .astype(int)
+    )
+    gdf_out = gpd.GeoDataFrame(
+        gdf_tmp,
+        geometry=columns.geom_col,
+        crs=gdf.crs
+    ).set_index(columns.time_col)
+
+    print("\nFinal State-Distribution:")
+    print(gdf_out['state'].value_counts().sort_index())
+
+    return gdf_out

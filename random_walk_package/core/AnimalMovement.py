@@ -9,7 +9,7 @@ import numpy as np
 from pandas import DataFrame
 from pyproj import CRS
 
-from random_walk_package.bindings import parse_terrain, terrain_map_free
+from random_walk_package.bindings import parse_terrain, terrain_map_free, terrain_at
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties, df_add_properties2
 from random_walk_package.core.KernelFactory import KernelFactory
 from random_walk_package.data_sources.geo_fetcher import *
@@ -528,30 +528,39 @@ class AnimalMovementProcessor:
 
     def get_hmm_kernels(self, dt_tolerance, rnge):
         """Computes HMM kernels from trajectory data"""
-
-        def utm_crs_from_geometry(geom):
-            lon, lat = geom.coords[0]
-            zone = int((lon + 180) // 6) + 1
-            epsg = 32600 + zone if lat >= 0 else 32700 + zone
-            return CRS.from_epsg(epsg)
-
         self.traj.add_speed()
         self.traj.add_direction()
         self.traj.add_angular_difference()
         self.traj.add_distance()
         data_gdf = self.traj.to_point_gdf()
         data_gdf = data_gdf.copy()
+        # local mean utm zone
+        mean_lon = data_gdf.geometry.x.mean()
+        mean_lat = data_gdf.geometry.y.mean()
+        zone = int((mean_lon + 180) // 6) + 1
+        epsg = 32600 + zone if mean_lat >= 0 else 32700 + zone
+        TARGET_CRS = f"EPSG:{epsg}"
         # UTM per individual animal
         utm_gdfs = []
         for traj_id, sub in data_gdf.groupby('individual-local-identifier'):
-            utm_crs = utm_crs_from_geometry(sub.geometry.iloc[0])
-            utm_gdfs.append(sub.to_crs(utm_crs))
+            sub = sub.copy().reset_index()
+            sub = gpd.GeoDataFrame(sub, geometry="geometry", crs=data_gdf.crs)
+            # add terrain info
+            grid_coords = self.create_movement_data(traj_id, False)
+            terrain_map = parse_terrain(file=self.terrain_paths[traj_id], delim=' ')
+            sub["terrain"] = [terrain_at(terrain_map, x, y) for x, y in grid_coords.grid_steps()]
+            utm_gdfs.append(sub.to_crs(TARGET_CRS))
 
-        data_gdf_utm = gpd.GeoDataFrame(pd.concat(utm_gdfs), crs=utm_gdfs[0].crs)
-        print(data_gdf_utm.head())
-
+        data_gdf_utm = gpd.GeoDataFrame(
+            pd.concat(utm_gdfs, ignore_index=True),
+            crs=TARGET_CRS
+        )
+        data_gdf_utm.reset_index()
+        # initialize HMM
         hmm_thingy = KernelFactory(data_gdf_utm)
+        # apply HMM to retrieve trajectories annotated with hidden states
         gdf = hmm_thingy.apply_hmm()
+        # compute kernels from states
         kernelA, kernelB, kernelC = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1)
         gdf = gdf.set_geometry(
             gpd.points_from_xy(gdf[self.longitude_col], gdf[self.latitude_col]),

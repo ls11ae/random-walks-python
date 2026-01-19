@@ -293,7 +293,7 @@ def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
                 "popup": traj_id,
             }
         }
-        ci += 1
+        ci = (ci + 1) % len(colors)
         features.append(feature)
 
     TimestampedGeoJson(

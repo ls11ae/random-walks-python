@@ -10,7 +10,7 @@ class ColumnConfig:
                  time_col='timestamp',
                  geom_col='geometry',
                  provided_dir_col='direction',  # degrees
-                 feature_cols=('distance', 'angular_difference', 'speed')):
+                 feature_cols=('distance', 'angular_difference', 'speed', 'terrain')):
         self.time_col = time_col
         self.geom_col = geom_col
         self.id_col = id_cols
@@ -95,15 +95,15 @@ def process_trajectories(data_list: list[pd.DataFrame]):
 
     for data in data_list:
         for _, row in data.iterrows():
-            bettong_id = row["individual-local-identifier"]
-            if bettong_id not in animal_trajectories:
-                animal_trajectories[bettong_id] = []
-            animal_trajectories[bettong_id].append(
+            animal_id = row["individual-local-identifier"]
+            if animal_id not in animal_trajectories:
+                animal_trajectories[animal_id] = []
+            animal_trajectories[animal_id].append(
                 (int(row["geometry"].x), int(row["geometry"].y), row["timestamp"], row["state"] + 1))
 
     # Sort each bettong's list of tuples by the datetime entry
-    for bettong_id in animal_trajectories:
-        animal_trajectories[bettong_id].sort(key=lambda entry: entry[2])
+    for animal_id in animal_trajectories:
+        animal_trajectories[animal_id].sort(key=lambda entry: entry[2])
 
     from collections import Counter
 
@@ -127,7 +127,7 @@ def process_trajectories(data_list: list[pd.DataFrame]):
 
 
 def sub(self, animal_trajectories):
-    bettong = []
+    animal = []
 
     max_len = -1
     for bettong_id, entries in animal_trajectories.items():
@@ -146,14 +146,14 @@ def sub(self, animal_trajectories):
             else:
                 if cur_len > max_len:
                     max_len = max(max_len, cur_len)
-                    bettong = cur_bettong
+                    animal = cur_bettong
                 cur_len = 0
                 cur_bettong = []
         if cur_len > max_len:
             max_len = max(max_len, cur_len)
-            bettong = cur_bettong
+            animal = cur_bettong
 
     # print(f"{min([x for x, _, _ in bettong]), max([x for x, _, _ in bettong]), min([y for _, y, _ in bettong]), max([y for _, y, _ in bettong])}")
 
     print("max_len: ", max_len)
-    return {"": bettong}
+    return {"": animal}

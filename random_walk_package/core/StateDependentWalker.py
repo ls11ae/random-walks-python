@@ -40,11 +40,12 @@ class StateDependentWalker(MixedWalker):
         self.animal = animal_type
         if animal_type is AIRBORNE:
             mapping = None
+            self.is_marine = True
         else:
             mapping = create_mixed_kernel_parameters(animal_type, 5)
         super().__init__(data, mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs)
 
-    def generate_walks(self, serialization_dir=None, dt_tolerance=0.5, rnge=200):
+    def generate_walks(self, serialization_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None):
         super()._process_movebank_data()
         Za, Zb, Zc = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance, rnge=rnge)
         dx_meter = dy_meter = Za.dx
@@ -56,7 +57,7 @@ class StateDependentWalker(MixedWalker):
         Zc = normalize_kernel(Zc.Z)
         py_kernels = [Za, Zb, Zc]
 
-        t_pol = TimeStepPolicy(timestep_s=20 * 60)
+        t_pol = TimeStepPolicy(timestep_s=20 * 60) if movement_policy is None else movement_policy
 
         print("Kernel sum:", Za.sum(), Zb.sum(), Zc.sum())
         print("Kernel shape:", Za.shape)
