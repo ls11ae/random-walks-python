@@ -51,7 +51,10 @@ class StateDependentWalker(MixedWalker):
 
     def generate_walks(self, serialization_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None):
         super()._process_movebank_data()
-        Za, Zb, Zc = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance, rnge=rnge)
+        [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance, rnge=rnge)
+
+        Za, Zb, Zc = corZs
+
         dx_meter = dy_meter = Za.dx
         reso = Za.reso
         rnge = Za.rnge

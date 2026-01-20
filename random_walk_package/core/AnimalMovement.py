@@ -561,7 +561,7 @@ class AnimalMovementProcessor:
         # apply HMM to retrieve trajectories annotated with hidden states
         gdf = hmm_thingy.apply_hmm()
         # compute kernels from states
-        kernelA, kernelB, kernelC = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1)
+        [crwZ, brwZ] = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1)
         gdf = gdf.set_geometry(
             gpd.points_from_xy(gdf[self.longitude_col], gdf[self.latitude_col]),
             crs=CRS.from_epsg(4326)
@@ -571,4 +571,4 @@ class AnimalMovementProcessor:
             traj_id_col=self.id_col,
             t=self.time_col,
         )
-        return kernelA, kernelB, kernelC
+        return crwZ, brwZ

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import geopandas as gpd
 import numpy as np
 
-from random_walk_package.core.hmm.kernels import pure_cor_grouped
+from random_walk_package.core.hmm.kernels import pure_cor_grouped, pure_brw_grouped
 from random_walk_package.core.hmm.models import apply_hmm
 from random_walk_package.core.hmm.preprocessing import ColumnConfig, preprocess_hmm
 from random_walk_package.core.hmm.utils import merge_states_to_gdf
@@ -46,11 +46,19 @@ class KernelFactory:
         self.gdf = merge_states_to_gdf(self.gdf, seq_dfs, self.columns)
         return self.gdf
 
-    def get_state_kernels(self, dt_tolerance, range, reso):
-        dx = 2 * range / reso
+    def get_state_kernels(self, dt_tolerance, rnge, reso):
+        dx = 2 * rnge / reso
         print(f"dx: {dx}\n")
-        Za, Zb, Zc = pure_cor_grouped(self.__threshold, dt_tolerance, self.__trajectories, range, reso)
-        kernelA = Kernel2D(Za, range, reso, dx)
-        kernelB = Kernel2D(Zb, range, reso, dx)
-        kernelC = Kernel2D(Zc, range, reso, dx)
-        return kernelA, kernelB, kernelC
+        Za, Zb, Zc = pure_cor_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso)
+        Ba, Bb, Bc = pure_brw_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso)
+
+        # correlated kernels
+        crw_Za = Kernel2D(Za, rnge, reso, dx)
+        crw_Zb = Kernel2D(Zb, rnge, reso, dx)
+        crw_Zc = Kernel2D(Zc, rnge, reso, dx)
+        # brownian kernels
+        brw_Za = Kernel2D(Ba, rnge, reso, dx)
+        brw_Zb = Kernel2D(Bb, rnge, reso, dx)
+        brw_Zc = Kernel2D(Bc, rnge, reso, dx)
+
+        return [(crw_Za, crw_Zb, crw_Zc), (brw_Za, brw_Zb, brw_Zc)]

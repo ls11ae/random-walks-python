@@ -126,34 +126,3 @@ def process_trajectories(data_list: list[pd.DataFrame]):
     return animal_trajectories, dt_threshold
 
 
-def sub(self, animal_trajectories):
-    animal = []
-
-    max_len = -1
-    for bettong_id, entries in animal_trajectories.items():
-        cur_len = 0
-        cur_bettong = []
-        # Calculate time differences between consecutive entries
-        for i in range(2, len(entries)):
-            time_diff_0 = (entries[i][2] - entries[i - 1][2]).total_seconds() / 60
-            time_diff_1 = (entries[i - 1][2] - entries[i - 2][2]).total_seconds() / 60
-            if abs(time_diff_0 - self.dt_threshold) <= self.dt_threshold * self.dt_tolerance and abs(
-                    time_diff_1 - self.dt_threshold) <= self.dt_tolerance * self.dt_threshold:
-                # steps.append((entries[i][0]-entries[i-1][0],entries[i][1]-entries[i-1][1]))
-                x, y = (entries[i][0], entries[i][1])
-                cur_bettong.append((x, y, cur_len))
-                cur_len += 1
-            else:
-                if cur_len > max_len:
-                    max_len = max(max_len, cur_len)
-                    animal = cur_bettong
-                cur_len = 0
-                cur_bettong = []
-        if cur_len > max_len:
-            max_len = max(max_len, cur_len)
-            animal = cur_bettong
-
-    # print(f"{min([x for x, _, _ in bettong]), max([x for x, _, _ in bettong]), min([y for _, y, _ in bettong]), max([y for _, y, _ in bettong])}")
-
-    print("max_len: ", max_len)
-    return {"": animal}

@@ -30,21 +30,42 @@ def calculate_steps_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories)
             # durations.append(time_diff.total_seconds()/60)  # Convert to
     # print(steps[0])
     # print(f"{min([x for x, _ in steps]), max([x for x, _ in steps]), min([y for _, y in steps]), max([y for _, y in steps])}")
-    print(f"  total of {count_total} steps, {count_discarded / count_total}% discarded")
+    print(f"  total of {count_total} steps, {(count_discarded / count_total) * 100.0}% discarded")
     print(f" State 1 {len(steps[0])}")
     print(f" State 2 {len(steps[1])}")
     print(f" State 3 {len(steps[2])}")
     return steps
 
+def calculate_steps_brownian_grouped(dt_threshold, dt_tolerance, animal_trajectories):
+    steps = [[], [], []]
+    count_total = 0
+    count_discarded = 0
+
+    for bettong_id, entries in animal_trajectories.items():
+        for i in range(1, len(entries)):
+            count_total += 1
+            time_diff = (entries[i][2] - entries[i - 1][2]).total_seconds() / 60
+
+            if abs(time_diff - dt_threshold) <= dt_threshold * dt_tolerance:
+                dx = entries[i][0] - entries[i - 1][0]
+                dy = entries[i][1] - entries[i - 1][1]
+                steps[entries[i - 1][3] - 1].append((dx, dy))
+            else:
+                count_discarded += 1
+
+    print(f"  total of {count_total} steps, {(count_discarded / count_total) * 100.0}% discarded")
+    print(f" State 1 {len(steps[0])}")
+    print(f" State 2 {len(steps[1])}")
+    print(f" State 3 {len(steps[2])}")
+
+    return steps
+
 
 updating = False
 
-
-def pure_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso):
+def create_and_plot_kernels(a, b, c, rnge, reso):
     from random_walk_package.core.hmm.visualization import generate_heatmap
 
-    # point clouds of relative steps per state
-    a, b, c = calculate_steps_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories)
     fig, axs = plt.subplots(2, 3, figsize=(12, 6))
     Za = Zb = Zc = None
     if len(a) >= 3:
@@ -90,3 +111,12 @@ def pure_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso
         ax2.callbacks.connect('ylim_changed', on_xlim_changed)
     plt.show()
     return Za, Zb, Zc
+
+def pure_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso):
+    # point clouds of relative steps per state
+    a, b, c = calculate_steps_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories)
+    return create_and_plot_kernels(a, b, c, rnge, reso)
+
+def pure_brw_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso):
+    a, b, c = calculate_steps_brownian_grouped(dt_threshold, dt_tolerance, animal_trajectories)
+    return create_and_plot_kernels(a, b, c, rnge, reso)
