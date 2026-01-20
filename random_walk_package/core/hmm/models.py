@@ -76,8 +76,4 @@ def fit_data(axs, steps, rnge, reso):
     axs.imshow(Z, extent=(-rnge, rnge, -rnge, rnge), origin='lower', cmap='viridis',
                interpolation='nearest')
     return Z
-    # axs.colorbar(label='Intensity')
-    # axs.title('2D Heatmap Centered Around (0,0) with Squares')
-    # axs.xlabel('X')
-    # axs.ylabel('Y')
-    # plt.show()
+

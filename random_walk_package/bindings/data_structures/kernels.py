@@ -34,7 +34,8 @@ def generate_correlated_kernels(width: int, dirs: int, angle_diff=0.3, len_diff=
 def clip_kernel(Z, radius):
     cx = Z.shape[0] // 2
     cy = Z.shape[1] // 2
-    return Z[cx - radius:cx + radius + 1, cy - radius:cy + radius + 1]
+    return Z[(cx - radius) : (cx + radius + 1),
+             (cy - radius) : (cy + radius + 1)]
 
 
 def normalize_kernel(Z):

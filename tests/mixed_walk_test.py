@@ -11,7 +11,7 @@ import pandas as pd
 
 from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, MixedTimeWalker, MEDIUM
 from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
-from random_walk_package.bindings import AIRBORNE, create_mixed_kernel_parameters
+from random_walk_package.bindings import create_mixed_kernel_parameters
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
@@ -32,7 +32,7 @@ def test_mixed_walk():
     kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=3)
     set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=3, directions=8)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
-                         step_size=4,
+                         step_size=2,
                          directions=4)
     set_forbidden_landmark(kernel_mapping, WATER)
 

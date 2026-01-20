@@ -6,9 +6,10 @@ import pandas as pd
 
 from random_walk_package import MixedWalker, get_walk_points, dll, tensor_free, tensor4D_free
 from random_walk_package.bindings import parse_terrain, terrain_map_free, kernels_map3d_free, AIRBORNE, \
-    create_mixed_kernel_parameters
+    create_mixed_kernel_parameters, MARINE
 from random_walk_package.bindings.correlated_walk import correlated_walk_init, correlated_backtrace
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline
 from random_walk_package.bindings.data_structures.kernels import normalize_kernel, clip_kernel, \
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single
@@ -38,12 +39,15 @@ class StateDependentWalker(MixedWalker):
                  id_col="tag-local-identifier",
                  crs="EPSG:4326"):
         self.animal = animal_type
+        is_marine = animal_type == MARINE or animal_type == AIRBORNE
         if animal_type is AIRBORNE:
             mapping = None
             self.is_marine = True
+        elif animal_type is MARINE:
+            mapping = marine_kernels_baseline(5, 5, 1, 1)
         else:
             mapping = create_mixed_kernel_parameters(animal_type, 5)
-        super().__init__(data, mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs)
+        super().__init__(data, mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs, is_marine)
 
     def generate_walks(self, serialization_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None):
         super()._process_movebank_data()
@@ -52,15 +56,15 @@ class StateDependentWalker(MixedWalker):
         reso = Za.reso
         rnge = Za.rnge
 
-        Za = normalize_kernel(Za.Z)
-        Zb = normalize_kernel(Zb.Z)
-        Zc = normalize_kernel(Zc.Z)
-        py_kernels = [Za, Zb, Zc]
+        py_kernels = [
+            normalize_kernel(Z.Z)
+            for Z in [Za, Zb, Zc]
+            if Z.Z is not None
+        ]
+
+        NUM_STATES = len(py_kernels)
 
         t_pol = TimeStepPolicy(timestep_s=20 * 60) if movement_policy is None else movement_policy
-
-        print("Kernel sum:", Za.sum(), Zb.sum(), Zc.sum())
-        print("Kernel shape:", Za.shape)
 
         steps_dict = self.animal_proc.create_movement_data_dict(has_states=True)
         per_animal_gdfs = []  # collect final GeoDataFrames per animal
@@ -74,8 +78,7 @@ class StateDependentWalker(MixedWalker):
             steps_df = steps_dict[animal_id].df
             idx = steps_df.index
             kmaps = []
-            if self.animal is not AIRBORNE:
-                kmaps = [kernels_map_single(terrain_map, kernel, self.mapping) for kernel in py_kernels]
+
             # grid params
             """xmin, ymin, xmax, ymax = self.animal_proc.bbox_utm(animal_id)
             Nx = terrain_map.contents.width
@@ -94,7 +97,7 @@ class StateDependentWalker(MixedWalker):
                 start_x, start_y = steps["grid_x"].iloc[i], steps["grid_y"].iloc[i]
                 end_x, end_y = steps["grid_x"].iloc[i + 1], steps["grid_y"].iloc[i + 1]
 
-                state = steps["state"].iloc[i]
+                state = min(NUM_STATES - 1, steps["state"].iloc[i])
                 start_time, end_time = steps["time"].iloc[i], steps["time"].iloc[i + 1]
 
                 if start_x == end_x and start_y == end_y:
@@ -103,14 +106,19 @@ class StateDependentWalker(MixedWalker):
                     segment_boundaries.append(len(full_path))
                     continue
 
-                T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), start_time, end_time)
+                T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), start_time, end_time, 2)
+                D = 8
+                print(f"T: {T} S: {S} \n")
 
                 c_kernels = [
-                    correlated_kernels_from_matrix(clip_kernel(k, S), width=2 * S + 1, height=2 * S + 1, directions=8)
+                    correlated_kernels_from_matrix(clip_kernel(k, S), width=2 * S + 1, height=2 * S + 1, directions=D)
                     for k in py_kernels]
 
+                if self.animal is not AIRBORNE:
+                    kmaps = [kernels_map_single(terrain_map, clip_kernel(Z, S), self.mapping) for Z in py_kernels]
                 # Initialize DP matrix for the current start point
                 if self.animal is not AIRBORNE:
+                    print("start walks")
                     walk_ptr = single_state_walk(T,
                                                  kmap=kmaps[state],
                                                  terrain=terrain_map,
@@ -119,7 +127,7 @@ class StateDependentWalker(MixedWalker):
                     dp = correlated_walk_init(c_kernels[state], terrain_map.contents.width,
                                               terrain_map.contents.height,
                                               T, start_x, start_y)
-                    d = direction_from_points(start_x, start_y, end_x, end_y, 8)
+                    d = direction_from_points(start_x, start_y, end_x, end_y, D)
                     print(f"from {(start_x, start_y)} to {(end_x, end_y)}\n")
                     print(f"T: {T} S: {S} ")
                     print(f"d: {d}\n")
@@ -135,8 +143,8 @@ class StateDependentWalker(MixedWalker):
                 full_path.extend(segment[:-1] if len(segment) > 1 else segment)
                 segment_boundaries.append(len(full_path))
 
-            for kmap in kmaps:
-                kernels_map3d_free(kmap)
+                for kmap in kmaps:
+                    kernels_map3d_free(kmap)
             terrain_map_free(terrain_map)
             # After loop, append final endpoint of last original step (to close path)
             last_row = steps_df.iloc[-1]

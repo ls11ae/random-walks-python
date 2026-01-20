@@ -9,8 +9,8 @@ def test_brownian_walk():
     terrain = create_terrain_map('terrain_baboons.txt', ' ')
     print(terrain.contents.width, terrain.contents.height)
     kernel_mapping = create_brownian_kernel_parameters(animal_type=MEDIUM, base_step_size=8)
-    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=True, step_size=5, directions=1, diffusity=1)
-    set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True, step_size=5, directions=1, diffusity=2.6)
+    set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=True, step_size=5, directions=1)
+    set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True, step_size=5, directions=1)
     set_forbidden_landmark(kernel_mapping, WATER)
 
     with BrownianWalker(T=150, terrain=terrain, k_mapping=kernel_mapping) as walker:

@@ -309,4 +309,5 @@ def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
 
     output = save_path / "trajectories_timed.html"
     m.save(str(output))
+    print(f"Trajectories saved to {output}")
     return output
