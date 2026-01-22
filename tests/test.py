@@ -2,7 +2,8 @@
 import gzip
 import pickle
 import random
-
+import pandas as pd
+import numpy as np
 from random_walk_package import create_correlated_kernel_parameters
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
     update_kernels_mapping
@@ -24,6 +25,43 @@ def weather_terrain_params(row):
     bias_y = int(row["terrain"] in (50, 60))
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
+def marine_resolver(row, start, end): 
+    
+    """
+    ASSUMES TRAVELING STATE i.e current-positive, not avoiding or actively resisting 
+    Compute the ocean-current displacement (meters) for a timestep dt. A systematic displacement caused by
+    the ocean currents that affects the shark’s trajectory, added on top of the shark’s swimming movement.
+    """
+    #start end 
+    ref_speed = 1.5
+    is_brownian = False
+    S =1
+    D = 4
+    length_diffusity= 0.5 
+    angle_diffusity = 0.5 
+    current_vec = np.array([
+        row["uo"],   # x-current
+        row["vo"]    # y-current
+    ])
+    curr_norm = np.linalg.norm(current_vec)
+    creature_vector = np.array([end[0]- start[0], end[1]- start[1]])
+    creature_norm = np.linalg.norm(creature_vector)
+    creature_vector= creature_vector / creature_norm #check norm func
+
+
+    creature_vector = ref_speed * creature_vector
+    current_vec = current_vec / creature_vector
+    current_norm = np.linalg.norm(current_vec)
+    max_current = np.max(np.abs(current_norm))
+    current_vec = current_vec/max_current
+    bias_x = float(current_vec[0])
+    bias_y = float(current_vec[1])
+ 
+
+    #correct dir and reff speed 
+    # we need to normalize by speed but by the constant, norm the creature vector to have unit length and mult by the lit.speed and 
+    return [bool(is_brownian), float(S), int(D), float(length_diffusity), float(angle_diffusity),
+        float(bias_x), float(bias_y)]
 
 if __name__ == "__main__":
     study = "random_walk_package/resources/elephants/Elephant Research - Lobeke National Park (Cameroon) - Collar 46179.csv"

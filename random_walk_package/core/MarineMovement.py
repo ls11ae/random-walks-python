@@ -240,22 +240,36 @@ class MarineMovement:
         offset_y = (v + swim_y) * dt
 
         return offset_x, offset_y
+    
+    def biological_kernel_parameters(self, target_len, mode_directions="dynamic", is_brownian = False, min_D=1, max_D=36):
+        def pad_array(arr, target_len): #dirty fix
+            arr = np.asarray(arr) 
 
-    def oceanic_kernel_resolver(self, landmark, row, mode_directions="dynamic", is_brownian=False, min_D=1, max_D=36):
+            if len(arr) == target_len:
+                return arr
+            
+            if len(arr) == target_len - 1:
+                return np.concatenate([arr, [arr[-1]]])
 
-        bias_x, bias_y = self.compute_current_offset()  # Movement charcteristics
-        effective_speed = self.effective_speed()
+            if len(arr) == target_len - 2:
+                first = arr[1]
+                last = arr[-2]
+                return np.concatenate([[first], arr, [last]])
+
+            raise ValueError(
+                f"Cannot pad array of length {len(arr)} to {target_len}"
+            )
+
         bear, turning = self.turning_angles()
         dt = self.compute_time_intervals()
         diffusivity = self.diffusivity()
-        r, kappa = self.directional_persistance()
         _, _, step_lengths = self.compute_step_lengths()
-        S = np.mean(step_lengths)
-        S = int(np.ceil(S / self.resolution))
-        # set a flag if you want to calculate the number of directions at each step or globally for the whole trajectory
+        
+        #set a flag if you want to calculate the number of directions at each step or globally for the whole trajectory 
         abs_turning = np.abs(turning)
         abs_turning[abs_turning < 1e-6] = 1e-6
         mean_turn = np.median(abs_turning)
+
 
         def D_calc_step(turning_divisor):
             D_raw = 2 * np.pi / turning_divisor
@@ -263,21 +277,45 @@ class MarineMovement:
             D_estimated = np.clip(D_estimated, min_D, max_D)
             return D_estimated.astype(int)
 
+
         if mode_directions == "dynamic":
             D = D_calc_step(abs_turning)
 
+
         if mode_directions == "static":
             D = D_calc_step(mean_turn)
-
+            D = np.full(len(abs_turning), D) 
+                
         if is_brownian:
-            D = 1
+            D = np.ones(len(abs_turning), dtype=int)
+        is_brownian_array = np.full(len(abs_turning), is_brownian, dtype=bool)
+        
+        if np.isscalar(diffusivity):
+            diffusivity_array = np.full(len(abs_turning), diffusivity)
+        else:
+            diffusivity_array = np.asarray(diffusivity)
+            
+        
 
-        return [is_brownian, S, D, diffusivity, bias_x, bias_y]
+        S = pad_array(S, target_len)
+        D = pad_array(D, target_len)
+        diffusivity_array = pad_array(diffusivity_array, target_len)
+        is_brownian_array = pad_array(is_brownian_array, target_len)
+
+        return (
+            is_brownian_array,
+            S,
+            D,
+            diffusivity_array
+        )
+
+    
 
 
-data_path = "/home/poiosh/movement_py/shark_13_with_currents.csv"
-data = shark_data_filter(data_path)
+data_path = "random_walk_package/resources/tiger_sharks/shark_13_filtered_full.csv"
+data = pd.read_csv(data_path)
 print(data.head())
+
 model = MarineMovement(data=data, age_class="pup")
 
 model.coordinates_to_xy()

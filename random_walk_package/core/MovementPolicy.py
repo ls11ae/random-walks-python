@@ -47,7 +47,7 @@ class TimeStepPolicy(MovementPolicy):
     def __init__(self, timestep_s):
         super().__init__(timestep_s)
 
-    def resolve(self, start_point, end_point, start_time, end_time, movement_diffusivity: float = 1.5):
+    def resolve(self, start_point, end_point, start_time, end_time, reference_speed):
         """
         Calculate T as number of time steps and S as step size in grid cells
 
@@ -56,7 +56,7 @@ class TimeStepPolicy(MovementPolicy):
             end_point (tuple): Coordinates of the ending point as (x, y) in grid coordinates
             start_time (str or pd.Timestamp): The start time of the traversal.
             end_time (str or pd.Timestamp): The end time of the traversal.
-            movement_diffusivity (float, optional): A factor influencing how much walk deviates from a straight line connection
+            reference_speed(float): literature-derived avg speed of the creature
 
         Returns:
             tuple: A tuple containing:
@@ -69,6 +69,10 @@ class TimeStepPolicy(MovementPolicy):
         start_time = pd.to_datetime(start_time)
         end_time = pd.to_datetime(end_time)
         dt_seconds = int((end_time - start_time).total_seconds())
+        calculated_speed = np.linalg.norm(end_point - start_point) /dt_seconds
+        movement_diffusivity = reference_speed/calculated_speed #movement_diffusivity (float, optional): A factor influencing how much walk deviates from a straight line connection
+        if movement_diffusivity <= 1:
+            movement_diffusivity = 1
 
         grid_dist = int(chebyshev(start_point, end_point) * movement_diffusivity)
         T = max(1, int(np.round(dt_seconds / self.timestep_s)))
