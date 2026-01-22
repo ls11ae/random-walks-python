@@ -8,6 +8,7 @@ import movingpandas as mpd
 import numpy as np
 from pandas import DataFrame
 from pyproj import CRS
+import utm
 
 from random_walk_package.bindings import parse_terrain, terrain_map_free, terrain_at
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties, df_add_properties2
@@ -109,6 +110,8 @@ class AnimalMovementProcessor:
             t=time_col,
         )
         self.terrain_paths = {}  # terrain txt path per animal_id
+        self.terrain_TIFFs = {}
+        self.cell_sizes_m: dict[str, float] = {}
         self.resolution = None
         self.env_samples = env_samples
         self.longitude_col = lon_col
@@ -119,11 +122,24 @@ class AnimalMovementProcessor:
         self.end_dt = {str(traj.id): traj.get_end_time() for traj in self.traj.trajectories}
 
     @property
+    def cell_sizes(self):
+        return self.cell_sizes_m
+
+    @property
     def terrain_path(self):
         return self.terrain_paths
 
     def time_period(self):
         return self.start_dt, self.end_dt
+
+    @staticmethod
+    def geo_to_utm(lat, lon):
+        easting, northing, zone_no, zone_let = utm.from_latlon(lat, lon)
+        return easting, northing, zone_no, zone_let
+
+    @staticmethod
+    def utm_to_geo(utm_x, utm_y, zone_no, zone_let):
+        return utm.to_latlon(utm_x, utm_y, zone_no, zone_let)
 
     def traj_utm(self, traj_id):
         # we dont save utm bboxes anymore, we compute them on the fly
@@ -199,6 +215,8 @@ class AnimalMovementProcessor:
             utm_bbox, _ = self.bbox_utm(traj_id)
             # REGULAR GRID SHAPE (x/y)
             nx, ny = self._grid_shape_from_bbox(utm_bbox, resolution)
+            # SIZE OF A (SQUARE) GRID CELL IN METERS
+            self.cell_sizes_m[str(traj_id)] = (utm_bbox[2] - utm_bbox[0]) / nx
 
             # Output paths
             base_name = (
@@ -207,7 +225,7 @@ class AnimalMovementProcessor:
             )
             tif_path = out_directory / f"{base_name}.tif"
             txt_path = out_directory / f"{base_name}_{resolution}.txt"
-
+            self.terrain_TIFFs[str(traj_id)] = tif_path
             # only fetch TIFF if it doesn't exist yet
             if not tif_path.exists():
                 if is_marine:
@@ -224,11 +242,11 @@ class AnimalMovementProcessor:
 
             landcover_to_discrete_txt(
                 str(tif_path),
-                nx, ny,
-                min_lon, max_lat, max_lon, min_lat,
-                str(txt_path),
+                res_x=nx, res_y=ny,
+                min_lon=min_lon, max_lat=max_lat, max_lon=max_lon, min_lat=min_lat,
+                output=str(txt_path),
             )
-            if is_marine is True:
+            if is_marine:
                 with open(txt_path, 'r') as file:
                     data = file.read()
                 OCEAN_VALUE = 0
@@ -247,6 +265,12 @@ class AnimalMovementProcessor:
 
         self.terrain_paths = results
         return results
+
+    @staticmethod
+    def utm_to_grid(nx, ny, xmin, ymin, xmax, ymax, utm_x, utm_y):
+        x = np.round((utm_x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
+        y = np.round((utm_y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
+        return x, y
 
     def create_movement_data(self, traj_id, has_states):
         traj_utm = self.traj_utm(traj_id)
@@ -285,6 +309,12 @@ class AnimalMovementProcessor:
 
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat
+
+    @staticmethod
+    def grid_to_geo_walk(walk, utm_bbox, width, height, epsg):
+        result = [(AnimalMovementProcessor.grid_to_geo(x, y, utm_bbox, width, height, epsg)) for x, y in walk]
+        return result
+
 
     def grid_to_geo_path(self, path, traj_id):
         utm_bounds, epsg = self.bbox_utm(traj_id)

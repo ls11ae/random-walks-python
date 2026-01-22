@@ -13,6 +13,7 @@ def shark_data_filter(data_path):
     data = data.sort_values("time")
     data["time"] = pd.to_datetime(data["time"]).dt.normalize()
     data["time"] = data["time"] + pd.Timedelta(hours=12)
+    data["tag-individ"]
     data = data.drop_duplicates(subset=["time"], keep="first")
     max_lat = data["latitude"].max()
     max_long = data["longitude"].max()

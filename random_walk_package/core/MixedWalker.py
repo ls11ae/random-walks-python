@@ -37,7 +37,7 @@ class MixedWalker:
                  time_col="timestamp",
                  lon_col="location-long",
                  lat_col="location-lat",
-                 id_col="tag-local-identifier",
+                 id_col="individual-local-identifier",
                  crs="EPSG:4326",
                  is_marine=False):
         self.data = data.dropna(
