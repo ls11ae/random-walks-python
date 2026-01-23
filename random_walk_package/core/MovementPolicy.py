@@ -47,7 +47,7 @@ class TimeStepPolicy(MovementPolicy):
     def __init__(self, timestep_s):
         super().__init__(timestep_s)
 
-    def resolve(self, start_point, end_point, start_time, end_time, reference_speed:Optional[float] = 1.5, movement_diffusivity:Optional[float] = 1.5):
+    def resolve(self, start_point, end_point, start_time, end_time, reference_speed:Optional[float]= None, movement_diffusivity:Optional[float] = 1.5):
         """
         Calculate T as number of time steps and S as step size in grid cells
 
@@ -71,10 +71,11 @@ class TimeStepPolicy(MovementPolicy):
         end_time = pd.to_datetime(end_time)
         dt_seconds = int((end_time - start_time).total_seconds())
         calculated_speed = np.linalg.norm(end_point - start_point) /dt_seconds
-        movement_diffusivity = reference_speed/calculated_speed #movement_diffusivity (float, optional): A factor influencing how much walk deviates from a straight line connection
-        if movement_diffusivity <= 1:
-            movement_diffusivity = 1
-
+        if reference_speed is not None :
+            movement_diffusivity = reference_speed/calculated_speed #movement_diffusivity (float, optional): A factor influencing how much walk deviates from a straight line connection
+            movement_diffusivity = max(1.0, movement_diffusivity)
+        else: 
+            movement_diffusivity = movement_diffusivity if movement_diffusivity is not None else 1.5
         grid_dist = int(chebyshev(start_point, end_point) * movement_diffusivity)
         T = max(1, int(np.round(dt_seconds / self.timestep_s)))
         S = max(1, int(np.round(grid_dist / T)))
