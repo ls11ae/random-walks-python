@@ -1,5 +1,5 @@
 from abc import abstractmethod, ABC
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -47,7 +47,7 @@ class TimeStepPolicy(MovementPolicy):
     def __init__(self, timestep_s):
         super().__init__(timestep_s)
 
-    def resolve(self, start_point, end_point, start_time, end_time, reference_speed):
+    def resolve(self, start_point, end_point, start_time, end_time, reference_speed:Optional[float] = 1.5, movement_diffusivity:Optional[float] = 1.5):
         """
         Calculate T as number of time steps and S as step size in grid cells
 
@@ -57,6 +57,7 @@ class TimeStepPolicy(MovementPolicy):
             start_time (str or pd.Timestamp): The start time of the traversal.
             end_time (str or pd.Timestamp): The end time of the traversal.
             reference_speed(float): literature-derived avg speed of the creature
+            movement_diffusivity (float, optional): A factor influencing how much walk deviates from a straight line connection
 
         Returns:
             tuple: A tuple containing:

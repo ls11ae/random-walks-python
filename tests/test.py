@@ -50,12 +50,11 @@ def marine_resolver(row, start, end):
 
 
     creature_vector = ref_speed * creature_vector
-    current_vec = current_vec / creature_vector
-    current_norm = np.linalg.norm(current_vec)
-    max_current = np.max(np.abs(current_norm))
-    current_vec = current_vec/max_current
-    bias_x = float(current_vec[0])
-    bias_y = float(current_vec[1])
+    mixed_vel = creature_vector + current_vec
+    mixed_dir = mixed_vel / np.linalg.norm(mixed_vel)
+
+    bias_x = float(mixed_dir[0])
+    bias_y = float(mixed_dir[1])
  
 
     #correct dir and reff speed 
@@ -64,6 +63,11 @@ def marine_resolver(row, start, end):
         float(bias_x), float(bias_y)]
 
 if __name__ == "__main__":
+    
+    test_marine_walker()
+    exit()
+    
+    
     study = "random_walk_package/resources/elephants/Elephant Research - Lobeke National Park (Cameroon) - Collar 46179.csv"
     df = pd.read_csv(study)  # or a traj collection
 
@@ -83,7 +87,7 @@ if __name__ == "__main__":
     plot_walk_from_json(
         "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/tiger_sharks/kernels/204413/.json")
 
-    # test_marine_walker()
+    test_marine_walker()
     exit()
 
     study_path = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
