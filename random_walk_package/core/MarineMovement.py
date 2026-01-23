@@ -197,49 +197,6 @@ class MarineMovement:
         diffusivity = mean_squared_displacement / (4 * mean_time_step)
         return diffusivity
 
-    def compute_current_offset(self, x, y, grid_x, grid_y, currents_u, currents_v, dt):
-        """
-        ASSUMES TRAVELING STATE i.e current-positive, not avoiding or actively resisting 
-        Compute the ocean-current displacement (meters) for a timestep dt. A systematic displacement caused by
-        the ocean currents that affects the shark’s trajectory, added on top of the shark’s swimming movement.
-        
-        Parameters
-        ----------
-        x, y : float
-            Current location
-        bearing : float
-            Heading in radians
-        grid_x, grid_y : arrays
-            Grid coordinates for currents
-        currents_u, currents_v : 2D arrays
-            Eastward and northward current speeds (m/s)
-        dt : float
-            Time step (s)
-        swim_speed : float
-            Shark swimming speed along its heading (m/s). Default 0.0
-        
-        Returns
-        -------
-        dx, dy : float
-            Displacement in meters for this time step
-            
-        """
-
-        ix = np.argmin(np.abs(grid_x - x))
-        iy = np.argmin(np.abs(grid_y - y))
-
-        u = currents_u[iy, ix]  # eastward
-        v = currents_v[iy, ix]  # northward
-        _, effective_speed = self.effective_speed()
-        bearing, _ = self.turning_angles
-        swim_x = effective_speed * np.cos(
-            bearing)  # The shark moves in the direction it intends to go, rather than perpendicular or randomly, at some swimming speed.
-        swim_y = effective_speed * np.sin(bearing)
-
-        offset_x = (u + swim_x) * dt
-        offset_y = (v + swim_y) * dt
-
-        return offset_x, offset_y
     
     def biological_kernel_parameters(self, target_len, mode_directions="dynamic", is_brownian = False, min_D=1, max_D=36):
         def pad_array(arr, target_len): #dirty fix
@@ -312,26 +269,4 @@ class MarineMovement:
     
 
 
-data_path = "random_walk_package/resources/tiger_sharks/shark_13_filtered_full.csv"
-data = pd.read_csv(data_path)
-print(data.head())
 
-model = MarineMovement(data=data, age_class="pup")
-
-model.coordinates_to_xy()
-
-dx, dy, steps = model.compute_step_lengths()
-bear, turning = model.turning_angles()
-dt = model.compute_time_intervals()
-
-mean_v = model.behavioural_speed()
-D = model.diffusivity()
-r, kappa = model.directional_persistance()
-
-print(dx, "dy", dy, "steps", steps, "bear", bear, "turning", turning, "dt", dt, "mean_v", mean_v, "diffusity", D, "r",
-      r, "kappa", kappa)
-print(data.head())
-
-# although filtering of dates also happens in C, it makes sense to set the dates of the interval of the study here
-
-# fetch_ocean_data(data=data,output_directory="ocean_data.csv")

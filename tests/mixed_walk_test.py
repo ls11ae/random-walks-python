@@ -142,14 +142,21 @@ def marine_params(row):
         int(bias_x),
         int(bias_y),
     ]
-
-def marine_resolver(row, start, end): #start end
+    
+def marine_resolver(row, start, end): 
+    
+    """
+    ASSUMES TRAVELING STATE i.e current-positive, not avoiding or actively resisting 
+    Compute the ocean-current displacement (meters) for a timestep dt. A systematic displacement caused by
+    the ocean currents that affects the shark’s trajectory, added on top of the shark’s swimming movement.
+    """
+    #start end 
     ref_speed = 1.5
     is_brownian = False
     S =1
     D = 4
-    length_diffusity= 0.5 #to discuss
-    angle_diffusity = 0.5
+    length_diffusity= 0.5 
+    angle_diffusity = 0.5 
     current_vec = np.array([
         row["uo"],   # x-current
         row["vo"]    # y-current
@@ -158,22 +165,28 @@ def marine_resolver(row, start, end): #start end
     creature_vector = np.array([end[0]- start[0], end[1]- start[1]])
     creature_norm = np.linalg.norm(creature_vector)
     creature_vector= creature_vector / creature_norm #check norm func
-    creature_vecror = ref_speed * creature_vector
 
-    bias_x = 0
-    bias_y = 0
 
-    #correct dir and reff speed
-    # we need to normalize by speed but by the constant, norm the creature vector to have unit length and mult by the lit.speed and
-    return [bool(is_brownian), float(S), int(D), float(length_diffusity),float(angle_diffusity),
+    creature_vector = ref_speed * creature_vector
+    mixed_vel = creature_vector + current_vec
+    mixed_dir = mixed_vel / np.linalg.norm(mixed_vel)
+
+    bias_x = float(mixed_dir[0])
+    bias_y = float(mixed_dir[1])
+ 
+
+    #correct dir and reff speed 
+    # we need to normalize by speed but by the constant, norm the creature vector to have unit length and mult by the lit.speed and 
+    return [bool(is_brownian), float(S), int(D), float(length_diffusity), float(angle_diffusity),
         float(bias_x), float(bias_y)]
+
 
 @pytest.mark.skip(reason="takes too long")
 def test_marine_walker():
     study = 'random_walk_package/resources/tiger_sharks/shark_13_filtered_full.csv'
     df = pd.read_csv(study)
 
-    environment_csv = '/home/omar/Downloads/current_filename.csv'
+    environment_csv = '/home/poiosh/movement_py/methods/ocean_data.csv/current_filename.csv'
     out_dir = os.path.dirname(study)
 
     mapping = marine_kernels_baseline(step_size=5, directions=16, angle_diffusity=0.3, len_diffusivity=1)
@@ -183,7 +196,7 @@ def test_marine_walker():
                              resolution=400,
                              out_directory=out_dir,
                              env_samples=5,
-                             kernel_resolver=marine_params,
+                             kernel_resolver=marine_resolver,
                              time_col="timestamp",
                              lon_col="location-long",
                              lat_col="location-lat",
