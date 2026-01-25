@@ -197,65 +197,36 @@ class MarineMovement:
         diffusivity = mean_squared_displacement / (4 * mean_time_step)
         return diffusivity
 
-    def compute_current_offset(self, x, y, grid_x, grid_y, currents_u, currents_v, dt):
-        """
-        ASSUMES TRAVELING STATE i.e current-positive, not avoiding or actively resisting 
-        Compute the ocean-current displacement (meters) for a timestep dt. A systematic displacement caused by
-        the ocean currents that affects the shark’s trajectory, added on top of the shark’s swimming movement.
-        
-        Parameters
-        ----------
-        x, y : float
-            Current location
-        bearing : float
-            Heading in radians
-        grid_x, grid_y : arrays
-            Grid coordinates for currents
-        currents_u, currents_v : 2D arrays
-            Eastward and northward current speeds (m/s)
-        dt : float
-            Time step (s)
-        swim_speed : float
-            Shark swimming speed along its heading (m/s). Default 0.0
-        
-        Returns
-        -------
-        dx, dy : float
-            Displacement in meters for this time step
+    
+    def biological_kernel_parameters(self, target_len, mode_directions="dynamic", is_brownian = False, min_D=1, max_D=36):
+        def pad_array(arr, target_len): #dirty fix
+            arr = np.asarray(arr) 
+
+            if len(arr) == target_len:
+                return arr
             
-        """
+            if len(arr) == target_len - 1:
+                return np.concatenate([arr, [arr[-1]]])
 
-        ix = np.argmin(np.abs(grid_x - x))
-        iy = np.argmin(np.abs(grid_y - y))
+            if len(arr) == target_len - 2:
+                first = arr[1]
+                last = arr[-2]
+                return np.concatenate([[first], arr, [last]])
 
-        u = currents_u[iy, ix]  # eastward
-        v = currents_v[iy, ix]  # northward
-        _, effective_speed = self.effective_speed()
-        bearing, _ = self.turning_angles
-        swim_x = effective_speed * np.cos(
-            bearing)  # The shark moves in the direction it intends to go, rather than perpendicular or randomly, at some swimming speed.
-        swim_y = effective_speed * np.sin(bearing)
+            raise ValueError(
+                f"Cannot pad array of length {len(arr)} to {target_len}"
+            )
 
-        offset_x = (u + swim_x) * dt
-        offset_y = (v + swim_y) * dt
-
-        return offset_x, offset_y
-
-    def oceanic_kernel_resolver(self, landmark, row, mode_directions="dynamic", is_brownian=False, min_D=1, max_D=36):
-
-        bias_x, bias_y = self.compute_current_offset()  # Movement charcteristics
-        effective_speed = self.effective_speed()
         bear, turning = self.turning_angles()
         dt = self.compute_time_intervals()
         diffusivity = self.diffusivity()
-        r, kappa = self.directional_persistance()
         _, _, step_lengths = self.compute_step_lengths()
-        S = np.mean(step_lengths)
-        S = int(np.ceil(S / self.resolution))
-        # set a flag if you want to calculate the number of directions at each step or globally for the whole trajectory
+        
+        #set a flag if you want to calculate the number of directions at each step or globally for the whole trajectory 
         abs_turning = np.abs(turning)
         abs_turning[abs_turning < 1e-6] = 1e-6
         mean_turn = np.median(abs_turning)
+
 
         def D_calc_step(turning_divisor):
             D_raw = 2 * np.pi / turning_divisor
@@ -263,37 +234,39 @@ class MarineMovement:
             D_estimated = np.clip(D_estimated, min_D, max_D)
             return D_estimated.astype(int)
 
+
         if mode_directions == "dynamic":
             D = D_calc_step(abs_turning)
 
+
         if mode_directions == "static":
             D = D_calc_step(mean_turn)
-
+            D = np.full(len(abs_turning), D) 
+                
         if is_brownian:
-            D = 1
+            D = np.ones(len(abs_turning), dtype=int)
+        is_brownian_array = np.full(len(abs_turning), is_brownian, dtype=bool)
+        
+        if np.isscalar(diffusivity):
+            diffusivity_array = np.full(len(abs_turning), diffusivity)
+        else:
+            diffusivity_array = np.asarray(diffusivity)
+            
+        
 
-        return [is_brownian, S, D, diffusivity, bias_x, bias_y]
+        S = pad_array(S, target_len)
+        D = pad_array(D, target_len)
+        diffusivity_array = pad_array(diffusivity_array, target_len)
+        is_brownian_array = pad_array(is_brownian_array, target_len)
+
+        return (
+            is_brownian_array,
+            S,
+            D,
+            diffusivity_array
+        )
+
+    
 
 
-data_path = "/home/poiosh/movement_py/shark_13_with_currents.csv"
-data = shark_data_filter(data_path)
-print(data.head())
-model = MarineMovement(data=data, age_class="pup")
 
-model.coordinates_to_xy()
-
-dx, dy, steps = model.compute_step_lengths()
-bear, turning = model.turning_angles()
-dt = model.compute_time_intervals()
-
-mean_v = model.behavioural_speed()
-D = model.diffusivity()
-r, kappa = model.directional_persistance()
-
-print(dx, "dy", dy, "steps", steps, "bear", bear, "turning", turning, "dt", dt, "mean_v", mean_v, "diffusity", D, "r",
-      r, "kappa", kappa)
-print(data.head())
-
-# although filtering of dates also happens in C, it makes sense to set the dates of the interval of the study here
-
-# fetch_ocean_data(data=data,output_directory="ocean_data.csv")
