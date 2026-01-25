@@ -157,22 +157,33 @@ def marine_resolver(row, start, end):
     D = 4
     length_diffusity= 0.5 
     angle_diffusity = 0.5 
-    current_vec = np.array([
-        row["uo"],   # x-current
-        row["vo"]    # y-current
-    ])
-    curr_norm = np.linalg.norm(current_vec)
-    creature_vector = np.array([end[0]- start[0], end[1]- start[1]])
+    
+    if pd.isna(row.get("uo")):
+         uo = 0.0
+    else: uo= row.get("uo", 0.0)
+    if pd.isna(row.get("vo")):
+        vo = 0.0
+    else: vo =row.get("vo", 0.0)
+    
+    current_vec = np.array([uo, vo])
+    creature_vector =  np.array([end[0] - start[0], end[1] - start[1]])
     creature_norm = np.linalg.norm(creature_vector)
+    if creature_norm == 0 or np.isnan:
+        creature_norm =0.001
     creature_vector= creature_vector / creature_norm #check norm func
-
-
     creature_vector = ref_speed * creature_vector
     mixed_vel = creature_vector + current_vec
+    if np.linalg.norm(mixed_vel) ==0 or np.isnan(np.linalg.norm(mixed_vel)):
+        mixed_dir = mixed_vel / 0.001
     mixed_dir = mixed_vel / np.linalg.norm(mixed_vel)
-
+    
     bias_x = float(mixed_dir[0])
     bias_y = float(mixed_dir[1])
+    
+    if not np.isfinite(bias_x):
+        bias_x = 0.0
+    if not np.isfinite(bias_y):
+        bias_y = 0.0
  
 
     #correct dir and reff speed 
