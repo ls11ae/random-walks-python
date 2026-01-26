@@ -11,7 +11,7 @@ def plot_walk(walk_points, terrain_width, terrain_height, title="Walk"):
     if walk_points is not None:
         plt.ylim(-1, terrain_height)
         plt.xlim(-1, terrain_width)
-        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-')  # Remove dots
+        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-o', markersize=4, linewidth=1, label='Path')  # Line with points
         plt.scatter([walk_points[0, 0]], [walk_points[0, 1]], color='green', label='Start')  # First point
         plt.scatter([walk_points[-1, 0]], [walk_points[-1, 1]], color='blue', label='End')  # Last point
         plt.legend()
@@ -249,3 +249,228 @@ def plot_walk_multistep(steps, walk_points, terrain_width, terrain_height):
         plt.show()
     else:
         print("No path generated.")
+
+# def plot_dp_utilisation_matrix(utilization_distribution, T, W, H):
+#     utilization_array = np.zeros((H, W))
+    
+#     D = utilization_distribution[0][0].len
+    
+    
+#     for y in range(H):
+#         for x in range(W):
+#             utilization_array[y, x] = sum(utilization_distribution[T][0].data[d][0].data.points[y*H + x] for d in range(D))
+
+    plt.figure(figsize=(10, 8))
+    plt.imshow(utilization_array, cmap='viridis', origin='lower')
+    plt.colorbar(label='Utilization Value')
+    plt.title(f'Utilization Distribution at T={T}')
+    plt.xlabel('X Coordinate')
+    plt.ylabel('Y Coordinate')
+    plt.show()
+    
+from matplotlib.colors import LogNorm
+
+
+def plot_single_utilisation_matrix(utilization_distribution, T, W, H, level=None):
+
+
+    
+    # im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
+    plt.figure(figsize=(10, 8))
+    
+    # levels = [0.01, 0.5, 0.75]
+    vmin = utilization_distribution[utilization_distribution>0].min()
+    vmax = utilization_distribution.max()
+    levels = np.logspace(np.log10(vmin), np.log10(vmax), 100)
+    CS = plt.contour(utilization_distribution, levels=levels, colors='white', linewidths=1)
+    
+    plt.imshow(utilization_distribution, cmap='viridis', origin='lower')
+    plt.colorbar(label='Utilization Value', norm=LogNorm())
+    plt.xlabel('X')
+    plt.ylabel('Y')
+        
+    plt.tight_layout()
+    plt.show()
+    
+    
+
+    
+def plot_dp_utilisation_matrix(utilization_distribution, T, W, H, squish=False, level=None):
+    D = utilization_distribution[0][0].len
+    
+    n_cols = 1
+    n_rows = 1
+    
+    if not squish:
+        # Decide subplot grid size (square-ish)
+        n_cols = int(np.ceil(np.sqrt(T)))
+        n_rows = int(np.ceil(T / n_cols))
+    
+    
+    if squish:
+        utilization_array = np.zeros((H, W))
+        for y in range(H):
+            for x in range(W):
+                utilization_array[y, x] = sum(
+                    utilization_distribution[t][0].data[d][0].data.points[y*W + x]
+                    for d in range(D) for t in range(T)
+                ) / T
+        
+        # im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
+        plt.figure(figsize=(10, 8))
+        
+        # levels = [0.01, 0.5, 0.75]
+        vmin = utilization_array[utilization_array>0].min()
+        vmax = utilization_array.max()
+        levels = np.logspace(np.log10(vmin), np.log10(vmax), 10)
+        CS = plt.contour(utilization_array, levels=levels, colors='white', linewidths=1)
+        
+        plt.imshow(utilization_array, cmap='viridis', origin='lower', norm=LogNorm())
+        plt.colorbar(label='Utilization Value')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+    
+    else:
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+        axes = axes.flatten()  # Flatten in case of single row/column
+        
+        for t in range(T):
+            utilization_array = np.zeros((H, W))
+            for y in range(H):
+                for x in range(W):
+                    utilization_array[y, x] = sum(
+                        utilization_distribution[t][0].data[d][0].data.points[y*W + x]
+                        for d in range(D)
+                    )
+            
+            ax = axes[t]
+            im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
+            ax.set_title(f'T={t}')
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+        # Leave extra axes empty (no data, no axis labels)
+        for i in range(T, len(axes)):
+            axes[i].axis('off')  # Completely remove axis, grid, and ticks
+            axes[i].set_facecolor('white')  # Optional: ensure background is white
+        
+    plt.tight_layout()
+    plt.show()
+    # plt.show(block=False)
+    # plt.pause(0.001)
+    
+
+def plot_visit_matrix(visit, T, W, H, start_x, start_y, target_area):
+    D = visit[0][0].len
+    
+    n_cols = 1
+    n_rows = 1
+    
+    
+    n_cols = int(np.ceil(np.sqrt(T)))
+    n_rows = int(np.ceil(T / n_cols))
+    
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+    axes = axes.flatten()  # Flatten in case of single row/column
+    # x = np.arange(W)# - 0.5
+    # y = np.arange(H)# - 0.5
+    # X, Y = np.meshgrid(x, y)
+    # plt.contour(
+    #     X, Y,
+    #     target_area.astype(int),      # convert bool → int
+    #     levels=[0.5],                 # draw boundary between 0/1
+    #     colors='red',                 # contour color
+    #     linewidths=2,
+    #     origin='lower'
+    # )
+    for t in range(T):
+    
+        utilization_array = np.zeros((H, W))
+        for y in range(H):
+            for x in range(W):
+                utilization_array[y, x] = sum(
+                    visit[t][0].data[d][0].data.points[y*W + x]
+                    for d in range(D)
+                ) / D
+                
+        ax = axes[t]
+        
+        
+        x = np.arange(W)# - 0.5
+        y = np.arange(H)# - 0.5
+        X, Y = np.meshgrid(x, y)
+        mask = np.zeros((H, W), dtype=int)
+        mask[start_y, start_x] = 1 
+        
+        ax.contour(
+            X, Y,
+            mask.astype(int),      # convert bool → int
+            levels=[0.5],                 # draw boundary between 0/1
+            colors='Blue',                 # contour color
+            linewidths=4,
+            origin='lower'
+        )
+        ax.contour(
+            X, Y,
+            target_area.astype(int),      # convert bool → int
+            levels=[0.5],                 # draw boundary between 0/1
+            colors='red',                 # contour color
+            linewidths=2,
+            origin='lower'
+        )
+        
+        
+        im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
+        ax.set_title(f'T={t}')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+
+        
+    # Leave extra axes empty (no data, no axis labels)
+    for i in range(T, len(axes)):
+        axes[i].axis('off')  # Completely remove axis, grid, and ticks
+        axes[i].set_facecolor('white')  # Optional: ensure background is white
+    
+    # im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
+    # print(utilization_array)
+    
+    plt.figure(figsize=(10, 8))
+    
+    
+    x = np.arange(W)# - 0.5
+    y = np.arange(H)# - 0.5
+    X, Y = np.meshgrid(x, y)
+    mask = np.zeros((H, W), dtype=int)
+    mask[start_y, start_x] = 1 
+    plt.contour(
+        X, Y,
+        target_area.astype(int),      # convert bool → int
+        levels=[0.5],                 # draw boundary between 0/1
+        colors='red',                 # contour color
+        linewidths=2,
+        origin='lower'
+    )
+    plt.contour(
+        X, Y,
+        mask.astype(int),      # convert bool → int
+        levels=[0.5],                 # draw boundary between 0/1
+        colors='orange',                 # contour color
+        linewidths=4,
+        origin='lower'
+    )
+    
+    # levels = [0.01, 0.5, 0.75]
+    vmin = utilization_array[utilization_array>0].min()
+    vmax = utilization_array.max()
+    levels = np.logspace(np.log10(vmin), np.log10(vmax), 10)
+    # CS = plt.contour(utilization_array, levels=levels, colors='white', linewidths=1)
+    
+    plt.imshow(utilization_array, cmap='viridis', origin='lower')
+    plt.colorbar(label='Visit Probability')
+    plt.xlabel('X')
+    plt.ylabel('Y')
+
+    plt.tight_layout()
+    plt.show()

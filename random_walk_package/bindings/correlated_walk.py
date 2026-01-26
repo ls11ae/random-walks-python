@@ -111,15 +111,15 @@ def correlated_utilization_distribution(dp_mat, T, kernels, end_x, end_y, direct
     return dll.correlated_utilization_distribution(use_serialization, dp_mat, dp_folder.encode('utf-8') if dp_folder is not None else None, T, kernels, end_x, end_y, output_folder.encode('utf-8') if output_folder is not None else None) 
 
 
-# def visit_probability_calculation(dp_mat, T, kernels, start_x, start_y, end_x, end_y, target_area, use_serialization=False, dp_folder=None, output_folder=None):
-#     if dp_mat is None and use_serialization is False:
-#         raise ValueError("DP matrix is None.")
-#     if kernels is None:
-#         raise ValueError("Kernels are None.")
-#     if end_x is None or end_y is None:
-#         raise ValueError("End point is None.")
+def visit_probability_calculation(dp_mat, T, kernels, start_x, start_y, end_x, end_y, target_area, use_serialization=False, dp_folder=None, output_folder=None):
+    if dp_mat is None and use_serialization is False:
+        raise ValueError("DP matrix is None.")
+    if kernels is None:
+        raise ValueError("Kernels are None.")
+    if end_x is None or end_y is None:
+        raise ValueError("End point is None.")
     
-#     return dll.visit_probability(use_serialization, dp_mat, dp_folder.encode('utf-8') if dp_folder is not None else None, T, kernels, start_x, start_y, end_x, end_y, target_area, output_folder.encode('utf-8') if output_folder is not None else None) 
+    return dll.visit_probability(use_serialization, dp_mat, dp_folder.encode('utf-8') if dp_folder is not None else None, T, kernels, start_x, start_y, end_x, end_y, target_area, output_folder.encode('utf-8') if output_folder is not None else None) 
 
 def correlated_multi_step(W, H, T, kernels, steps, direction=0, use_serialization=False, dp_folder=None):
     if use_serialization and dp_folder is None:

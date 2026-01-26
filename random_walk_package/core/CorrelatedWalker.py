@@ -175,10 +175,28 @@ class CorrelatedWalker:
                                         target_area=target_area.ctypes.data_as(POINTER(c_bool)),
                                         use_serialization=use_serialization,
                                         output_folder=dp_folder)
+            return dp_mat
         # save path to serialized dp matrix
         self.dp_matrix = None if use_serialization else dp_mat
-        print(f"DP matrix serialized to: {dp_folder}")
+        # print(f"DP matrix serialized to: {dp_folder}")
         return dp_folder
+    
+    # def visit_probability(self, start_x, start_y, end_x, end_y, target_area, dp_folder=None, initial_direction=0, plot=False):
+    #     if target_area.dtype != np.bool_ or target_area.shape != (self.H, self.W):
+    #         raise ValueError(
+    #             f"target_area must be a boolean array of shape ({self.H}, {self.W})"
+    #         )
+        
+    #     visit_probability = visit_probability_calculation(dp_mat=self.dp_matrix if dp_folder is None else None,
+    #                                 T=self.T, kernels=self.kernels,
+    #                                 start_x=start_x, start_y=start_y,
+    #                                 end_x=end_x, end_y=end_y,
+    #                                 target_area=target_area.ctypes.data_as(POINTER(c_bool)),
+    #                                 use_serialization=dp_folder is not None,
+    #                                 dp_folder=dp_folder)
+    #     # if plot:
+    #     #     plot_utilization(utilization_distribution, self.W, self.H, title="Correlated Walk")
+    #     return visit_probability
     
     def utilize(self, end_x, end_y, dp_folder=None, initial_direction=0, plot=False):
         utilization_distribution = correlated_utilization_distribution(dp_mat=self.dp_matrix if dp_folder is None else None,
@@ -191,22 +209,7 @@ class CorrelatedWalker:
         #     plot_utilization(utilization_distribution, self.W, self.H, title="Correlated Walk")
         return utilization_distribution
 
-    def visit_probability(self, start_x, start_y, end_x, end_y, target_area, dp_folder=None, initial_direction=0, plot=False):
-        if target_area.dtype != np.bool_ or target_area.shape != (self.H, self.W):
-            raise ValueError(
-                f"target_area must be a boolean array of shape ({self.H}, {self.W})"
-            )
-        
-        visit_probability = visit_probability_calculation(dp_mat=self.dp_matrix if dp_folder is None else None,
-                                    T=self.T, kernels=self.kernels,
-                                    start_x=start_x, start_y=start_y,
-                                    end_x=end_x, end_y=end_y,
-                                    target_area=target_area.ctypes.data_as(POINTER(c_bool)),
-                                    use_serialization=dp_folder is not None,
-                                    dp_folder=dp_folder)
-        # if plot:
-        #     plot_utilization(utilization_distribution, self.W, self.H, title="Correlated Walk")
-        return visit_probability
+   
 
     def backtrace(self, end_x, end_y, dp_folder=None, initial_direction=0, plot=False):
         walk = correlated_backtrace(dp_mat=self.dp_matrix if dp_folder is None else None,

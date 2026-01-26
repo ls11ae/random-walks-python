@@ -1,4 +1,5 @@
 from random_walk_package.core.BiasedWalker import BiasedWalker
+from random_walk_package.bindings.plotter import plot_walk
 
 
 def biased_test():
@@ -12,5 +13,4 @@ def biased_test():
     walker = BiasedWalker(S=7, W=size, H=size, T=T)
     walker.generate(bias_offsets=biases, start_x=200, start_y=50)
     walk = walker.backtrace(end_x=200, end_y=280)
-    """plot_walk(walk, size, size,
-              title=f"Biased Walk with bias offsets: {bias_offsets1[0], bias_offsets2[0], bias_offsets3[0]}")"""
+    plot_walk(walk, size, size,title=f"Biased Walk with bias offsets: {bias_offsets1[0], bias_offsets2[0], bias_offsets3[0]}")
