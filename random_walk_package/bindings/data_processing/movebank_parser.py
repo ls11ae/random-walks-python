@@ -242,6 +242,7 @@ def df_add_properties2(df: DataFrame,
     ]
 
     # compute kernel parameters
+    # todo: pass step size here
     kp = clean_df.apply(
         lambda row: kernel_resolver(row, start, end),
         axis=1,

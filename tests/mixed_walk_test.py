@@ -142,7 +142,8 @@ def marine_params(row):
         int(bias_x),
         int(bias_y),
     ]
-    
+
+# todo: add argument step size S here
 def marine_resolver(row, start, end): 
     
     """
@@ -153,7 +154,8 @@ def marine_resolver(row, start, end):
     #start end 
     ref_speed = 1.5
     is_brownian = False
-    S =1
+    #todo: use argument step size S instead
+    S =5
     D = 4
     length_diffusity= 0.5 
     angle_diffusity = 0.5 
@@ -179,8 +181,8 @@ def marine_resolver(row, start, end):
         bias_y = 0
     else:
         mixed_dir = mixed_dir / np.linalg.norm(mixed_dir)
-        bias_x = float(mixed_dir[0])
-        bias_y = float(mixed_dir[1])
+        bias_x = float(mixed_dir[0]) * S
+        bias_y = float(mixed_dir[1]) * S
 
 
     
@@ -193,7 +195,7 @@ def marine_resolver(row, start, end):
     #correct dir and reff speed 
     # we need to normalize by speed but by the constant, norm the creature vector to have unit length and mult by the lit.speed and 
     return [bool(is_brownian), float(S), int(D), float(length_diffusity), float(angle_diffusity),
-        float(bias_x), float(bias_y)]
+        int(bias_x), int(bias_y)]
 
 
 @pytest.mark.skip(reason="takes too long")

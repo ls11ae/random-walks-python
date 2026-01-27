@@ -522,7 +522,7 @@ class AnimalMovementProcessor:
 
                 start_x, start_y = point_pairs[index][0].x, point_pairs[index][0].y
                 end_x, end_y = point_pairs[index][1].x, point_pairs[index][1].y
-
+                # todo: pass step size from argument here
                 df_proc, T = df_add_properties2(
                     df=interval_df,
                     kernel_resolver=kernel_resolver,

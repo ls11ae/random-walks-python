@@ -39,6 +39,7 @@ class MixedTimeWalker(MixedWalker):
         super()._process_movebank_data()
         self.animal_proc.env_samples = self.env_samples
         kernel_dir = os.path.join(self.out_directory, 'kernels')
+        # todo: pass df column with stepsizes S to this function
         self.env_paths = self.animal_proc.kernel_params_per_animal_binary(env_path=self.env_data,
                                                                           kernel_resolver=self.kernel_resolver,
                                                                           time_stamp='time',
