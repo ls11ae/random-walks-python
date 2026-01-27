@@ -96,7 +96,7 @@ class MixedTimeWalker(MixedWalker):
                                                start_time=start_date,
                                                end_time=end_date,
                                                movement_diffusivity=2)
-                D = 10
+                D = 6
                 # todo: replace with parameters per step passed as arrays
                 if S > 160:
                     S //= 4

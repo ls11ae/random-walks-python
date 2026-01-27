@@ -168,17 +168,21 @@ def marine_resolver(row, start, end):
     current_vec = np.array([uo, vo])
     creature_vector =  np.array([end[0] - start[0], end[1] - start[1]])
     creature_norm = np.linalg.norm(creature_vector)
-    if creature_norm == 0 or np.isnan:
+    if creature_norm == 0 or np.isnan(creature_norm):
         creature_norm =0.001
     creature_vector= creature_vector / creature_norm #check norm func
     creature_vector = ref_speed * creature_vector
     mixed_vel = creature_vector + current_vec
-    if np.linalg.norm(mixed_vel) ==0 or np.isnan(np.linalg.norm(mixed_vel)):
-        mixed_dir = mixed_vel / 0.001
-    mixed_dir = mixed_vel / np.linalg.norm(mixed_vel)
-    
-    bias_x = float(mixed_dir[0])
-    bias_y = float(mixed_dir[1])
+    mixed_dir = mixed_vel
+    if np.linalg.norm(mixed_vel) == 0 or np.isnan(np.linalg.norm(mixed_vel)):
+        bias_x = 0
+        bias_y = 0
+    else:
+        mixed_dir = mixed_dir / np.linalg.norm(mixed_dir)
+        bias_x = float(mixed_dir[0])
+        bias_y = float(mixed_dir[1])
+
+
     
     if not np.isfinite(bias_x):
         bias_x = 0.0
@@ -197,7 +201,7 @@ def test_marine_walker():
     study = 'random_walk_package/resources/tiger_sharks/shark_13_filtered_full.csv'
     df = pd.read_csv(study)
 
-    environment_csv = '/home/poiosh/movement_py/methods/ocean_data.csv/current_filename.csv'
+    environment_csv = '/home/omar/Downloads/current_filename.csv'
     out_dir = os.path.dirname(study)
 
     mapping = marine_kernels_baseline(step_size=5, directions=16, angle_diffusity=0.3, len_diffusivity=1)
@@ -215,7 +219,7 @@ def test_marine_walker():
                              crs="EPSG:4326",
                              is_marine=True)
 
-    movement_policy = TimeStepPolicy(timestep_s=3600)  # one hour per step
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 6)  # one hour per step
     bias_only = EnvWeights.bias_only()
 
     trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
@@ -246,7 +250,7 @@ def test_time_walker():
     walker = MixedTimeWalker(data=df,
                              env_data=environment_csv,
                              kernel_mapping=mapping,
-                             resolution=600,
+                             resolution=400,
                              out_directory=out_dir,
                              env_samples=5,
                              kernel_resolver=weather_terrain_params,

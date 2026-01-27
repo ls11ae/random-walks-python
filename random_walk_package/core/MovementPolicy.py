@@ -88,7 +88,7 @@ class TimeStepPolicy(MovementPolicy):
             movement_diffusivity = movement_diffusivity if movement_diffusivity is not None else 1.5
 
         grid_dist = int(chebyshev(start_point, end_point) * movement_diffusivity)
-        T = max(1, int(np.round(dt_seconds / self.timestep_s)))
+        T = max(2, int(np.round(dt_seconds / self.timestep_s)))
         S = max(1, int(np.round(grid_dist / T)))
         return T, S
 

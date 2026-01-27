@@ -18,7 +18,8 @@ from random_walk_package.data_sources.land_cover_adapter import landcover_to_dis
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
 from random_walk_package.data_sources.ocean_cover import fetch_ocean_cover_tif
 from random_walk_package.data_sources.open_meteo_api import create_weather_csvs
-from random_walk_package.data_sources.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
+from random_walk_package.data_sources.walks_serialization import serialize_env_grid, serialize_kernel_paths_json, \
+    deserialize_kernel_paths_json
 
 
 @dataclass
@@ -305,7 +306,7 @@ class AnimalMovementProcessor:
         min_x, min_y, max_x, max_y = utm_bbox
 
         utm_x = min_x + ((x + 0.5) / width) * (max_x - min_x)
-        utm_y = (min_y + ((y + 0.5) / height) * (max_y - min_y))
+        utm_y = (max_y - ((y + 0.5) / height) * (max_y - min_y))
 
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat
@@ -475,7 +476,6 @@ class AnimalMovementProcessor:
         :param lat: the name of your latitude instance
         :param out_directory: path to output directory
         """
-
         # prepare outer folder for kernels
         if out_directory is None:
             out_directory = "kernels"
@@ -486,7 +486,7 @@ class AnimalMovementProcessor:
 
         parquet_root = out_directory / "env_parquet"
         parquet_root.mkdir(exist_ok=True, parents=True)
-        # AnimalMovementProcessor.convert_env_csv_to_parquet(env_path, parquet_root, time_col=time_stamp)
+        #AnimalMovementProcessor.convert_env_csv_to_parquet(env_path, parquet_root, time_col=time_stamp)
         # for each animal trajectory
         for traj in self.traj.trajectories:
             times = traj.df.index

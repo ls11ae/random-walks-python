@@ -63,10 +63,11 @@ def marine_resolver(row, start, end):
         float(bias_x), float(bias_y)]
 
 if __name__ == "__main__":
-    
+    plot_walk_from_json("random-walks-python/random_walk_package/resources/tiger_sharks/kernels/204413/.json")
     test_marine_walker()
+
     exit()
-    
+
     
     study = "random_walk_package/resources/elephants/Elephant Research - Lobeke National Park (Cameroon) - Collar 46179.csv"
     df = pd.read_csv(study)  # or a traj collection
