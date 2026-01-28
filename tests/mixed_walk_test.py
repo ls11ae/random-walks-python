@@ -143,8 +143,7 @@ def marine_params(row):
         int(bias_y),
     ]
 
-# todo: add argument step size S here
-def marine_resolver(row, start, end): 
+def marine_resolver(row, start, end, S):
     
     """
     ASSUMES TRAVELING STATE i.e current-positive, not avoiding or actively resisting 
@@ -153,12 +152,12 @@ def marine_resolver(row, start, end):
     """
     #start end 
     ref_speed = 1.5
-    is_brownian = False
-    #todo: use argument step size S instead
-    S =5
-    D = 4
-    length_diffusity= 0.5 
-    angle_diffusity = 0.5 
+    is_brownian = True
+    D = 1
+    length_diffusity= 1.0
+    angle_diffusity = 0.5
+
+    BIAS_STRENGTH = 0.7
     
     if pd.isna(row.get("uo")):
          uo = 0.0
@@ -181,8 +180,8 @@ def marine_resolver(row, start, end):
         bias_y = 0
     else:
         mixed_dir = mixed_dir / np.linalg.norm(mixed_dir)
-        bias_x = float(mixed_dir[0]) * S
-        bias_y = float(mixed_dir[1]) * S
+        bias_x = float(mixed_dir[0]) * S * BIAS_STRENGTH
+        bias_y = float(mixed_dir[1]) * S * BIAS_STRENGTH
 
 
     
@@ -194,8 +193,8 @@ def marine_resolver(row, start, end):
 
     #correct dir and reff speed 
     # we need to normalize by speed but by the constant, norm the creature vector to have unit length and mult by the lit.speed and 
-    return [bool(is_brownian), float(S), int(D), float(length_diffusity), float(angle_diffusity),
-        int(bias_x), int(bias_y)]
+    return [bool(is_brownian), int(S), int(D), float(length_diffusity), float(angle_diffusity),
+        int(np.round(bias_x)), int(np.round(bias_y))]
 
 
 @pytest.mark.skip(reason="takes too long")
@@ -206,11 +205,12 @@ def test_marine_walker():
     environment_csv = '/home/omar/Downloads/current_filename.csv'
     out_dir = os.path.dirname(study)
 
-    mapping = marine_kernels_baseline(step_size=5, directions=16, angle_diffusity=0.3, len_diffusivity=1)
+    mapping = marine_kernels_baseline(step_size=5, directions=1, angle_diffusity=0.3, len_diffusivity=1)
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 6)  # 8 hours per step
     walker = MixedTimeWalker(data=df,
                              env_data=environment_csv,
                              kernel_mapping=mapping,
-                             resolution=400,
+                             resolution=800,
                              out_directory=out_dir,
                              env_samples=5,
                              kernel_resolver=marine_resolver,
@@ -219,9 +219,10 @@ def test_marine_walker():
                              lat_col="location-lat",
                              id_col="tag-local-identifier",
                              crs="EPSG:4326",
-                             is_marine=True)
+                             is_marine=True,
+                             movement_policy=movement_policy,
+                             reference_speed=1.5)
 
-    movement_policy = TimeStepPolicy(timestep_s=3600 * 6)  # one hour per step
     bias_only = EnvWeights.bias_only()
 
     trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
@@ -262,7 +263,7 @@ def test_time_walker():
                              id_col="tag-local-identifier",
                              crs="EPSG:4326",
                              is_marine=False)
-    movement_policy = TimeStepPolicy(timestep_s=3600 * 4)  # one hour per step
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 4)  # 4 hours per step
     bias_only = EnvWeights.bias_only()
     trajectory_collection = walker.generate_walks(movement_policy=movement_policy, env_weights=bias_only)
 

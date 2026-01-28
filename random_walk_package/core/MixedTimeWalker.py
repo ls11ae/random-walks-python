@@ -25,10 +25,12 @@ class MixedTimeWalker(MixedWalker):
                  lat_col="location-lat",
                  id_col="tag-local-identifier",
                  crs="EPSG:4326",
-                 is_marine="False"
+                 is_marine="False",
+                 movement_policy=None,
+                 reference_speed=None
                  ):
         super().__init__(data, kernel_mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs,
-                         is_marine)
+                         is_marine, movement_policy, reference_speed)
         self.env_data = env_data
         self.env_paths: dict[tuple[str, str, str], str] = {}
         self.kernel_resolver = kernel_resolver
@@ -39,7 +41,6 @@ class MixedTimeWalker(MixedWalker):
         super()._process_movebank_data()
         self.animal_proc.env_samples = self.env_samples
         kernel_dir = os.path.join(self.out_directory, 'kernels')
-        # todo: pass df column with stepsizes S to this function
         self.env_paths = self.animal_proc.kernel_params_per_animal_binary(env_path=self.env_data,
                                                                           kernel_resolver=self.kernel_resolver,
                                                                           time_stamp='time',
@@ -98,15 +99,6 @@ class MixedTimeWalker(MixedWalker):
                                                end_time=end_date,
                                                movement_diffusivity=2)
                 D = 6
-                # todo: replace with parameters per step passed as arrays
-                if S > 160:
-                    S //= 4
-                    T *= 4
-                    D = 6
-                elif S > 100:
-                    S //= 2
-                    T *= 2
-                    D = 8
 
                 print(f"T {T} - S {S} - D {D}")
                 # paranoia check
@@ -114,7 +106,6 @@ class MixedTimeWalker(MixedWalker):
                     S = T // max(abs(start_x - start_y), abs(end_x - end_y))
                     S = int(S * 2)
                     print(f"new S {S}")
-                # todo: better updating logic, doesnt rly work with self.mapping,
                 mapping = marine_kernels_baseline(S, D, angle_diffusity=0.3,
                                                   len_diffusivity=1) if self.is_marine else create_mixed_kernel_parameters(MEDIUM, S)
 

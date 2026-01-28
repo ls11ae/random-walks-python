@@ -177,7 +177,8 @@ def df_add_properties2(df: DataFrame,
                        grid_points_per_edge=5,
                        lon='location-long',
                        lat='location-lat',
-                       start = None, end = None) -> (pd.DataFrame, int):
+                       start = None, end = None,
+                       S = None) -> (pd.DataFrame, int):
     min_lon, min_lat, max_lon, max_lat = bbox_geo
 
     # filter by bounding box
@@ -242,9 +243,8 @@ def df_add_properties2(df: DataFrame,
     ]
 
     # compute kernel parameters
-    # todo: pass step size here
     kp = clean_df.apply(
-        lambda row: kernel_resolver(row, start, end),
+        lambda row: kernel_resolver(row, start, end, S),
         axis=1,
         result_type="expand"
     )

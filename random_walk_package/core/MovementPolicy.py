@@ -27,9 +27,9 @@ class MovementPolicy(ABC):
                 end_point,
                 start_time,
                 end_time,
-                diffusity: float = 1.5
+                reference_speed:Optional[float]= None, movement_diffusivity:Optional[float] = 1.5
                 ) -> Tuple[int, int]:
-        """ return T, S
+        """
         T = number of time steps
         S = kernel radius in grid cells per step (transition range = (2S+1)²)
 
@@ -38,7 +38,8 @@ class MovementPolicy(ABC):
             end_point: end point
             start_time: start time
             end_time: end time
-            diffusity: Controls how motion deviates from a straight line connection. Must be >= 1.0
+            reference_speed: reference speed in m/s for the animal
+            movement_diffusivity: movement diffusivity >= 1, 1 straight line connection of two points
         """
         pass
 
@@ -76,11 +77,14 @@ class TimeStepPolicy(MovementPolicy):
         if dt_seconds == 0:
             dt_seconds = 0.0001
              
-        calculated_speed = np.linalg.norm(end_point - start_point) /dt_seconds
-        
+        calculated_speed = np.linalg.norm(end_point - start_point) / dt_seconds
+        if calculated_speed == 0:
+            calculated_speed = 1
+
         if reference_speed is not None :
-            movement_diffusivity = reference_speed/calculated_speed #movement_diffusivity (float, optional): A factor influencing how much walk deviates from a straight line connection
-            movement_diffusivity = max(1.0, movement_diffusivity)
+            reference_speed /= self.timestep_s
+            movement_diffusivity = reference_speed / calculated_speed
+            movement_diffusivity = max(1.2, movement_diffusivity)
             
         if np.isnan(movement_diffusivity) or np.isinf(movement_diffusivity):
             movement_diffusivity = 1.5 
@@ -90,7 +94,18 @@ class TimeStepPolicy(MovementPolicy):
         grid_dist = int(chebyshev(start_point, end_point) * movement_diffusivity)
         T = max(2, int(np.round(dt_seconds / self.timestep_s)))
         S = max(1, int(np.round(grid_dist / T)))
-        return T, S
+
+        if S > 160:
+            S //= 2
+            T *= 2
+        if S > 100:
+            S /= 2
+            T *= 2
+        if S > 80:
+            S /= 2
+            T *= 2
+
+        return int(T), int(S)
 
 
 class SpeedBasedPolicy(MovementPolicy):
@@ -99,7 +114,7 @@ class SpeedBasedPolicy(MovementPolicy):
         self.base_speed = base_speed
         self.grid_cell_m = grid_cell_m
 
-    def resolve(self, start_point, end_point, start_time=None, end_time=None, diffusity: float = 1.5):
+    def resolve(self, start_point, end_point, start_time=None, end_time=None, reference_speed:Optional[float]= None, movement_diffusivity:Optional[float] = 1.5):
         """
         Calculate T as number of time steps and S as step size in grid cells
 
@@ -124,7 +139,7 @@ class SpeedBasedPolicy(MovementPolicy):
         # in Euclidean space (L_2)
         dist_m = euclidean(start_point, end_point)
         step_length_m = self.base_speed * self.timestep_s
-        effective_dist = dist_m * diffusity
+        effective_dist = dist_m * movement_diffusivity
         # on the grid (L_1)
         S = max(1, int(np.round(step_length_m / self.grid_cell_m)))
         T = max(1, int(np.ceil(effective_dist / step_length_m)))

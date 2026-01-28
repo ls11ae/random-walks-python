@@ -39,7 +39,9 @@ class MixedWalker:
                  lat_col="location-lat",
                  id_col="individual-local-identifier",
                  crs="EPSG:4326",
-                 is_marine=False):
+                 is_marine=False,
+                 movement_policy=None,
+                 reference_speed=None):
         self.data = data.dropna(
             subset=[time_col, lon_col, lat_col, id_col]
         )
@@ -53,6 +55,8 @@ class MixedWalker:
         self.animal_proc = None
         self.mapping = kernel_mapping
         self.is_marine = is_marine
+        self.movement_policy = movement_policy
+        self.reference_speed = reference_speed
 
     def _process_movebank_data(self):
         self.animal_proc = AnimalMovementProcessor(data=self.data,
@@ -60,7 +64,9 @@ class MixedWalker:
                                                    lon_col=self.lon_col,
                                                    lat_col=self.lat_col,
                                                    id_col=self.id_col,
-                                                   crs=self.crs)
+                                                   crs=self.crs,
+                                                   movement_policy=self.movement_policy,
+                                                   reference_speed=self.reference_speed)
         self.animal_proc.create_landcover_data_txt(resolution=self.resolution, is_marine=self.is_marine,
                                                    out_directory=self.out_directory)
 

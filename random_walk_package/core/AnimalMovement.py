@@ -13,6 +13,7 @@ import utm
 from random_walk_package.bindings import parse_terrain, terrain_map_free, terrain_at
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties, df_add_properties2
 from random_walk_package.core.KernelFactory import KernelFactory
+from random_walk_package.core.MovementPolicy import MovementPolicy
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
@@ -47,7 +48,9 @@ class AnimalMovementProcessor:
                  lat_col="location-lat",
                  id_col="tag-local-identifier",
                  crs="EPSG:4326",
-                 env_samples=5):
+                 env_samples=5,
+                 movement_policy:MovementPolicy = None,
+                 reference_speed = None):
         """
         Initializes an instance of a class to process and manage trajectory data.
 
@@ -110,6 +113,7 @@ class AnimalMovementProcessor:
             traj_id_col=id_col,
             t=time_col,
         )
+        self.reference_speed = reference_speed
         self.terrain_paths = {}  # terrain txt path per animal_id
         self.terrain_TIFFs = {}
         self.cell_sizes_m: dict[str, float] = {}
@@ -119,6 +123,7 @@ class AnimalMovementProcessor:
         self.latitude_col = lat_col
         self.time_col = time_col
         self.id_col = id_col
+        self.movement_policy = movement_policy
         self.start_dt = {str(traj.id): traj.get_start_time() for traj in self.traj.trajectories}
         self.end_dt = {str(traj.id): traj.get_end_time() for traj in self.traj.trajectories}
 
@@ -270,7 +275,7 @@ class AnimalMovementProcessor:
     @staticmethod
     def utm_to_grid(nx, ny, xmin, ymin, xmax, ymax, utm_x, utm_y):
         x = np.round((utm_x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
-        y = np.round((utm_y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
+        y = np.round((ymax - utm_y) / (ymax - ymin) * (ny - 1)).astype(int)
         return x, y
 
     def create_movement_data(self, traj_id, has_states):
@@ -281,8 +286,14 @@ class AnimalMovementProcessor:
         nx, ny = self._grid_shape_from_bbox(utm_bbox, self.resolution)
         df = traj_utm.df.copy()
 
-        df["grid_x"] = np.round((df.geometry.x - xmin) / (xmax - xmin) * (nx - 1)).astype(int)
-        df["grid_y"] = np.round((df.geometry.y - ymin) / (ymax - ymin) * (ny - 1)).astype(int)
+        gx, gy = self.utm_to_grid(
+            nx, ny, xmin, ymin, xmax, ymax,
+            df.geometry.x.values,
+            df.geometry.y.values
+        )
+
+        df["grid_x"] = gx
+        df["grid_y"] = gy
         traj = self.traj.get_trajectory(traj_id)
         df["geo_x"] = traj.df.geometry.x
         df["geo_y"] = traj.df.geometry.y
@@ -305,8 +316,8 @@ class AnimalMovementProcessor:
     def grid_to_geo(x, y, utm_bbox, width, height, epsg):
         min_x, min_y, max_x, max_y = utm_bbox
 
-        utm_x = min_x + ((x + 0.5) / width) * (max_x - min_x)
-        utm_y = (max_y - ((y + 0.5) / height) * (max_y - min_y))
+        utm_x = min_x + x / (width - 1) * (max_x - min_x)
+        utm_y = max_y - y / (height - 1) * (max_y - min_y)
 
         lon, lat = utm_to_lonlat(utm_x, utm_y, epsg)
         return lon, lat
@@ -487,8 +498,14 @@ class AnimalMovementProcessor:
         parquet_root = out_directory / "env_parquet"
         parquet_root.mkdir(exist_ok=True, parents=True)
         #AnimalMovementProcessor.convert_env_csv_to_parquet(env_path, parquet_root, time_col=time_stamp)
+        if self.reference_speed is None:
+            diffusivity = 1.5
+        else:
+            diffusivity = None
+
         # for each animal trajectory
         for traj in self.traj.trajectories:
+            trajectories = self.create_movement_data(traj.id, has_states=False)
             times = traj.df.index
             points = traj.df.geometry           # (lon, lat)
             intervals = [(times[i], times[i + 1]) for i in range(len(times) - 1)]
@@ -522,7 +539,20 @@ class AnimalMovementProcessor:
 
                 start_x, start_y = point_pairs[index][0].x, point_pairs[index][0].y
                 end_x, end_y = point_pairs[index][1].x, point_pairs[index][1].y
-                # todo: pass step size from argument here
+
+                sx = trajectories.df.iloc[index]["grid_x"]
+                sy = trajectories.df.iloc[index]["grid_y"]
+
+                ex = trajectories.df.iloc[index + 1]["grid_x"]
+                ey = trajectories.df.iloc[index + 1]["grid_y"]
+
+                print(f"[KERNEL PARAMETERS] Processing interval {index}\n")
+                print(f"[KERNEL PARAMETERS] Start point {sx}, {sy}, End point {ex}, {ey}\n")
+                print(f"[KERNEL PARAMETERS] Start Time {t_start}, End Time {t_end}\n")
+
+                _, S = self.movement_policy.resolve([sx, sy], [ex, ey],
+                                             start_time=t_start, end_time=t_end, reference_speed=self.reference_speed, movement_diffusivity=diffusivity)
+                print(f"S: {S}\n")
                 df_proc, T = df_add_properties2(
                     df=interval_df,
                     kernel_resolver=kernel_resolver,
@@ -537,6 +567,7 @@ class AnimalMovementProcessor:
                     lat=lat,
                     start=(start_x, start_y),
                     end=(end_x, end_y),
+                    S=S
                 )
 
                 # save binary
