@@ -8,7 +8,7 @@ from random_walk_package import dll, WATER, walk_to_json, create_point2d_array, 
 from random_walk_package import get_walk_points
 from random_walk_package.bindings import parse_terrain, terrain_map_free, create_mixed_kernel_parameters
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw, \
     update_kernels_mapping
 from random_walk_package.bindings.mixed_walk import env_mixed_walk
 from random_walk_package.bindings.plotter import plot_walk_from_json
@@ -106,8 +106,8 @@ class MixedTimeWalker(MixedWalker):
                     S = T // max(abs(start_x - start_y), abs(end_x - end_y))
                     S = int(S * 2)
                     print(f"new S {S}")
-                mapping = marine_kernels_baseline(S, D, angle_diffusity=0.3,
-                                                  len_diffusivity=1) if self.is_marine else create_mixed_kernel_parameters(MEDIUM, S)
+                mapping = marine_kernels_baseline_crw(S, D, angle_diffusity=0.3,
+                                                      len_diffusivity=1) if self.is_marine else create_mixed_kernel_parameters(MEDIUM, S)
 
                 # update_kernels_mapping(self.mapping, WATER, stepsize=S, directions=D, diffusity=2)
                 # Initialize DP matrix for the current start point

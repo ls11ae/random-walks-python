@@ -13,7 +13,8 @@ from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, Mixed
 from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
 from random_walk_package.bindings import create_mixed_kernel_parameters
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw, \
+    marine_kernels_baseline_brw
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
 from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed, \
     save_trajectory_coll_leaflet
@@ -157,7 +158,7 @@ def marine_resolver(row, start, end, S):
     length_diffusity= 1.0
     angle_diffusity = 0.5
 
-    BIAS_STRENGTH = 0.7
+    BIAS_STRENGTH = 0.4
     
     if pd.isna(row.get("uo")):
          uo = 0.0
@@ -183,8 +184,6 @@ def marine_resolver(row, start, end, S):
         bias_x = float(mixed_dir[0]) * S * BIAS_STRENGTH
         bias_y = float(mixed_dir[1]) * S * BIAS_STRENGTH
 
-
-    
     if not np.isfinite(bias_x):
         bias_x = 0.0
     if not np.isfinite(bias_y):
@@ -205,12 +204,16 @@ def test_marine_walker():
     environment_csv = '/home/omar/Downloads/current_filename.csv'
     out_dir = os.path.dirname(study)
 
-    mapping = marine_kernels_baseline(step_size=5, directions=1, angle_diffusity=0.3, len_diffusivity=1)
-    movement_policy = TimeStepPolicy(timestep_s=3600 * 6)  # 8 hours per step
+    # for correlated
+    mapping_crw = marine_kernels_baseline_crw(step_size=5, directions=8, angle_diffusity=0.3, len_diffusivity=1)
+    # for biased / brownian
+    mapping_brw = marine_kernels_baseline_brw(step_size=5, len_diffusivity=1)
+
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 4)  # 8 hours per step
     walker = MixedTimeWalker(data=df,
                              env_data=environment_csv,
-                             kernel_mapping=mapping,
-                             resolution=800,
+                             kernel_mapping=mapping_crw,
+                             resolution=600,
                              out_directory=out_dir,
                              env_samples=5,
                              kernel_resolver=marine_resolver,

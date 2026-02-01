@@ -36,10 +36,15 @@ dll.update_mapping.argtypes = [KernelParametersMappingPtr, c_int, c_int, c_ssize
 dll.update_mapping.restype = None
 
 
-def marine_kernels_baseline(step_size: int, directions: int, angle_diffusity,
-                            len_diffusivity: float) -> KernelParametersMappingPtr:
+
+def marine_kernels_baseline_crw(step_size: int, directions: int, angle_diffusity,
+                                len_diffusivity: float) -> KernelParametersMappingPtr:
+    if directions < 4:
+        raise Exception('directions should be >= 4')
     return dll.create_default_marine_mapping(step_size, directions, len_diffusivity, angle_diffusity)
 
+def marine_kernels_baseline_brw(step_size: int, len_diffusivity: float):
+    return marine_kernels_baseline_crw(step_size, 1, 1, len_diffusivity)
 
 def update_kernels_mapping(mapping: KernelParametersMappingPtr, landmark: int, stepsize: int, directions: int,
                            diffusity: float):
