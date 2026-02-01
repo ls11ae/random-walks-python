@@ -48,7 +48,7 @@ def preprocess_hmm(gdf, columns: ColumnConfig, scale=True):
 
         group['speed'] = group['speed'].fillna(0.0).astype(float)
         # direction of movement (degrees)
-        headings = np.deg2rad(group[provided_dir_col].fillna(method='pad').astype(float).values)
+        headings = np.deg2rad(group[provided_dir_col].fillna(0.0).astype(float).values)
         if len(headings) > 1 and np.isnan(headings[0]):
             headings[0] = headings[1]
         turn_angles = np.concatenate(

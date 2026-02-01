@@ -120,7 +120,7 @@ class StateDependentWalker(MixedWalker):
         t_pol = TimeStepPolicy(timestep_s=20 * 60) if movement_policy is None else movement_policy
 
         steps_dict = self.animal_proc.create_movement_data_dict(has_states=True)
-        per_animal_gdfs = []  # collect final GeoDataFrames per animal
+        per_animal_gdfs = []
         aid = 0
         for animal_id, trajectory in steps_dict.items():
             print(f"{aid} / {len(steps_dict) - 1}")

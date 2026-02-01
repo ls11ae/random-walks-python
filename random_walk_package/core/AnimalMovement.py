@@ -610,6 +610,7 @@ class AnimalMovementProcessor:
             grid_coords = self.create_movement_data(traj_id, False)
             terrain_map = parse_terrain(file=self.terrain_paths[traj_id], delim=' ')
             sub["terrain"] = [terrain_at(terrain_map, x, y) for x, y in grid_coords.grid_steps()]
+            terrain_map_free(terrain_map)
             utm_gdfs.append(sub.to_crs(TARGET_CRS))
 
         data_gdf_utm = gpd.GeoDataFrame(

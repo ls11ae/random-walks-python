@@ -72,6 +72,7 @@ class TimeStepPolicy(MovementPolicy):
         end_time = pd.to_datetime(end_time)
         start_point = np.array(start_point)
         end_point= np.array(end_point)
+
     
         dt_seconds = int((end_time - start_time).total_seconds())
         if dt_seconds == 0:
@@ -95,15 +96,10 @@ class TimeStepPolicy(MovementPolicy):
         T = max(2, int(np.round(dt_seconds / self.timestep_s)))
         S = max(1, int(np.round(grid_dist / T)))
 
-        if S > 160:
-            S //= 2
-            T *= 2
-        if S > 100:
-            S /= 2
-            T *= 2
-        if S > 80:
-            S /= 2
-            T *= 2
+        if S > 50:
+            ratio = S / 50
+            T *= ratio
+            S = 50
 
         return int(T), int(S)
 
