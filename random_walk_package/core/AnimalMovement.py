@@ -169,7 +169,7 @@ class AnimalMovementProcessor:
         return padded_bbox(min_x, min_y, max_x, max_y, padding=0.1), utm_traj.crs.to_epsg()
 
     @staticmethod
-    def _grid_shape_from_bbox(bbox_utm, resolution):
+    def grid_shape_from_bbox(bbox_utm, resolution):
         """Compute regular grid shape (width, height) from utm bounding box and resolution."""
         xmin, ymin, xmax, ymax = bbox_utm
         width_m = xmax - xmin
@@ -220,7 +220,7 @@ class AnimalMovementProcessor:
             # PADDED UTM BBOX (x/y)
             utm_bbox, _ = self.bbox_utm(traj_id)
             # REGULAR GRID SHAPE (x/y)
-            nx, ny = self._grid_shape_from_bbox(utm_bbox, resolution)
+            nx, ny = self.grid_shape_from_bbox(utm_bbox, resolution)
             # SIZE OF A (SQUARE) GRID CELL IN METERS
             self.cell_sizes_m[str(traj_id)] = (utm_bbox[2] - utm_bbox[0]) / nx
 
@@ -283,7 +283,7 @@ class AnimalMovementProcessor:
         utm_bbox, _ = self.bbox_utm(traj_id)
         xmin, ymin, xmax, ymax = utm_bbox
 
-        nx, ny = self._grid_shape_from_bbox(utm_bbox, self.resolution)
+        nx, ny = self.grid_shape_from_bbox(utm_bbox, self.resolution)
         df = traj_utm.df.copy()
 
         gx, gy = self.utm_to_grid(
@@ -330,7 +330,7 @@ class AnimalMovementProcessor:
 
     def grid_to_geo_path(self, path, traj_id):
         utm_bounds, epsg = self.bbox_utm(traj_id)
-        width, height = self._grid_shape_from_bbox(utm_bounds, self.resolution)
+        width, height = self.grid_shape_from_bbox(utm_bounds, self.resolution)
         geo = [self.grid_to_geo(x, y, utm_bounds, width, height, epsg) for x, y in path]
         df = pd.DataFrame(geo, columns=["longitude", "latitude"])
         return df
@@ -408,7 +408,7 @@ class AnimalMovementProcessor:
             aid = traj.id
             bbox = self.bbox_geo(aid)
             utm_bbox, epsg = self.bbox_utm(aid)
-            width, height = self._grid_shape_from_bbox(utm_bbox, self.resolution)
+            width, height = self.grid_shape_from_bbox(utm_bbox, self.resolution)
             print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
             terrain_pth = self.terrain_paths.get(aid)
             terrain_map = parse_terrain(file=terrain_pth, delim=' ')
@@ -514,7 +514,7 @@ class AnimalMovementProcessor:
             aid = traj.id
             bbox = self.bbox_geo(aid)
             utm_bbox, epsg = self.bbox_utm(aid)
-            width, height = self._grid_shape_from_bbox(utm_bbox, self.resolution)
+            width, height = self.grid_shape_from_bbox(utm_bbox, self.resolution)
             print(f"[KERNEL PARAMETERS] Processing {aid} with bbox {width} x {height}")
 
             terrain_pth = self.terrain_paths.get(aid)

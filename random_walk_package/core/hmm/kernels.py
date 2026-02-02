@@ -109,7 +109,7 @@ def create_and_plot_kernels(a, b, c, rnge, reso):
         ax1.callbacks.connect('ylim_changed', on_xlim_changed)
         ax2.callbacks.connect('xlim_changed', on_xlim_changed)
         ax2.callbacks.connect('ylim_changed', on_xlim_changed)
-    plt.show()
+    #plt.show()
     return Za, Zb, Zc
 
 def pure_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso):

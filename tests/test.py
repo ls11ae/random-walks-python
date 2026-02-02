@@ -5,7 +5,7 @@ import random
 import pandas as pd
 import numpy as np
 from random_walk_package import create_correlated_kernel_parameters
-from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline, \
+from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw, \
     update_kernels_mapping
 from random_walk_package.bindings.plotter import plot_walk_from_json
 from random_walk_package.core.MixedWalker import *
@@ -26,19 +26,13 @@ def weather_terrain_params(row):
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
 if __name__ == "__main__":
-    plot_walk_from_json("random_walk_package/resources/tiger_sharks/kernels/204413/.json")
-    test_marine_walker()
-    exit()
-
-
-    
-    study = "random_walk_package/resources/elephants/Elephant Research - Lobeke National Park (Cameroon) - Collar 46179.csv"
+    study = "random_walk_package/resources/biology_birds/Biology of birds practical.csv"
     df = pd.read_csv(study)  # or a traj collection
 
     out_dir = os.path.dirname(study)
-    walker = StateDependentWalker(data=df, animal_type=MEDIUM, resolution=1000,
+    walker = StateDependentWalker(data=df, animal_type=AIRBORNE, resolution=300,
                                   out_directory=out_dir)  # data can also be a traj collection (MoveApp's input)
-    mvm_pol = TimeStepPolicy(60 * 15)
+    mvm_pol = TimeStepPolicy(60*3)
     traj_coll = walker.generate_walks(dt_tolerance=100.0, rnge=1000, movement_policy=mvm_pol)  # gets output from MoveApp0
     walk_dir = os.path.join(out_dir, "walks")
     os.makedirs(walk_dir, exist_ok=True)
@@ -67,7 +61,7 @@ if __name__ == "__main__":
                                               time_stamp="time", lon="longitude", lat="latitude",
                                               out_directory=os.path.dirname(study_path))
     # example mapping for marine animals. Water is the only allowed landmark, motion is always correlated
-    kernels_mapping = marine_kernels_baseline(step_size=5, directions=8, angle_diffusity=0.3, len_diffusivity=1)
+    kernels_mapping = marine_kernels_baseline_crw(step_size=5, directions=8, angle_diffusity=0.3, len_diffusivity=1)
     # update the mapping parameters
     update_kernels_mapping(kernels_mapping, landmark=WATER, stepsize=7, directions=6, diffusity=1.5)
 

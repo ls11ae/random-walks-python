@@ -178,9 +178,8 @@ dll.kernels_map_single.argtypes = [TerrainMapPtr, TensorPtr, KernelParametersMap
 dll.kernels_map_single.restype = KernelsMap3DPtr
 
 
-def kernels_map_single(terrain, kernel, mapping):
-    tensor_ptr = build_state_tensor(kernel)
-    return dll.kernels_map_single(terrain, tensor_ptr, mapping)
+def kernels_map_single_kernel(terrain, kernel, mapping):
+    return dll.kernels_map_single(terrain, kernel, mapping)
 
 
 def single_state_walk(T, kmap, terrain, start_x, start_y, end_x, end_y):
