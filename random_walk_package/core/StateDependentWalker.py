@@ -110,6 +110,7 @@ class StateDependentWalker(MixedWalker):
             normalize_kernel(Z.Z)
             for Z in [Za, Zb, Zc]
             if Z.Z is not None
+            and np.sum(Z) != 0
         ]
 
         NUM_STATES = len(py_kernels)
@@ -120,7 +121,9 @@ class StateDependentWalker(MixedWalker):
         per_animal_gdfs = []
         aid = 0
         for animal_id, trajectory in steps_dict.items():
-            if aid == 1: break
+            if aid == 0: 
+                aid += 1
+                continue
             print(f"{aid} / {len(steps_dict) - 1}")
             aid += 1
             steps = trajectory.df
@@ -202,6 +205,7 @@ class StateDependentWalker(MixedWalker):
 
                 state = min(NUM_STATES - 1, steps["state"].iloc[i])
                 start_time, end_time = steps["time"].iloc[i], steps["time"].iloc[i + 1]
+                print(f"start lon {start_lon}, start lat {start_lat} \n")
 
                 if abs(start_x - end_x) < 3 and abs(start_y - end_y) < 3:
                     animal_rows.append({
@@ -221,6 +225,7 @@ class StateDependentWalker(MixedWalker):
 
                 T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), start_time, end_time)
                 D = 8
+
 
                 kernel_radius = int(S * cell_size)
                 print(f"Kernel radius: {kernel_radius}\n")
@@ -256,16 +261,27 @@ class StateDependentWalker(MixedWalker):
                 if walk_ptr is not None:
                     segment = get_walk_points(walk_ptr)
                     geo_walk = AnimalMovementProcessor.grid_to_geo_walk(segment, utm_bbox, Nx, Ny, epsg_code)
+                    print(geo_walk)
+                    times = pd.date_range(
+                        start=start_time,
+                        end=end_time,
+                        periods=len(geo_walk)
+                    )
+                    for (y, x), t in zip(geo_walk, times):
+                        animal_rows.append({
+                            "traj_id": animal_id,
+                            "time": t,
+                            "geometry": Point(x, y)
+                        })
+                    dll.point2d_array_free(walk_ptr)
+                else:
                     animal_rows.append({
                         "traj_id": animal_id,
                         "time": steps["time"].iloc[i],
-                        "geometry": LineString(geo_walk)
+                        "geometry": Point(start_lon, start_lat)
                     })
-                    dll.point2d_array_free(walk_ptr)
-                else:
-                    animal_rows.append((start_lat, start_lon))
 
-            animal_gdf = gpd.GeoDataFrame(animal_rows, crs="EPSG:4326")
+            animal_gdf = gpd.GeoDataFrame(animal_rows, geometry="geometry" ,crs="EPSG:4326")
             per_animal_gdfs.append(animal_gdf)
 
 

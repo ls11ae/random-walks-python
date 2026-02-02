@@ -30,7 +30,7 @@ if __name__ == "__main__":
     df = pd.read_csv(study)  # or a traj collection
 
     out_dir = os.path.dirname(study)
-    walker = StateDependentWalker(data=df, animal_type=AIRBORNE, resolution=300,
+    walker = StateDependentWalker(data=df, animal_type=AIRBORNE, resolution=350,
                                   out_directory=out_dir)  # data can also be a traj collection (MoveApp's input)
     mvm_pol = TimeStepPolicy(60*3)
     traj_coll = walker.generate_walks(dt_tolerance=100.0, rnge=1000, movement_policy=mvm_pol)  # gets output from MoveApp0
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     pickle_path = os.path.join(walk_dir, "state_walks.pickle")
     with gzip.open(pickle_path, 'wb') as f:
         pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)
-
+    exit()
     # test_marine_walker()
     plot_walk_from_json(
         "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/tiger_sharks/kernels/204413/.json")
