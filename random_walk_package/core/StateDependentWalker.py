@@ -16,10 +16,6 @@ from random_walk_package.core.MovementPolicy import TimeStepPolicy
 from random_walk_package.data_sources.movebank_adapter import padded_bbox
 
 
-def point_in_bbox(lon, lat, bbox):
-    min_lon, min_lat, max_lon, max_lat = bbox
-    return min_lon <= lon <= max_lon and min_lat <= lat <= max_lat
-
 def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
     dx = start_x - end_x
     dy = start_y - end_y
@@ -138,8 +134,7 @@ class StateDependentWalker(MixedWalker):
 
             # track segment boundaries so we can slice full_path per original segment
             for i in range(len(idx) - 1):
-                if i < 250: continue
-                if i == 273: break
+                if i == 400: break
                 print(f"{i} / {len(idx) - 1}\n")
                 start_lat, start_lon = steps["geo_x"].iloc[i], steps["geo_y"].iloc[i]
                 end_lat, end_lon = steps["geo_x"].iloc[i + 1], steps["geo_y"].iloc[i + 1]
@@ -272,11 +267,7 @@ class StateDependentWalker(MixedWalker):
                     if walk_ptr is not None:
                         segment = get_walk_points(walk_ptr)
                         geo_walk = AnimalMovementProcessor.grid_to_geo_walk(segment, utm_bbox, Nx, Ny, epsg_code)
-
-                        # check for outliers
-                        if any(not point_in_bbox(x, y, global_bbox) for y, x in geo_walk):
-                            geo_walk = [(start_lat, start_lon), (end_lat, end_lon)]
-
+                        print(geo_walk)
                         times = pd.date_range(
                             start=sub_start_time,
                             end=sub_end_time,
