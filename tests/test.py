@@ -25,6 +25,29 @@ def weather_terrain_params(row):
     bias_y = int(row["terrain"] in (50, 60))
     return [is_brownian, S, D, diffusity, bias_x, bias_y]
 
+def filter_bbox(traj_collection, bbox):
+    gdf = traj_collection.to_point_gdf().copy()
+    lon_min, lat_min, lon_max, lat_max = bbox
+
+    keep = (
+        (gdf.geometry.x >= lon_min) &
+        (gdf.geometry.x <= lon_max) &
+        (gdf.geometry.y >= lat_min) &
+        (gdf.geometry.y <= lat_max)
+    )
+
+    gdf = gdf[keep]
+
+    return mpd.TrajectoryCollection(
+        gdf,
+        traj_id_col="traj_id",
+        t="time"
+    )
+
+
+
+
+
 if __name__ == "__main__":
     study = "random_walk_package/resources/biology_birds/Biology of birds practical.csv"
     df = pd.read_csv(study)  # or a traj collection

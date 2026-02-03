@@ -313,6 +313,15 @@ class AnimalMovementProcessor:
         }
 
     @staticmethod
+    def grid_to_utm(x, y, utm_bbox, width, height):
+        min_x, min_y, max_x, max_y = utm_bbox
+
+        utm_x = min_x + x / (width - 1) * (max_x - min_x)
+        utm_y = max_y - y / (height - 1) * (max_y - min_y)
+
+        return utm_x, utm_y
+
+    @staticmethod
     def grid_to_geo(x, y, utm_bbox, width, height, epsg):
         min_x, min_y, max_x, max_y = utm_bbox
 

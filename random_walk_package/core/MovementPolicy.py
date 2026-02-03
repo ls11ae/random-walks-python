@@ -96,12 +96,14 @@ class TimeStepPolicy(MovementPolicy):
         T = max(2, int(np.round(dt_seconds / self.timestep_s)))
         S = max(1, int(np.round(grid_dist / T)))
 
-        if S > 50:
-            ratio = S / 50
-            T *= ratio
-            S = 50
+        MAX_S = 30
 
-        return int(T), int(S)
+        if S > MAX_S:
+            ratio = S / MAX_S
+            T *= ratio
+            S = MAX_S
+
+        return int(np.ceil(T)), int(S)
 
 
 class SpeedBasedPolicy(MovementPolicy):
