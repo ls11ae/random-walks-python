@@ -9,7 +9,7 @@ import pytest
 
 import pandas as pd
 
-from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, MixedTimeWalker, MEDIUM
+from random_walk_package import MixedWalker, GRASSLAND, WATER, TREE_COVER, MixedTimeWalker, TERRESTRIAL
 from random_walk_package import create_correlated_kernel_parameters, set_forbidden_landmark, set_landmark_mapping
 from random_walk_package.bindings import create_mixed_kernel_parameters
 from random_walk_package.bindings.data_structures.EnvWeights import EnvWeights
@@ -30,7 +30,7 @@ def test_mixed_walk():
     resources_dir = os.path.dirname("random_walk_package/resources/")
     study = os.path.join(resources_dir, studies[2])
     df = pd.read_csv(study)
-    kernel_mapping = create_correlated_kernel_parameters(animal_type=MEDIUM, base_step_size=3)
+    kernel_mapping = create_correlated_kernel_parameters(animal_type=TERRESTRIAL, base_step_size=3)
     set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=3, directions=8)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=True,
                          step_size=2,
@@ -250,7 +250,7 @@ def test_time_walker():
     environment_csv = 'random_walk_package/resources/movebank_test/weather/weather_data_full.csv'
     out_dir = os.path.dirname(study)
 
-    mapping = create_mixed_kernel_parameters(MEDIUM, 5)
+    mapping = create_mixed_kernel_parameters(TERRESTRIAL, 5)
     set_landmark_mapping(mapping, GRASSLAND, is_brownian=False, step_size=3, directions=12, len_diffusity=0.7,
                          angle_diffusity=0.2)
     walker = MixedTimeWalker(data=df,

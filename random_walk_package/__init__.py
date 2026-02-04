@@ -41,7 +41,19 @@ except ImportError:
 # --------------------------------------------------
 # Re-export enums / constants for easier use
 # --------------------------------------------------
-from .bindings import MEDIUM, LIGHT, TREE_COVER, GRASSLAND, WATER, create_terrain_map
+from .bindings import (TERRESTRIAL, AIRBORNE, MARINE,
+                       TREE_COVER, GRASSLAND, WATER, create_terrain_map)
+
+#---------------------------------------------------
+# Movement Policies
+#---------------------------------------------------
+from random_walk_package.core.MovementPolicy import TimeStepPolicy, SpeedBasedPolicy
+
+#---------------------------------------------------
+# Serialization
+#---------------------------------------------------
+from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed
+
 
 # --------------------------------------------------
 # Core walkers
@@ -72,15 +84,24 @@ __all__ = [
     "point2d_arr_free",
 
     # Enums / constants
-    "MEDIUM",
-    "LIGHT",
+    "TERRESTRIAL",
+    "AIRBORNE",
+    "MARINE",
     "GRASSLAND",
     "TREE_COVER",
     "WATER",
+
+    # MovementPolicies
+    "TimeStepPolicy",
+    "SpeedBasedPolicy",
+
+    # Serialization
+    "save_trajectory_collection_timed",
 
     # Walkers
     "BrownianWalker",
     "BiasedWalker",
     "MixedWalker",
     "MixedTimeWalker",
+    "StateDependentWalker",
 ]

@@ -23,11 +23,8 @@ MOSS_AND_LICHEN = 100
 
 # animal types
 AIRBORNE = 0
-AMPHIBIAN = 1
-LIGHT = 2
-MEDIUM = 3
-HEAVY = 4
-MARINE = 5
+TERRESTRIAL = 1
+MARINE = 2
 
 dll.get_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
 dll.get_terrain_map.restype = TerrainMapPtr
@@ -99,7 +96,7 @@ def tensor_map_terrain_serialize_time(tensor_set_time, terrain: TerrainMapPtr,
     file = os.path.join(script_dir, 'resources', output_path)
     c_file = file.encode('ascii')
     if mapping is None:
-        mapping = create_mixed_kernel_parameters(animal_type=MEDIUM, base_step_size=7)
+        mapping = create_mixed_kernel_parameters(animal_type=TERRESTRIAL, base_step_size=7)
     dll.tensor_map_terrain_serialize_time(tensor_set_time, terrain, mapping, c_file)
 
 

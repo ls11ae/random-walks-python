@@ -108,7 +108,7 @@ def tensor_set_new(tensors):
 def mix_walk(W, H, terrain_map, kernels_map, T, start_x, start_y, serialize: bool, recompute: bool,
              serialize_path: str, mapping=None):
     if mapping is None:
-        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
+        mapping = create_mixed_kernel_parameters(TERRESTRIAL, 7)
 
     result = dll.m_walk(
         c_ssize_t(W),
@@ -136,7 +136,7 @@ def mix_backtrace_c(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: 
 def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bool = False, serialize_path: str = "",
                   dp_dir: str = "", mapping=None):
     if mapping is None:
-        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
+        mapping = create_mixed_kernel_parameters(TERRESTRIAL, 7)
     walk_c = dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, 0, serialize,
                                   serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
     if walk_c is None:

@@ -3,7 +3,7 @@ import typing
 import weakref
 
 from random_walk_package import tensor_free, tensor4D_free, matrix_free
-from random_walk_package.bindings import get_tensor_map_terrain, MEDIUM, terrain_map_free, kernels_map3d_free
+from random_walk_package.bindings import get_tensor_map_terrain, TERRESTRIAL, terrain_map_free, kernels_map3d_free
 from random_walk_package.bindings.brownian_walk import *
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import create_brownian_kernel_parameters, \
     kernel_mapping_free
@@ -51,7 +51,7 @@ class BrownianWalker:
         """Set up the initial configuration based on provided parameters."""
         if self.terrain is not None:
             if self.kernel_mapping is None:
-                self.kernel_mapping = create_brownian_kernel_parameters(MEDIUM, self.S)
+                self.kernel_mapping = create_brownian_kernel_parameters(TERRESTRIAL, self.S)
             self.W = self.terrain.contents.width
             self.H = self.terrain.contents.height
             try:
@@ -233,7 +233,7 @@ class BrownianWalker:
 
         # Initialize kernel mapping if needed
         if self.kernel_mapping is None:
-            self.kernel_mapping = create_brownian_kernel_parameters(MEDIUM, self.S)
+            self.kernel_mapping = create_brownian_kernel_parameters(TERRESTRIAL, self.S)
 
         # Create a tensor map if needed
         if self.tensor_map is None:
@@ -324,7 +324,7 @@ class BrownianWalker:
 
         # Initialize kernel mapping and tensor map if needed
         if self.kernel_mapping is None:
-            self.kernel_mapping = create_brownian_kernel_parameters(MEDIUM, self.S)
+            self.kernel_mapping = create_brownian_kernel_parameters(TERRESTRIAL, self.S)
         if self.tensor_map is None:
             self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
 

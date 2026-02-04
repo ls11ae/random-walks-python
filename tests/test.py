@@ -50,19 +50,25 @@ def filter_bbox(traj_collection, bbox):
 
 if __name__ == "__main__":
     study = "random_walk_package/resources/biology_birds/Biology of birds practical.csv"
-    df = pd.read_csv(study)  # or a traj collection
+    df = pd.read_csv(study)  # or a traj collection in case of MoveApps
 
     out_dir = os.path.dirname(study)
+
+    # animal type must be set Choice (Terrestrial, aerial or some better name for birds, Marine)
+    # also for terrestrial: set behaviour towars water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
+    # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
+    # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
     walker = StateDependentWalker(data=df, animal_type=AIRBORNE, resolution=350,
                                   out_directory=out_dir)  # data can also be a traj collection (MoveApp's input)
-    mvm_pol = TimeStepPolicy(60*3)
-    traj_coll = walker.generate_walks(dt_tolerance=100.0, rnge=1000, movement_policy=mvm_pol)  # gets output from MoveApp0
+    # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
+    mvm_pol = TimeStepPolicy(60*3) # this would be option 1
+    traj_coll = walker.generate_walks(dt_tolerance=2.0, rnge=1000, movement_policy=mvm_pol)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
     walk_dir = os.path.join(out_dir, "walks")
     os.makedirs(walk_dir, exist_ok=True)
-    save_trajectory_collection_timed(traj_coll, str(walk_dir))
+    save_trajectory_collection_timed(traj_coll, str(walk_dir))  # creates leaflet html with TimestampedGeoJson
     pickle_path = os.path.join(walk_dir, "state_walks.pickle")
     with gzip.open(pickle_path, 'wb') as f:
-        pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)   # this gets passed to the next MoveApp
     exit()
     # test_marine_walker()
     plot_walk_from_json(

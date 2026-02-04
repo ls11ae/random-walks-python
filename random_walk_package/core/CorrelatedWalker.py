@@ -51,7 +51,7 @@ class CorrelatedWalker:
         """Set up the initial configuration based on provided parameters."""
         if self.terrain is not None:
             if self.kernel_mapping is None:
-                self.kernel_mapping = create_correlated_kernel_parameters(MEDIUM, self.S)
+                self.kernel_mapping = create_correlated_kernel_parameters(TERRESTRIAL, self.S)
             try:
                 if self.tensor_map is None:
                     self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
@@ -233,7 +233,7 @@ class CorrelatedWalker:
 
         # Initialize kernel mapping if needed
         if self.kernel_mapping is None:
-            self.kernel_mapping = create_correlated_kernel_parameters(MEDIUM, self.S)
+            self.kernel_mapping = create_correlated_kernel_parameters(TERRESTRIAL, self.S)
 
         # Create a tensor map if needed
         if self.tensor_map is None:
@@ -332,7 +332,7 @@ class CorrelatedWalker:
 
         # Initialize kernel mapping and tensor map if needed
         if self.kernel_mapping is None:
-            self.kernel_mapping = create_correlated_kernel_parameters(MEDIUM, self.S)
+            self.kernel_mapping = create_correlated_kernel_parameters(TERRESTRIAL, self.S)
         if self.tensor_map is None:
             self.tensor_map = get_tensor_map_terrain(self.terrain, mapping=self.kernel_mapping)
 
