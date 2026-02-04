@@ -51,6 +51,7 @@ from .core.BrownianWalker import BrownianWalker
 from .core.MixedTimeWalker import MixedTimeWalker
 from .core.MixedWalker import MixedWalker
 from .core.BiasedWalker import BiasedWalker
+from .core.StateDependentWalker import StateDependentWalker
 
 # --------------------------------------------------
 # Define __all__ for clean public API
