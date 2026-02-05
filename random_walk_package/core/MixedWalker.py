@@ -42,9 +42,6 @@ class MixedWalker:
                  is_marine=False,
                  movement_policy=None,
                  reference_speed=None):
-        self.data = data.dropna(
-            subset=[time_col, lon_col, lat_col, id_col]
-        )
         self.time_col = time_col
         self.lon_col = lon_col
         self.lat_col = lat_col

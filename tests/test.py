@@ -10,7 +10,7 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.plotter import plot_walk_from_json
 from random_walk_package.core.MixedWalker import *
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
-from random_walk_package.core.StateDependentWalker import StateDependentWalker
+from random_walk_package import StateDependentWalker
 from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed
 from tests.mixed_walk_test import test_marine_walker, test_time_walker, test_mixed_walk
 from random_walk_package.core.MarineMovement import shark_data_filter
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     out_dir = os.path.dirname(study)
 
     # animal type must be set Choice (Terrestrial, aerial or some better name for birds, Marine)
-    # also for terrestrial: set behaviour towars water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
+    # also for terrestrial: set behaviour towards water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
     # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
     walker = StateDependentWalker(data=df, animal_type=AIRBORNE, resolution=350,
