@@ -42,7 +42,7 @@ class KernelFactory:
 
     def apply_hmm(self):
         arrays, scaler, seq_dfs = self.__preprocess()
-        self.__trajectories, self.__threshold, self.__state_mapping = apply_hmm(arrays, seq_dfs)
+        self.__trajectories, self.__threshold, self.__state_mapping = apply_hmm(arrays, seq_dfs, n_components=3,columns=self.columns)
         self.gdf = merge_states_to_gdf(self.gdf, seq_dfs, self.columns)
         return self.gdf
 

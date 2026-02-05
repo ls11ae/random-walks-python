@@ -88,18 +88,18 @@ def preprocess_hmm(gdf, columns: ColumnConfig, scale=True):
     return arrays, scaler, seq_dfs
 
 
-def process_trajectories(data_list: list[pd.DataFrame]):
+def process_trajectories(data_list: list[pd.DataFrame], columns=None):
     animal_trajectories = {}
     # Iterate over each row in the DataFrame
     print("Length" + str(len(data_list)))
 
     for data in data_list:
         for _, row in data.iterrows():
-            animal_id = row["individual-local-identifier"]
+            animal_id = row[columns.id_col]
             if animal_id not in animal_trajectories:
                 animal_trajectories[animal_id] = []
             animal_trajectories[animal_id].append(
-                (int(row["geometry"].x), int(row["geometry"].y), row["timestamp"], row["state"] + 1))
+                (int(row["geometry"].x), int(row["geometry"].y), row[columns.time_col], row["state"] + 1))
 
     # Sort each bettong's list of tuples by the datetime entry
     for animal_id in animal_trajectories:

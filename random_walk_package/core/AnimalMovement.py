@@ -41,91 +41,121 @@ class MovementTrajectory:
 
 
 class AnimalMovementProcessor:
-    def __init__(self,
-                 data,
-                 time_col="timestamp",
-                 lon_col="location-long",
-                 lat_col="location-lat",
-                 id_col="tag-local-identifier",
-                 crs="EPSG:4326",
-                 env_samples=5,
-                 movement_policy:MovementPolicy = None,
-                 reference_speed = None):
-        """
-        Initializes an instance of a class to process and manage trajectory data.
 
-        Parameters
-        ----------
-        data : pandas.DataFrame or geopandas.GeoDataFrame or mpd.TrajectoryCollection
-            Input dataset containing trajectory data. If it is not an instance of
-            `mpd.TrajectoryCollection`, it is converted into one.
-        time_col : str, optional
-            The name of the column containing time data, by default "timestamp".
-        lon_col : str, optional
-            The name of the column containing longitude data, by default "longitude".
-        lat_col : str, optional
-            The name of the column containing latitude data, by default "latitude".
-        id_col : str, optional
-            The name of the column containing unique animal identifiers, by default "animal_id".
-        crs : str, optional
-            The coordinate reference system to assign to the data if it is not already a
-            GeoDataFrame, by default "EPSG:4326".
+    def __init__(
+        self,
+        data,
+        time_col="timestamp",
+        lon_col="location-long",
+        lat_col="location-lat",
+        id_col="tag-local-identifier",
+        crs="EPSG:4326",
+        env_samples=5,
+        movement_policy=None,
+        reference_speed=None,
+    ):
 
-        Attributes
-        ----------
-        traj : mpd.TrajectoryCollection
-            A TrajectoryCollection object containing processed trajectories.
-        terrain_paths : dict[id, str]
-            A dictionary storing terrain text paths for each unique animal identifier.
-        resolution : None
-            the number of cells in the regular grid along the longer axis of the bounding box.
-        """
-        # these columns must not be NaN
-        required_cols = [time_col, lon_col, lat_col, id_col]
+        self.reference_speed = reference_speed
+        self.terrain_paths = {}
+        self.terrain_TIFFs = {}
+        self.cell_sizes_m = {}
+        self.resolution = None
+        self.env_samples = env_samples
+        self.movement_policy = movement_policy
 
         # TrajectoryCollection
         if isinstance(data, mpd.TrajectoryCollection):
-            self.traj = data
-            return
+            gdf = data.to_point_gdf().copy()
 
         # GeoDataFrame
-        if isinstance(data, gpd.GeoDataFrame):
+        elif isinstance(data, gpd.GeoDataFrame):
             gdf = data.copy()
 
-            # in case 'geometry' is missing
-            if gdf.geometry is None:
-                gdf = gdf.set_geometry(
-                    gpd.points_from_xy(gdf[lon_col], gdf[lat_col]),
-                    crs=crs
-                )
+        # pandas DataFrame
+        elif isinstance(data, pd.DataFrame):
+            gdf = gpd.GeoDataFrame(data.copy())
 
-        # Normal df
         else:
-            gdf = gpd.GeoDataFrame(
-                data.copy(),
-                geometry=gpd.points_from_xy(data[lon_col], data[lat_col]),
-                crs=crs,
+            raise ValueError("Unsupported input type")
+
+        # time column auto detection
+        possible_time = ["timestamp", "time", "event_time", time_col]
+        time_col = next((c for c in possible_time if c in gdf.columns), None)
+
+        if time_col is None:
+            raise ValueError("No timestamp column found")
+
+        # id column auto detection
+        possible_ids = [
+            id_col,
+            "individual_local_identifier",
+            "tag_local_identifier",
+            "individual_id",
+            "tag_id",
+            "deployment_id"
+        ]
+
+        id_col = next((c for c in possible_ids if c in gdf.columns), None)
+
+        if id_col is None:
+            raise ValueError("No trajectory id column found")
+
+        # geometry handling
+        if "geometry" in gdf.columns and gdf.geometry.notna().any():
+            if gdf.crs is None:
+                gdf = gdf.set_crs(crs)
+
+            gdf["longitude"] = gdf.geometry.x
+            gdf["latitude"] = gdf.geometry.y
+
+        else:
+            # lon / lat column name candidates
+            possible_lon = [lon_col, "longitude", "lon", "location-long"]
+            possible_lat = [lat_col, "latitude", "lat", "location-lat"]
+
+            lon = next((c for c in possible_lon if c in gdf.columns), None)
+            lat = next((c for c in possible_lat if c in gdf.columns), None)
+
+            if lon is None or lat is None:
+                raise ValueError("No geometry or lon/lat columns found")
+
+            gdf["longitude"] = gdf[lon]
+            gdf["latitude"] = gdf[lat]
+
+            gdf = gdf.set_geometry(
+                gpd.points_from_xy(gdf["longitude"], gdf["latitude"]),
+                crs=crs
             )
 
-        gdf = gdf.dropna(subset=required_cols)
+        gdf["x"] = gdf.geometry.x
+        gdf["y"] = gdf.geometry.y
+
+        gdf = gdf.dropna(subset=[time_col, "x", "y", id_col])
+
+        # final trajectory collection rebuilt
         self.traj = mpd.TrajectoryCollection(
             gdf,
             traj_id_col=id_col,
             t=time_col,
+            x="x",
+            y="y",
+            crs=gdf.crs,
         )
-        self.reference_speed = reference_speed
-        self.terrain_paths = {}  # terrain txt path per animal_id
-        self.terrain_TIFFs = {}
-        self.cell_sizes_m: dict[str, float] = {}
-        self.resolution = None
-        self.env_samples = env_samples
-        self.longitude_col = lon_col
-        self.latitude_col = lat_col
+
+        # meta
+        self.longitude_col = "longitude"
+        self.latitude_col = "latitude"
         self.time_col = time_col
         self.id_col = id_col
-        self.movement_policy = movement_policy
-        self.start_dt = {str(traj.id): traj.get_start_time() for traj in self.traj.trajectories}
-        self.end_dt = {str(traj.id): traj.get_end_time() for traj in self.traj.trajectories}
+
+        self.start_dt = {
+            str(traj.id): traj.get_start_time()
+            for traj in self.traj.trajectories
+        }
+        self.end_dt = {
+            str(traj.id): traj.get_end_time()
+            for traj in self.traj.trajectories
+        }
 
     @property
     def cell_sizes(self):
@@ -612,7 +642,7 @@ class AnimalMovementProcessor:
         TARGET_CRS = f"EPSG:{epsg}"
         # UTM per individual animal
         utm_gdfs = []
-        for traj_id, sub in data_gdf.groupby('individual-local-identifier'):
+        for traj_id, sub in data_gdf.groupby(self.id_col):
             sub = sub.copy().reset_index()
             sub = gpd.GeoDataFrame(sub, geometry="geometry", crs=data_gdf.crs)
             # add terrain info
@@ -628,7 +658,7 @@ class AnimalMovementProcessor:
         )
         data_gdf_utm.reset_index()
         # initialize HMM
-        hmm_thingy = KernelFactory(data_gdf_utm)
+        hmm_thingy = KernelFactory(data_gdf_utm, id_cols=self.id_col)
         # apply HMM to retrieve trajectories annotated with hidden states
         gdf = hmm_thingy.apply_hmm()
         # compute kernels from states

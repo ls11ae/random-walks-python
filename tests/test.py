@@ -51,6 +51,11 @@ def filter_bbox(traj_collection, bbox):
 if __name__ == "__main__":
     study = "random_walk_package/resources/biology_birds/Biology of birds practical.csv"
     df = pd.read_csv(study)  # or a traj collection in case of MoveApps
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["location-long"], df["location-lat"]), crs="EPSG:4326")
+    f = open("random_walk_package/resources/input1_LatLon.pickle", "rb")
+    traj_col = pickle.load(f)#mpd.TrajectoryCollection(gdf, traj_id_col="individual-local-identifier", t="timestamp")
+    gdf2 = traj_col.to_point_gdf()
+    print(gdf2["main_location"].tolist())
 
     out_dir = os.path.dirname(study)
 
@@ -58,7 +63,7 @@ if __name__ == "__main__":
     # also for terrestrial: set behaviour towards water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
     # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
-    walker = StateDependentWalker(data=df, animal_type=AIRBORNE, resolution=350,
+    walker = StateDependentWalker(data=traj_col, animal_type=AIRBORNE, resolution=350,
                                   out_directory=out_dir)  # data can also be a traj collection (MoveApp's input)
     # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
     mvm_pol = TimeStepPolicy(60*3) # this would be option 1

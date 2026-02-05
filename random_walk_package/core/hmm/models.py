@@ -5,7 +5,7 @@ from sklearn.mixture import GaussianMixture
 from random_walk_package.core.hmm.preprocessing import process_trajectories
 
 
-def apply_hmm(arrays, seq_dfs, n_components=3):
+def apply_hmm(arrays, seq_dfs, n_components=3, columns=None):
     model = GaussianHMM(
         n_components=n_components,
         covariance_type='full',
@@ -49,7 +49,7 @@ def apply_hmm(arrays, seq_dfs, n_components=3):
         df["state"] = states
 
     # sum of gaussians for transition matrix creation
-    animal_trajectories, dt_threshold = process_trajectories(seq_dfs)
+    animal_trajectories, dt_threshold = process_trajectories(seq_dfs, columns)
     return animal_trajectories, dt_threshold, state_mappings
 
 
