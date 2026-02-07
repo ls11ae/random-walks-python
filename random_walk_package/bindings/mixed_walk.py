@@ -174,12 +174,12 @@ def build_state_tensor(Z: np.ndarray) -> Tensor:
     return tensor
 
 
-dll.kernels_map_single.argtypes = [TerrainMapPtr, TensorPtr, KernelParametersMappingPtr]
+dll.kernels_map_single.argtypes = [TerrainMapPtr, TensorPtr, KernelParametersMappingPtr, c_bool]
 dll.kernels_map_single.restype = KernelsMap3DPtr
 
 
-def kernels_map_single_kernel(terrain, kernel, mapping):
-    return dll.kernels_map_single(terrain, kernel, mapping)
+def kernels_map_single_kernel(terrain, kernel, mapping, water_allowed=True):
+    return dll.kernels_map_single(terrain, kernel, mapping, water_allowed)
 
 
 def single_state_walk(T, kmap, terrain, start_x, start_y, end_x, end_y):

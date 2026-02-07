@@ -626,7 +626,7 @@ class AnimalMovementProcessor:
         serialize_kernel_paths_json(binary_paths, out_directory)
         return binary_paths
 
-    def get_hmm_kernels(self, dt_tolerance, rnge):
+    def get_hmm_kernels(self, dt_tolerance, rnge, out_dir=None, num_states=3):
         """Computes HMM kernels from trajectory data"""
         self.traj.add_speed()
         self.traj.add_direction()
@@ -658,11 +658,11 @@ class AnimalMovementProcessor:
         )
         data_gdf_utm.reset_index()
         # initialize HMM
-        hmm_thingy = KernelFactory(data_gdf_utm, id_cols=self.id_col)
+        hmm_thingy = KernelFactory(data_gdf_utm, id_cols=self.id_col, num_states=num_states)
         # apply HMM to retrieve trajectories annotated with hidden states
         gdf = hmm_thingy.apply_hmm()
         # compute kernels from states
-        [crwZ, brwZ] = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1)
+        [crwZ, brwZ] = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1, out_dir)
         gdf = gdf.set_geometry(
             gpd.points_from_xy(gdf[self.longitude_col], gdf[self.latitude_col]),
             crs=CRS.from_epsg(4326)

@@ -24,7 +24,8 @@ class KernelFactory:
                  geom_col='geometry',
                  provided_dir_col='direction',  # degrees
                  feature_cols=('distance', 'angular_difference', 'speed', 'terrain'),  # additional data from the workflow
-                 scale=True):
+                 scale=True,
+                 num_states=3):
         self.columns = ColumnConfig(id_cols=id_cols,
                                     time_col=time_col,
                                     geom_col=geom_col,
@@ -36,21 +37,22 @@ class KernelFactory:
         self.__trajectories = None
         self.__threshold = None
         self.__state_mapping = None
+        self.__num_states = num_states
 
     def __preprocess(self):
         return preprocess_hmm(self.gdf, self.columns, self.scale)
 
     def apply_hmm(self):
         arrays, scaler, seq_dfs = self.__preprocess()
-        self.__trajectories, self.__threshold, self.__state_mapping = apply_hmm(arrays, seq_dfs, n_components=3,columns=self.columns)
+        self.__trajectories, self.__threshold, self.__state_mapping = apply_hmm(arrays, seq_dfs, n_components=self.__num_states,columns=self.columns)
         self.gdf = merge_states_to_gdf(self.gdf, seq_dfs, self.columns)
         return self.gdf
 
-    def get_state_kernels(self, dt_tolerance, rnge, reso):
+    def get_state_kernels(self, dt_tolerance, rnge, reso, out=None):
         dx = 2 * rnge / reso
         print(f"dx: {dx}\n")
-        Za, Zb, Zc = pure_cor_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso)
-        Ba, Bb, Bc = pure_brw_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso)
+        Za, Zb, Zc = pure_cor_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out)
+        Ba, Bb, Bc = pure_brw_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out)
 
         # correlated kernels
         crw_Za = Kernel2D(Za, rnge, reso, dx)

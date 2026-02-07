@@ -13,6 +13,7 @@ from random_walk_package.bindings.data_structures.kernels import normalize_kerne
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single_kernel
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
+from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox
 
 
@@ -71,12 +72,14 @@ def resample_kernel_to_grid(K_meter, cell_size, S):
 
 class StateDependentWalker(MixedWalker):
     def __init__(self, data, animal_type, resolution, out_directory,
+                 n_hmm_states=3,
                  time_col="timestamp",
                  lon_col="location-long",
                  lat_col="location-lat",
                  id_col="individual-local-identifier",
                  crs="EPSG:4326"):
         self.animal = animal_type
+        self.n_hmm_states = n_hmm_states
         is_marine = animal_type == MARINE or animal_type == AIRBORNE
         if animal_type is AIRBORNE:
             mapping = None
@@ -97,21 +100,20 @@ class StateDependentWalker(MixedWalker):
         return dist > dist_factor
 
 
-    def generate_walks(self, serialization_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None):
+    def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None):
         super()._process_movebank_data()
-        [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance, rnge=rnge)
-
+        [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance,
+                                                          rnge=rnge,
+                                                          out_dir=out_dir,
+                                                          num_states=self.n_hmm_states)
         Za, Zb, Zc = corZs
-
         rnge = Za.rnge
-
         py_kernels = [
             normalize_kernel(Z.Z)
             for Z in [Za, Zb, Zc]
             if Z.Z is not None
             and np.sum(Z) != 0
         ]
-
         NUM_STATES = len(py_kernels)
 
         t_pol = TimeStepPolicy(timestep_s=20 * 60) if movement_policy is None else movement_policy
@@ -213,8 +215,8 @@ class StateDependentWalker(MixedWalker):
                     terrain = landcover_to_discrete_ptr(file_path=self.animal_proc.terrain_TIFFs[str(animal_id)],
                                                         res_x=Nx, res_y=Ny,
                                                         min_lon=min_lon, min_lat=min_lat,
-                                                        max_lon=max_lon, max_lat=max_lat,
-                                                        txt_output_path=None)
+                                                        max_lon=max_lon, max_lat=max_lat)
+                    print(f"Grid {Nx} x {Ny}\n")
 
                     cell_size = (max_utm_x - min_utm_x) / Nx
                     cell_size = min(max(cell_size, 1.0), MAX_CELL_SIZE)
@@ -228,9 +230,11 @@ class StateDependentWalker(MixedWalker):
                         sub_en_x, sub_en_y
                     )
 
+                    print(f"Start {start_x}, {start_y}\n")
+                    print(f"End {end_x}, {end_y}\n")
+
                     T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), sub_start_time, sub_end_time)
                     D = 8
-
 
                     kernel_radius = int(S * cell_size)
                     kernel_radius = max(rnge, kernel_radius)
@@ -238,9 +242,11 @@ class StateDependentWalker(MixedWalker):
                     print(f"T: {T} S: {S} \n")
                     clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
                     grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
+                    print(f"State: {state}\n")
+                    print(grid_kernel)
+
                     h, w = grid_kernel.shape
                     assert w == 2 * S + 1 and h == 2 * S + 1
-
                     c_kernels = correlated_kernels_from_matrix(grid_kernel, w,h, directions=D)
 
                     if self.animal is not AIRBORNE:

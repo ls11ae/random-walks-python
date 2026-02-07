@@ -7,6 +7,7 @@ from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll, script_dir
 from .kernel_terrain_mapping import create_mixed_kernel_parameters
 from ..mixed_walk import build_state_tensor
+from ...data_sources.geo_fetcher import lonlat_bbox_to_utm
 
 # landcover types
 TREE_COVER = 10
@@ -187,16 +188,30 @@ def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
     return terrain_ptr.contents
 
 
-def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat,
+def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon,min_lat, max_lon,max_lat,
                               txt_output_path="terrain_movebank.txt") -> TerrainMapPtr | None:  # type: ignore
     try:
+        # BBox in Lon/Lat
+        bbox_lonlat = (min_lon, min_lat, max_lon, max_lat)
+
         with rasterio.open(file_path) as src:
+            crs_epsg = src.crs.to_epsg()
+            if crs_epsg is None:
+                raise ValueError("Raster CRS has no valid EPSG code")
+
+            # Transform BBox to CRS of grid (eg. UTM)
+            min_x, min_y, max_x, max_y = lonlat_bbox_to_utm(
+                *bbox_lonlat, crs_epsg
+            )
+
+            print(f"BBox transformed to UTM: {min_x}, {min_y}, {max_x}, {max_y}")
+
             landcover_array = src.read(1)
             array_height, array_width = landcover_array.shape
 
             # Calculate raster indices for the bounding box coordinates
-            row_start, col_start = src.index(min_lon, max_lat)
-            row_stop, col_stop = src.index(max_lon, min_lat)
+            row_start, col_start = src.index(min_x, max_y)
+            row_stop, col_stop = src.index(max_x, min_y)
 
             # Ensure start <= stop for rows and columns
             if row_start > row_stop:
@@ -204,7 +219,7 @@ def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon
             if col_start > col_stop:
                 col_start, col_stop = col_stop, col_start
 
-            # Clamp the indices to valid ranges
+            # Clamp the indices to valid ranges (handle bbox partially or fully outside raster)
             row_start = max(0, min(row_start, array_height - 1))
             row_stop = max(0, min(row_stop, array_height - 1))
             col_start = max(0, min(col_start, array_width - 1))
@@ -214,37 +229,33 @@ def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon
             roi_rows = row_stop - row_start
             roi_cols = col_stop - col_start
 
+            # If there is no overlap between bbox and raster, fail fast with a clear message
+            if roi_rows < 0 or roi_cols < 0 or (row_start == row_stop and col_start == col_stop):
+                raise ValueError(
+                    "Requested bounding box does not overlap the landcover raster. "
+                    f"Raster bounds (lon, lat): {src.bounds}. "
+                    f"Requested bbox: ({min_lon}, {min_lat}, {max_lon}, {max_lat})."
+                )
+
             # Avoid division by zero when resolution is 1
             step_y = roi_rows / (res_y - 1) if res_y > 1 else 0
             step_x = roi_cols / (res_x - 1) if res_x > 1 else 0
-
             # Generate the grid as a 2D list
-            grid = []
+            terrain_ptr = dll.terrain_map_new(res_x, res_y)
             for y_idx in range(res_y):
+                # Calculate row index in the raster, clamped to the ROI and array bounds
                 r = row_start + int(y_idx * step_y)
                 r = max(row_start, min(r, row_stop))
                 r = min(r, array_height - 1)
 
-                row = []
                 for x_idx in range(res_x):
+                    # Calculate column index in the raster, clamped to the ROI and array bounds
                     c = col_start + int(x_idx * step_x)
                     c = max(col_start, min(c, col_stop))
                     c = min(c, array_width - 1)
 
-                    row.append(int(landcover_array[r, c]))
-                grid.append(row)
-
-            terrain_ptr = dll.terrain_map_new(res_x, res_y)
-
-            for y in range(res_y):
-                for x in range(res_x):
-                    dll.terrain_set(terrain_ptr, x, y, grid[y][x])
-
-            # Optional: write to .txt
-            if txt_output_path:
-                with open(txt_output_path, 'w') as f:
-                    for row in grid:
-                        f.write(' '.join(map(str, row)) + '\n')
+                    pixel_value = landcover_array[r, c]
+                    dll.terrain_set(terrain_ptr, x_idx, y_idx, pixel_value)
 
             return terrain_ptr
     except rasterio.RasterioIOError as e:
