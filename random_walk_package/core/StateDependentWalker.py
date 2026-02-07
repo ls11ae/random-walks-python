@@ -6,14 +6,14 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import Point
 from random_walk_package import MixedWalker, get_walk_points, dll, tensor_free, tensor4D_free, AnimalMovementProcessor
-from random_walk_package.bindings import kernels_map3d_free, AIRBORNE, create_mixed_kernel_parameters, MARINE, landcover_to_discrete_ptr
+from random_walk_package.bindings import kernels_map3d_free, Animal, create_mixed_kernel_parameters, \
+    landcover_to_discrete_ptr, Water
 from random_walk_package.bindings.correlated_walk import correlated_walk_init, correlated_backtrace
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw
 from random_walk_package.bindings.data_structures.kernels import normalize_kernel, clip_kernel, \
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single_kernel
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
-from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox
 
 
@@ -80,11 +80,11 @@ class StateDependentWalker(MixedWalker):
                  crs="EPSG:4326"):
         self.animal = animal_type
         self.n_hmm_states = n_hmm_states
-        is_marine = animal_type == MARINE or animal_type == AIRBORNE
-        if animal_type is AIRBORNE:
+        is_marine = animal_type == Animal.MARINE or animal_type == Animal.AIRBORNE
+        if animal_type is Animal.AIRBORNE:
             mapping = None
             self.is_marine = True
-        elif animal_type is MARINE:
+        elif animal_type is Animal.MARINE:
             mapping = marine_kernels_baseline_crw(5, 5, 1, 1)
         else:
             mapping = create_mixed_kernel_parameters(animal_type, 5)
@@ -100,13 +100,13 @@ class StateDependentWalker(MixedWalker):
         return dist > dist_factor
 
 
-    def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None):
+    def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:Water=Water.AVOID, is_brownian = False):
         super()._process_movebank_data()
         [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance,
                                                           rnge=rnge,
                                                           out_dir=out_dir,
                                                           num_states=self.n_hmm_states)
-        Za, Zb, Zc = corZs
+        Za, Zb, Zc = brwZs if is_brownian and self.animal is not Animal.AIRBORNE else corZs
         rnge = Za.rnge
         py_kernels = [
             normalize_kernel(Z.Z)
@@ -122,8 +122,6 @@ class StateDependentWalker(MixedWalker):
         per_animal_gdfs = []
         aid = 0
         for animal_id, trajectory in steps_dict.items():
-            if aid == 1:
-                break
             print(f"{aid} / {len(steps_dict) - 1}")
             aid += 1
             steps = trajectory.df
@@ -136,7 +134,6 @@ class StateDependentWalker(MixedWalker):
 
             # track segment boundaries so we can slice full_path per original segment
             for i in range(len(idx) - 1):
-                if i == 400: break
                 print(f"{i} / {len(idx) - 1}\n")
                 start_lat, start_lon = steps["geo_x"].iloc[i], steps["geo_y"].iloc[i]
                 end_lat, end_lon = steps["geo_x"].iloc[i + 1], steps["geo_y"].iloc[i + 1]
@@ -164,7 +161,7 @@ class StateDependentWalker(MixedWalker):
 
                 # upper bound for grid
                 MAX_GRID_CELLS = 1000
-                MAX_CELL_SIZE = 10.0
+                MAX_CELL_SIZE = max_cell_size
                 max_window_size = MAX_GRID_CELLS * MAX_CELL_SIZE
 
                 dx = abs(en_utm_x - st_utm_x)
@@ -194,8 +191,8 @@ class StateDependentWalker(MixedWalker):
                     # metric padding
                     dx = max_utm_x - min_utm_x
                     dy = max_utm_y - min_utm_y
-                    pad_x = max(0.2 * dx, 50.0)
-                    pad_y = max(0.2 * dy, 50.0)
+                    pad_x = max(0.2 * dx, 2 * MAX_CELL_SIZE)
+                    pad_y = max(0.2 * dy, 2 * MAX_CELL_SIZE)
 
                     min_utm_x -= pad_x
                     max_utm_x += pad_x
@@ -234,7 +231,7 @@ class StateDependentWalker(MixedWalker):
                     print(f"End {end_x}, {end_y}\n")
 
                     T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), sub_start_time, sub_end_time)
-                    D = 8
+                    D = 1
 
                     kernel_radius = int(S * cell_size)
                     kernel_radius = max(rnge, kernel_radius)
@@ -243,14 +240,13 @@ class StateDependentWalker(MixedWalker):
                     clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
                     grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
                     print(f"State: {state}\n")
-                    print(grid_kernel)
 
                     h, w = grid_kernel.shape
                     assert w == 2 * S + 1 and h == 2 * S + 1
                     c_kernels = correlated_kernels_from_matrix(grid_kernel, w,h, directions=D)
 
-                    if self.animal is not AIRBORNE:
-                        kmap = kernels_map_single_kernel(terrain, c_kernels, self.mapping)
+                    if self.animal is not Animal.AIRBORNE:
+                        kmap = kernels_map_single_kernel(terrain, c_kernels, self.mapping, water_allowed=water_mode is not Water.FORBID)
                         # Initialize DP matrix for the current start point
                         print("start walks")
                         walk_ptr = single_state_walk(T,

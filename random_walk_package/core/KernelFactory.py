@@ -51,8 +51,8 @@ class KernelFactory:
     def get_state_kernels(self, dt_tolerance, rnge, reso, out=None):
         dx = 2 * rnge / reso
         print(f"dx: {dx}\n")
-        Za, Zb, Zc = pure_cor_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out)
-        Ba, Bb, Bc = pure_brw_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out)
+        Za, Zb, Zc = pure_cor_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out, self.__num_states)
+        Ba, Bb, Bc = pure_brw_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out, self.__num_states)
 
         # correlated kernels
         crw_Za = Kernel2D(Za, rnge, reso, dx)

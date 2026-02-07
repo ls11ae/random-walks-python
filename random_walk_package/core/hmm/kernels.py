@@ -4,44 +4,58 @@ import numpy as np
 from random_walk_package.core.hmm.models import fit_data
 from random_walk_package.core.hmm.utils import rotate_vector, generate_angles, to_json
 
-def calculate_steps_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories):
-    steps = [[], [], []]
+def calculate_steps_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories, num_states=3):
+    if num_states < 2:
+        raise ValueError("num_states must be >= 2")
+
+    steps = [[] for _ in range(num_states)]
+
     count_total = 0
     count_discarded = 0
 
-    for bettong_id, entries in animal_trajectories.items():
+    for animal_id, entries in animal_trajectories.items():
         cur_len = 0
-        # Calculate time differences between consecutive entries
+
         for i in range(2, len(entries)):
             count_total += 1
+
             time_diff_0 = (entries[i][2] - entries[i - 1][2]).total_seconds() / 60
             time_diff_1 = (entries[i - 1][2] - entries[i - 2][2]).total_seconds() / 60
-            if abs(time_diff_0 - dt_threshold) <= dt_threshold * dt_tolerance and abs(
-                    time_diff_1 - dt_threshold) <= dt_tolerance * dt_threshold:
-                # steps.append((entries[i][0]-entries[i-1][0],entries[i][1]-entries[i-1][1]))
+
+            if (
+                abs(time_diff_0 - dt_threshold) <= dt_threshold * dt_tolerance and
+                abs(time_diff_1 - dt_threshold) <= dt_threshold * dt_tolerance
+            ):
                 a = (entries[i - 2][0], entries[i - 2][1])
                 b = (entries[i - 1][0], entries[i - 1][1])
                 c = (entries[i][0], entries[i][1])
-                steps[entries[i - 1][3] - 1].append(rotate_vector(a, b, c))
-                cur_len += 1
+
+                state = entries[i - 1][3] - 1
+
+                if 0 <= state < num_states:
+                    steps[state].append(rotate_vector(a, b, c))
+                    cur_len += 1
+                else:
+                    count_discarded += 1
             else:
                 count_discarded += 1
 
-            # durations.append(time_diff.total_seconds()/60)  # Convert to
-    # print(steps[0])
-    # print(f"{min([x for x, _ in steps]), max([x for x, _ in steps]), min([y for _, y in steps]), max([y for _, y in steps])}")
-    print(f"  total of {count_total} steps, {(count_discarded / count_total) * 100.0}% discarded")
-    print(f" State 1 {len(steps[0])}")
-    print(f" State 2 {len(steps[1])}")
-    print(f" State 3 {len(steps[2])}")
+    print(f"  total of {count_total} steps, {(count_discarded / count_total) * 100.0:.2f}% discarded")
+
+    for s in range(num_states):
+        print(f" State {s+1}: {len(steps[s])}")
+
     return steps
 
-def calculate_steps_brownian_grouped(dt_threshold, dt_tolerance, animal_trajectories):
-    steps = [[], [], []]
+def calculate_steps_brownian_grouped(dt_threshold, dt_tolerance, animal_trajectories, num_states=3):
+    if num_states < 2:
+        raise ValueError("num_states must be >= 2")
+
+    steps = [[] for _ in range(num_states)]
     count_total = 0
     count_discarded = 0
 
-    for bettong_id, entries in animal_trajectories.items():
+    for animal_id, entries in animal_trajectories.items():
         for i in range(1, len(entries)):
             count_total += 1
             time_diff = (entries[i][2] - entries[i - 1][2]).total_seconds() / 60
@@ -49,16 +63,23 @@ def calculate_steps_brownian_grouped(dt_threshold, dt_tolerance, animal_trajecto
             if abs(time_diff - dt_threshold) <= dt_threshold * dt_tolerance:
                 dx = entries[i][0] - entries[i - 1][0]
                 dy = entries[i][1] - entries[i - 1][1]
-                steps[entries[i - 1][3] - 1].append((dx, dy))
+
+                state = entries[i - 1][3] - 1
+
+                if 0 <= state < num_states:
+                    steps[state].append((dx, dy))
+                else:
+                    count_discarded += 1
             else:
                 count_discarded += 1
 
-    print(f"  total of {count_total} steps, {(count_discarded / count_total) * 100.0}% discarded")
-    print(f" State 1 {len(steps[0])}")
-    print(f" State 2 {len(steps[1])}")
-    print(f" State 3 {len(steps[2])}")
+    print(f"  total of {count_total} steps, {(count_discarded / count_total) * 100.0:.2f}% discarded")
+
+    for s in range(num_states):
+        print(f" State {s+1}: {len(steps[s])}")
 
     return steps
+
 
 
 updating = False
@@ -113,11 +134,11 @@ def create_and_plot_kernels(a, b, c, rnge, reso, output_dir = None):
         plt.savefig(output_dir, bbox_inches='tight')
     return Za, Zb, Zc
 
-def pure_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso, out=None):
+def pure_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso, out=None, num_states=3):
     # point clouds of relative steps per state
     a, b, c = calculate_steps_cor_grouped(dt_threshold, dt_tolerance, animal_trajectories)
     return create_and_plot_kernels(a, b, c, rnge, reso, out)
 
-def pure_brw_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso, out=None):
+def pure_brw_grouped(dt_threshold, dt_tolerance, animal_trajectories, rnge, reso, out=None, num_states=3):
     a, b, c = calculate_steps_brownian_grouped(dt_threshold, dt_tolerance, animal_trajectories)
     return create_and_plot_kernels(a, b, c, rnge, reso, out)

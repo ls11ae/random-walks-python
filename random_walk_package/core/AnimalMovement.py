@@ -628,10 +628,10 @@ class AnimalMovementProcessor:
 
     def get_hmm_kernels(self, dt_tolerance, rnge, out_dir=None, num_states=3):
         """Computes HMM kernels from trajectory data"""
-        self.traj.add_speed()
-        self.traj.add_direction()
-        self.traj.add_angular_difference()
-        self.traj.add_distance()
+        self.traj.add_speed(overwrite=True)
+        self.traj.add_direction(overwrite=True)
+        self.traj.add_angular_difference(overwrite=True)
+        self.traj.add_distance(overwrite=True)
         data_gdf = self.traj.to_point_gdf()
         data_gdf = data_gdf.copy()
         # local mean utm zone

@@ -1,4 +1,5 @@
 import ctypes
+import enum
 import os
 
 import rasterio
@@ -23,9 +24,16 @@ MANGROVES = 95
 MOSS_AND_LICHEN = 100
 
 # animal types
-AIRBORNE = 0
-TERRESTRIAL = 1
-MARINE = 2
+class Animal(enum.IntEnum):
+    AIRBORNE = 0
+    TERRESTRIAL = 1
+    MARINE = 2
+
+# Water behaviour
+class Water(enum.IntEnum):
+    FORBID = 0
+    AVOID = 1
+    ALLOW = 2
 
 dll.get_terrain_map.argtypes = [ctypes.c_char_p, ctypes.c_char]
 dll.get_terrain_map.restype = TerrainMapPtr

@@ -41,8 +41,7 @@ except ImportError:
 # --------------------------------------------------
 # Re-export enums / constants for easier use
 # --------------------------------------------------
-from .bindings import (TERRESTRIAL, AIRBORNE, MARINE,
-                       TREE_COVER, GRASSLAND, WATER, create_terrain_map)
+from .bindings import (TREE_COVER, GRASSLAND, WATER, create_terrain_map, Animal)
 
 #---------------------------------------------------
 # Movement Policies
@@ -82,11 +81,10 @@ __all__ = [
     # Point2D helpers
     "Point2DArrayPtr",
     "point2d_arr_free",
+    "get_walk_points",
 
     # Enums / constants
-    "TERRESTRIAL",
-    "AIRBORNE",
-    "MARINE",
+    Animal,
     "GRASSLAND",
     "TREE_COVER",
     "WATER",

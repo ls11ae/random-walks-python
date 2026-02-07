@@ -63,12 +63,12 @@ if __name__ == "__main__":
     # also for terrestrial: set behaviour towards water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
     # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
-    walker = StateDependentWalker(data=df, animal_type=TERRESTRIAL, resolution=350,
+    walker = StateDependentWalker(data=df, animal_type=Animal.TERRESTRIAL, resolution=500,
                                   out_directory=out_dir, n_hmm_states=2)  # data can also be a traj collection (MoveApp's input)
     # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
-    mvm_pol = TimeStepPolicy(60*3) # this would be option 1
+    mvm_pol = TimeStepPolicy(60*10) # this would be option 1
     walk_dir = os.path.join(out_dir, "walks")
-    traj_coll = walker.generate_walks(out_dir=walk_dir, dt_tolerance=100.0, rnge=1000, movement_policy=mvm_pol)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
+    traj_coll = walker.generate_walks(out_dir=walk_dir, dt_tolerance=3.0, rnge=200, movement_policy=mvm_pol)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
     os.makedirs(walk_dir, exist_ok=True)
     save_trajectory_collection_timed(traj_coll, str(walk_dir))  # creates leaflet html with TimestampedGeoJson
     pickle_path = os.path.join(walk_dir, "state_walks.pickle")
