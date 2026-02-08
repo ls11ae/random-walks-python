@@ -7,7 +7,7 @@ import pandas as pd
 from shapely.geometry import Point
 from random_walk_package import MixedWalker, get_walk_points, dll, tensor_free, tensor4D_free, AnimalMovementProcessor
 from random_walk_package.bindings import kernels_map3d_free, Animal, create_mixed_kernel_parameters, \
-    landcover_to_discrete_ptr, WaterMode
+    landcover_to_discrete_ptr, WaterMode, terrain_map_free
 from random_walk_package.bindings.correlated_walk import correlated_walk_init, correlated_backtrace
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw
 from random_walk_package.bindings.data_structures.kernels import normalize_kernel, clip_kernel, \
@@ -255,6 +255,7 @@ class StateDependentWalker(MixedWalker):
                                                      terrain=terrain,
                                                      start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
                         kernels_map3d_free(kmap)
+                        terrain_map_free(terrain)
                     else:
                         dp = correlated_walk_init(c_kernels, Nx, Ny,
                                                   T, start_x, start_y)
