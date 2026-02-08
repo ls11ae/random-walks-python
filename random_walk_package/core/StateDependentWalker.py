@@ -7,7 +7,7 @@ import pandas as pd
 from shapely.geometry import Point
 from random_walk_package import MixedWalker, get_walk_points, dll, tensor_free, tensor4D_free, AnimalMovementProcessor
 from random_walk_package.bindings import kernels_map3d_free, Animal, create_mixed_kernel_parameters, \
-    landcover_to_discrete_ptr, Water
+    landcover_to_discrete_ptr, WaterMode
 from random_walk_package.bindings.correlated_walk import correlated_walk_init, correlated_backtrace
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw
 from random_walk_package.bindings.data_structures.kernels import normalize_kernel, clip_kernel, \
@@ -100,7 +100,7 @@ class StateDependentWalker(MixedWalker):
         return dist > dist_factor
 
 
-    def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:Water=Water.AVOID, is_brownian = False):
+    def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
         super()._process_movebank_data()
         [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance,
                                                           rnge=rnge,
@@ -246,7 +246,7 @@ class StateDependentWalker(MixedWalker):
                     c_kernels = correlated_kernels_from_matrix(grid_kernel, w,h, directions=D)
 
                     if self.animal is not Animal.AIRBORNE:
-                        kmap = kernels_map_single_kernel(terrain, c_kernels, self.mapping, water_allowed=water_mode is not Water.FORBID)
+                        kmap = kernels_map_single_kernel(terrain, c_kernels, self.mapping, water_allowed=water_mode is not WaterMode.FORBID)
                         # Initialize DP matrix for the current start point
                         print("start walks")
                         walk_ptr = single_state_walk(T,

@@ -29,8 +29,13 @@ class Animal(enum.IntEnum):
     TERRESTRIAL = 1
     MARINE = 2
 
+class MovementPolicyCfg(str, enum.Enum):
+    TIME_STEP = "TIME_STEP"
+    FIXED_STEPS = "FIXED_STEPS"
+    AUTO_SPEED = "AUTO_SPEED"
+
 # Water behaviour
-class Water(enum.IntEnum):
+class WaterMode(enum.IntEnum):
     FORBID = 0
     AVOID = 1
     ALLOW = 2

@@ -41,12 +41,12 @@ except ImportError:
 # --------------------------------------------------
 # Re-export enums / constants for easier use
 # --------------------------------------------------
-from .bindings import (TREE_COVER, GRASSLAND, WATER, create_terrain_map, Animal)
+from .bindings import (TREE_COVER, GRASSLAND, WATER, create_terrain_map, Animal, WaterMode, MovementPolicyCfg)
 
 #---------------------------------------------------
 # Movement Policies
 #---------------------------------------------------
-from random_walk_package.core.MovementPolicy import TimeStepPolicy, SpeedBasedPolicy
+from random_walk_package.core.MovementPolicy import TimeStepPolicy, SpeedBasedPolicy, MovementPolicy
 
 #---------------------------------------------------
 # Serialization
@@ -84,7 +84,9 @@ __all__ = [
     "get_walk_points",
 
     # Enums / constants
+    WaterMode,
     Animal,
+    MovementPolicyCfg,
     "GRASSLAND",
     "TREE_COVER",
     "WATER",
@@ -92,6 +94,8 @@ __all__ = [
     # MovementPolicies
     "TimeStepPolicy",
     "SpeedBasedPolicy",
+    "MovementPolicyCfg",
+    "MovementPolicy",
 
     # Serialization
     "save_trajectory_collection_timed",
