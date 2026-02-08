@@ -164,9 +164,6 @@ class AnimalMovementProcessor:
         traj = self.traj.get_trajectory(traj_id)
         lon, lat = traj.df.geometry.iloc[0].x, traj.df.geometry.iloc[0].y
 
-        print(f"{lon}, {lat}")
-        print(traj.crs)
-
         zone = int((lon + 180) // 6) + 1
         epsg = 32600 + zone if lat >= 0 else 32700 + zone
         utm_crs = CRS.from_epsg(epsg)
@@ -629,6 +626,8 @@ class AnimalMovementProcessor:
         utm_gdfs = []
         for traj_id, sub in data_gdf.groupby(self.id_col):
             sub = sub.copy()
+            if self.time_col not in sub.columns:
+                sub = sub.reset_index()
             sub = gpd.GeoDataFrame(sub, geometry="geometry", crs=data_gdf.crs)
             # add terrain info
             grid_coords = self.create_movement_data(traj_id, False)
