@@ -157,7 +157,7 @@ class AnimalMovementProcessor:
 
     @staticmethod
     def utm_to_geo(utm_x, utm_y, zone_no, zone_let):
-        return utm.to_latlon(utm_x, utm_y, zone_no, zone_let)
+        return utm.to_latlon(utm_x, utm_y, zone_no, zone_let, strict=False)
 
     def traj_utm(self, traj_id):
         # we dont save utm bboxes anymore, we compute them on the fly
