@@ -209,10 +209,11 @@ class StateDependentWalker(MixedWalker):
                     max_lon, max_lat = AnimalMovementProcessor.utm_to_geo(max_utm_x, max_utm_y, zone, hemi)
 
                     # sample landcover of new bounds
-                    terrain = landcover_to_discrete_ptr(file_path=self.animal_proc.terrain_TIFFs[str(animal_id)],
-                                                        res_x=Nx, res_y=Ny,
-                                                        min_lon=min_lon, min_lat=min_lat,
-                                                        max_lon=max_lon, max_lat=max_lat)
+                    if self.animal != Animal.AIRBORNE:
+                        terrain = landcover_to_discrete_ptr(file_path=self.animal_proc.terrain_TIFFs[str(animal_id)],
+                                                            res_x=Nx, res_y=Ny,
+                                                            min_lon=min_lon, min_lat=min_lat,
+                                                            max_lon=max_lon, max_lat=max_lat)
                     print(f"Grid {Nx} x {Ny}\n")
 
                     cell_size = (max_utm_x - min_utm_x) / Nx
@@ -255,8 +256,7 @@ class StateDependentWalker(MixedWalker):
                                                      start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
                         kernels_map3d_free(kmap)
                     else:
-                        dp = correlated_walk_init(c_kernels, terrain.contents.width,
-                                                  terrain.contents.height,
+                        dp = correlated_walk_init(c_kernels, Nx, Ny,
                                                   T, start_x, start_y)
                         d = direction_from_points(start_x, start_y, end_x, end_y, D)
                         print(f"from {(start_x, start_y)} to {(end_x, end_y)}\n")
