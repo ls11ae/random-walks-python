@@ -62,7 +62,6 @@ class MixedWalker:
                                                    lon_col=self.lon_col,
                                                    lat_col=self.lat_col,
                                                    id_col=self.id_col,
-                                                   crs=self.crs,
                                                    movement_policy=self.movement_policy,
                                                    reference_speed=self.reference_speed)
         self.animal_proc.create_landcover_data_txt(resolution=self.resolution, is_marine=self.is_marine,

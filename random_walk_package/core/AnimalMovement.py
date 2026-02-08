@@ -13,14 +13,12 @@ import utm
 from random_walk_package.bindings import parse_terrain, terrain_map_free, terrain_at
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties, df_add_properties2
 from random_walk_package.core.KernelFactory import KernelFactory
-from random_walk_package.core.MovementPolicy import MovementPolicy
 from random_walk_package.data_sources.geo_fetcher import *
 from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
 from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
 from random_walk_package.data_sources.ocean_cover import fetch_ocean_cover_tif
 from random_walk_package.data_sources.open_meteo_api import create_weather_csvs
-from random_walk_package.data_sources.walks_serialization import serialize_env_grid, serialize_kernel_paths_json, \
-    deserialize_kernel_paths_json
+from random_walk_package.data_sources.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
 
 
 @dataclass
@@ -49,12 +47,11 @@ class AnimalMovementProcessor:
         lon_col="location-long",
         lat_col="location-lat",
         id_col="tag-local-identifier",
-        crs="EPSG:4326",
+        target_crs="EPSG:4326",   # IMMER GEO
         env_samples=5,
         movement_policy=None,
         reference_speed=None,
     ):
-
         self.reference_speed = reference_speed
         self.terrain_paths = {}
         self.terrain_TIFFs = {}
@@ -65,97 +62,82 @@ class AnimalMovementProcessor:
 
         # TrajectoryCollection
         if isinstance(data, mpd.TrajectoryCollection):
-            gdf = data.to_point_gdf().copy()
 
-        # GeoDataFrame
-        elif isinstance(data, gpd.GeoDataFrame):
-            gdf = data.copy()
+            traj_col = data
+            gdf = traj_col.to_point_gdf().copy()
 
-        # pandas DataFrame
-        elif isinstance(data, pd.DataFrame):
+            orig_time = traj_col.t
+            orig_id = traj_col.get_traj_id_col()
+
+            # Zeit auch als Spalte
+            if orig_time not in gdf.columns:
+                gdf[orig_time] = gdf.index
+
+
+        # DataFrame / GeoDataFrame
+        elif isinstance(data, (pd.DataFrame, gpd.GeoDataFrame)):
+
             gdf = gpd.GeoDataFrame(data.copy())
 
-        else:
-            raise ValueError("Unsupported input type")
+            if time_col not in gdf.columns:
+                raise ValueError("time_col not found in dataframe")
 
-        # time column auto detection
-        possible_time = ["timestamp", "time", "event_time", time_col]
-        time_col = next((c for c in possible_time if c in gdf.columns), None)
+            if id_col not in gdf.columns:
+                raise ValueError("id_col not found in dataframe")
 
-        if time_col is None:
-            raise ValueError("No timestamp column found")
+            orig_time = time_col
+            orig_id = id_col
 
-        # id column auto detection
-        possible_ids = [
-            id_col,
-            "individual_local_identifier",
-            "tag_local_identifier",
-            "individual_id",
-            "tag_id",
-            "deployment_id"
-        ]
+            if "geometry" not in gdf.columns:
+                if lon_col not in gdf.columns or lat_col not in gdf.columns:
+                    raise ValueError("Need geometry or lon/lat columns")
 
-        id_col = next((c for c in possible_ids if c in gdf.columns), None)
-
-        if id_col is None:
-            raise ValueError("No trajectory id column found")
-
-        # geometry handling
-        if "geometry" in gdf.columns and gdf.geometry.notna().any():
-            if gdf.crs is None:
-                gdf = gdf.set_crs(crs)
-
-            gdf["longitude"] = gdf.geometry.x
-            gdf["latitude"] = gdf.geometry.y
+                gdf = gdf.set_geometry(
+                    gpd.points_from_xy(gdf[lon_col], gdf[lat_col]),
+                    crs="EPSG:4326"
+                )
 
         else:
-            # lon / lat column name candidates
-            possible_lon = [lon_col, "longitude", "lon", "location-long"]
-            possible_lat = [lat_col, "latitude", "lat", "location-lat"]
+            raise ValueError("Input must be TrajectoryCollection or DataFrame")
 
-            lon = next((c for c in possible_lon if c in gdf.columns), None)
-            lat = next((c for c in possible_lat if c in gdf.columns), None)
 
-            if lon is None or lat is None:
-                raise ValueError("No geometry or lon/lat columns found")
+        if gdf.crs is None:
+            gdf = gdf.set_crs("EPSG:4326")
 
-            gdf["longitude"] = gdf[lon]
-            gdf["latitude"] = gdf[lat]
-
-            gdf = gdf.set_geometry(
-                gpd.points_from_xy(gdf["longitude"], gdf["latitude"]),
-                crs=crs
-            )
+        if str(gdf.crs) != target_crs:
+            gdf = gdf.to_crs(target_crs)
 
         gdf["x"] = gdf.geometry.x
         gdf["y"] = gdf.geometry.y
 
-        gdf = gdf.dropna(subset=[time_col, "x", "y", id_col])
+        if orig_time not in gdf.columns:
+            gdf[orig_time] = gdf.index
 
-        # final trajectory collection rebuilt
+        gdf = gdf.dropna(subset=["x", "y", orig_time, orig_id])
+
         self.traj = mpd.TrajectoryCollection(
             gdf,
-            traj_id_col=id_col,
-            t=time_col,
+            traj_id_col=orig_id,
+            t=orig_time,
             x="x",
             y="y",
-            crs=gdf.crs,
+            crs=target_crs,
         )
 
-        # meta
-        self.longitude_col = "longitude"
-        self.latitude_col = "latitude"
-        self.time_col = time_col
-        self.id_col = id_col
-
+        self.time_col = orig_time
+        self.id_col = orig_id
+        self.crs = target_crs
         self.start_dt = {
             str(traj.id): traj.get_start_time()
             for traj in self.traj.trajectories
         }
+
         self.end_dt = {
             str(traj.id): traj.get_end_time()
             for traj in self.traj.trajectories
         }
+
+
 
     @property
     def cell_sizes(self):
@@ -181,6 +163,9 @@ class AnimalMovementProcessor:
         # we dont save utm bboxes anymore, we compute them on the fly
         traj = self.traj.get_trajectory(traj_id)
         lon, lat = traj.df.geometry.iloc[0].x, traj.df.geometry.iloc[0].y
+
+        print(f"{lon}, {lat}")
+        print(traj.crs)
 
         zone = int((lon + 180) // 6) + 1
         epsg = 32600 + zone if lat >= 0 else 32700 + zone
@@ -643,7 +628,7 @@ class AnimalMovementProcessor:
         # UTM per individual animal
         utm_gdfs = []
         for traj_id, sub in data_gdf.groupby(self.id_col):
-            sub = sub.copy().reset_index()
+            sub = sub.copy()
             sub = gpd.GeoDataFrame(sub, geometry="geometry", crs=data_gdf.crs)
             # add terrain info
             grid_coords = self.create_movement_data(traj_id, False)
@@ -663,14 +648,13 @@ class AnimalMovementProcessor:
         gdf = hmm_thingy.apply_hmm()
         # compute kernels from states
         [crwZ, brwZ] = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1, out_dir)
-        gdf = gdf.set_geometry(
-            gpd.points_from_xy(gdf[self.longitude_col], gdf[self.latitude_col]),
-            crs=CRS.from_epsg(4326)
-        )
+        original_gdf = self.traj.to_point_gdf()
+        original_gdf["state"] = gdf["state"]
         self.traj = mpd.TrajectoryCollection(
-            gdf,
+            original_gdf,
             traj_id_col=self.id_col,
             t=self.time_col,
+            crs=self.crs
         )
         return crwZ, brwZ
     
