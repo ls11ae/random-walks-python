@@ -6,7 +6,7 @@ from random_walk_package.core.CorrelatedWalker import *
 def test_correlated_walk_terrain():
     terrain = create_terrain_map('landcover_baboons123_200.txt', ' ')
     print(terrain.contents.width, terrain.contents.height)
-    kernel_mapping = create_correlated_kernel_parameters(animal_type=TERRESTRIAL, base_step_size=5)
+    kernel_mapping = create_correlated_kernel_parameters(animal_type=Animal.TERRESTRIAL, base_step_size=5)
     set_landmark_mapping(kernel_mapping, GRASSLAND, is_brownian=False, step_size=5, directions=4)
     set_landmark_mapping(kernel_mapping, TREE_COVER, is_brownian=False, step_size=5, directions=6)
     set_forbidden_landmark(kernel_mapping, WATER)
