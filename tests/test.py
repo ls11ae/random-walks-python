@@ -54,6 +54,15 @@ if __name__ == "__main__":
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["location-long"], df["location-lat"]), crs="EPSG:4326")
     f = open("random_walk_package/resources/move_apps/input4_LatLon.pickle", "rb")
     traj_col = pickle.load(f)#mpd.TrajectoryCollection(gdf, traj_id_col="individual-local-identifier", t="timestamp")
+    short_trajs = []
+
+    for traj in traj_col:
+        short_df = traj.df.iloc[:20].copy()
+        short_traj = mpd.Trajectory(short_df, traj.id)
+        print(short_df.head())
+        short_trajs.append(short_traj)
+
+    traj_col = mpd.TrajectoryCollection(short_trajs)
     gdf2 = traj_col.to_point_gdf()
     print(gdf2["main_location"].tolist())
 

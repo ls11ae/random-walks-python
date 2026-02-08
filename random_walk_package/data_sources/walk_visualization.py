@@ -269,7 +269,7 @@ def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
     p = traj_coll.trajectories[0].df.geometry.iloc[0]
     center = (p.y, p.x)
 
-    m = folium.Map(location=center, zoom_start=14, tiles="Esri.WorldImagery")
+    m = folium.Map(location=center, zoom_start=14, tiles="Esri.WorldImagery", attr="Tiles © Esri")
 
     features = []
     ci = 0
