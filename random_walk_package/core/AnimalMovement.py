@@ -62,7 +62,6 @@ class AnimalMovementProcessor:
 
         # TrajectoryCollection
         if isinstance(data, mpd.TrajectoryCollection):
-
             traj_col = data
             gdf = traj_col.to_point_gdf().copy()
 
@@ -137,7 +136,9 @@ class AnimalMovementProcessor:
             for traj in self.traj.trajectories
         }
 
-
+    @property
+    def traj_coll(self):
+        return self.traj
 
     @property
     def cell_sizes(self):

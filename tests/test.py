@@ -49,43 +49,45 @@ def filter_bbox(traj_collection, bbox):
 
 
 if __name__ == "__main__":
-    study = "random_walk_package/resources/Boars_Austria/boar_study_austria.csv"
-    df = pd.read_csv(study)  # or a traj collection in case of MoveApps
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["location-long"], df["location-lat"]), crs="EPSG:4326")
-    f = open("random_walk_package/resources/move_apps/input4_LatLon.pickle", "rb")
-    traj_col = pickle.load(f)#mpd.TrajectoryCollection(gdf, traj_id_col="individual-local-identifier", t="timestamp")
-    short_trajs = []
 
-    for traj in traj_col:
-        short_df = traj.df.iloc[:20].copy()
-        short_traj = mpd.Trajectory(short_df, traj.id)
-        print(short_df.head())
-        short_trajs.append(short_traj)
+    with open("/home/omar/PycharmProjects/random-walks-python/tests/cats.pickle", "rb") as f:
+        traj_col: mpd.TrajectoryCollection = pickle.load(f)
 
-    traj_col = mpd.TrajectoryCollection(short_trajs)
-    gdf2 = traj_col.to_point_gdf()
-    print(gdf2["main_location"].tolist())
+    print("\n=== OUTPUT PICKLE ===")
+    print(type(traj_col))
+    print(traj_col.to_point_gdf().head(20))
+    print(traj_col.to_point_gdf().columns)
+    print(traj_col.to_point_gdf().dtypes)
 
-    out_dir ="random_walk_package/resources/move_apps"
+    out_dir = "random_walk_package/resources/move_apps"
+
+    walk_dir = os.path.join(out_dir, "original")
+    save_trajectory_collection_timed(traj_col, str(walk_dir))
+
+
 
     # animal type must be set Choice (Terrestrial, aerial or some better name for birds, Marine)
     # also for terrestrial: set behaviour towards water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
     # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
-    walker = StateDependentWalker(data=traj_col, animal_type=Animal.AIRBORNE, resolution=500,
+    walker = StateDependentWalker(data=traj_col, animal_type=Animal.TERRESTRIAL, resolution=400,
                                   out_directory=out_dir, n_hmm_states=2)  # data can also be a traj collection (MoveApp's input)
     # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
-    mvm_pol = TimeStepPolicy(60*5) # this would be option 1
+    mvm_pol = TimeStepPolicy(60 * 2) # this would be option 1
     walk_dir = os.path.join(out_dir, "walks")
     traj_coll = walker.generate_walks(out_dir=walk_dir,
                                       dt_tolerance=3.0,
-                                      rnge=200,
+                                      rnge=100,
                                       movement_policy=mvm_pol,
-                                      max_cell_size=10, water_mode=WaterMode.ALLOW,
+                                      max_cell_size=10, water_mode=WaterMode.FORBID,
                                       is_brownian=True)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
+    print(traj_col.to_point_gdf().head(20))
+    print(traj_col.to_point_gdf().columns)
+    print(traj_col.to_point_gdf().dtypes)
+
     os.makedirs(walk_dir, exist_ok=True)
     save_trajectory_collection_timed(traj_coll, str(walk_dir))  # creates leaflet html with TimestampedGeoJson
-    pickle_path = os.path.join(walk_dir, "state_walks.pickle")
+    pickle_path = os.path.join(walk_dir, "cat_walks.pickle")
     with gzip.open(pickle_path, 'wb') as f:
         pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)   # this gets passed to the next MoveApp
     exit()

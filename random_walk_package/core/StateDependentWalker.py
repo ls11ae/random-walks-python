@@ -16,6 +16,39 @@ from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_m
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
 from random_walk_package.data_sources.movebank_adapter import padded_bbox
 
+def merge_traj_collections(original, modified):
+    result = modified
+
+    orig_gdf = original.to_point_gdf().copy()
+    res_gdf = result.to_point_gdf().copy()
+
+    traj_id_col = original.get_traj_id_col()
+    t_col = orig_gdf.index.name
+
+    orig_gdf = orig_gdf.reset_index()
+    res_gdf = res_gdf.reset_index()
+
+    new = pd.DataFrame()
+
+    new[t_col] = res_gdf.iloc[:, 0]
+    new[traj_id_col] = res_gdf["traj_id"]
+    new["geometry"] = res_gdf["geometry"]
+
+    for col in orig_gdf.columns:
+        if col not in new.columns:
+            new[col] = None
+
+    new = new[orig_gdf.columns]
+    new = gpd.GeoDataFrame(new, geometry="geometry", crs=original.get_crs())
+
+    result_tc = mpd.TrajectoryCollection(
+        new,
+        traj_id_col=traj_id_col,
+        t=t_col,
+        crs=original.get_crs()
+    )
+    return result_tc
+
 
 def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
     dx = start_x - end_x
@@ -78,6 +111,9 @@ class StateDependentWalker(MixedWalker):
                  lat_col="location-lat",
                  id_col="individual-local-identifier",
                  crs="EPSG:4326"):
+        self.original_data = None
+        if isinstance(data, mpd.TrajectoryCollection):
+            self.original_data = data
         self.animal = animal_type
         self.n_hmm_states = n_hmm_states
         is_marine = animal_type == Animal.MARINE or animal_type == Animal.AIRBORNE
@@ -102,6 +138,9 @@ class StateDependentWalker(MixedWalker):
 
     def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
         super()._process_movebank_data()
+        if self.original_data is None:
+            self.original_data = self.animal_proc.traj_coll
+
         [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance,
                                                           rnge=rnge,
                                                           out_dir=out_dir,
@@ -122,7 +161,7 @@ class StateDependentWalker(MixedWalker):
         per_animal_gdfs = []
         aid = 0
         for animal_id, trajectory in steps_dict.items():
-            print(f"{aid} / {len(steps_dict) - 1}")
+            if aid == 1: break
             aid += 1
             steps = trajectory.df
             steps_df = steps_dict[animal_id].df
@@ -134,11 +173,10 @@ class StateDependentWalker(MixedWalker):
 
             # track segment boundaries so we can slice full_path per original segment
             for i in range(len(idx) - 1):
-                print(f"{i} / {len(idx) - 1}\n")
+                print(f"[{aid} / {len(steps_dict) - 1}] : ({i} / {len(idx) - 1})\n")
                 start_lat, start_lon = steps["geo_x"].iloc[i], steps["geo_y"].iloc[i]
                 end_lat, end_lon = steps["geo_x"].iloc[i + 1], steps["geo_y"].iloc[i + 1]
 
-                print("RESAMPLING")
                 # geo bbox
                 min_lon = min(start_lon, end_lon)
                 min_lat = min(start_lat, end_lat)
@@ -208,13 +246,13 @@ class StateDependentWalker(MixedWalker):
                     min_lon, min_lat = AnimalMovementProcessor.utm_to_geo(min_utm_x, min_utm_y, zone, hemi)
                     max_lon, max_lat = AnimalMovementProcessor.utm_to_geo(max_utm_x, max_utm_y, zone, hemi)
 
+                    terrain = None
                     # sample landcover of new bounds
                     if self.animal != Animal.AIRBORNE:
                         terrain = landcover_to_discrete_ptr(file_path=self.animal_proc.terrain_TIFFs[str(animal_id)],
                                                             res_x=Nx, res_y=Ny,
                                                             min_lon=min_lon, min_lat=min_lat,
                                                             max_lon=max_lon, max_lat=max_lat)
-                    print(f"Grid {Nx} x {Ny}\n")
 
                     cell_size = (max_utm_x - min_utm_x) / Nx
                     cell_size = min(max(cell_size, 1.0), MAX_CELL_SIZE)
@@ -228,28 +266,24 @@ class StateDependentWalker(MixedWalker):
                         sub_en_x, sub_en_y
                     )
 
-                    print(f"Start {start_x}, {start_y}\n")
-                    print(f"End {end_x}, {end_y}\n")
-
                     T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), sub_start_time, sub_end_time)
                     D = 1
 
                     kernel_radius = int(S * cell_size)
                     kernel_radius = max(rnge, kernel_radius)
-                    print(f"Kernel radius: {kernel_radius}\n")
-                    print(f"T: {T} S: {S} \n")
+
                     clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
                     grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
-                    print(f"State: {state}\n")
 
                     h, w = grid_kernel.shape
                     assert w == 2 * S + 1 and h == 2 * S + 1
                     c_kernels = correlated_kernels_from_matrix(grid_kernel, w,h, directions=D)
 
+                    print(f"[{start_time} - {end_time}]: {start_x}, {start_y} -> {end_x}, {end_y}: S - {S} T - {T} {Nx} x {Ny} - State {state}\n")
+
                     if self.animal is not Animal.AIRBORNE:
                         kmap = kernels_map_single_kernel(terrain, c_kernels, self.mapping, water_allowed=water_mode is not WaterMode.FORBID)
                         # Initialize DP matrix for the current start point
-                        print("start walks")
                         walk_ptr = single_state_walk(T,
                                                      kmap=kmap,
                                                      terrain=terrain,
@@ -260,9 +294,7 @@ class StateDependentWalker(MixedWalker):
                         dp = correlated_walk_init(c_kernels, Nx, Ny,
                                                   T, start_x, start_y)
                         d = direction_from_points(start_x, start_y, end_x, end_y, D)
-                        print(f"from {(start_x, start_y)} to {(end_x, end_y)}\n")
-                        print(f"T: {T} S: {S} ")
-                        print(f"d: {d}\n")
+
                         walk_ptr = correlated_backtrace(dp, T, c_kernels, end_x, end_y, d, out_ptr=True)
                         tensor4D_free(dp, T)
                         tensor_free(c_kernels)
@@ -270,7 +302,6 @@ class StateDependentWalker(MixedWalker):
                     if walk_ptr is not None:
                         segment = get_walk_points(walk_ptr)
                         geo_walk = AnimalMovementProcessor.grid_to_geo_walk(segment, utm_bbox, Nx, Ny, epsg_code)
-                        print(geo_walk)
                         times = pd.date_range(
                             start=sub_start_time,
                             end=sub_end_time,
@@ -304,4 +335,4 @@ class StateDependentWalker(MixedWalker):
             t="time"
         )
 
-        return traj_collection
+        return merge_traj_collections(self.original_data, traj_collection)

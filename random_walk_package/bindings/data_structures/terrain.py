@@ -217,8 +217,6 @@ def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon,min_lat, max_lon,
                 *bbox_lonlat, crs_epsg
             )
 
-            print(f"BBox transformed to UTM: {min_x}, {min_y}, {max_x}, {max_y}")
-
             landcover_array = src.read(1)
             array_height, array_width = landcover_array.shape
 

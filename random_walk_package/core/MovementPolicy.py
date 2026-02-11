@@ -97,14 +97,31 @@ class TimeStepPolicy(MovementPolicy):
         S = max(1, int(np.round(grid_dist / T)))
 
         MAX_S = 30
+        MAX_T = 2000
 
         if S > MAX_S:
             ratio = S / MAX_S
             T *= ratio
             S = MAX_S
+        if T > MAX_T:
+            ratio = T / MAX_T
+            T = MAX_T
+            S *= ratio
 
         return int(np.ceil(T)), int(S)
 
+class FixedStepsPolicy(MovementPolicy):
+    def __init__(self, time_steps):
+        super().__init__(time_steps)
+
+    def resolve(self,
+                start_point,
+                end_point,
+                start_time,
+                end_time,
+                reference_speed:Optional[float]= None, movement_diffusivity:Optional[float] = 1.5
+                ) -> Tuple[int, int]:
+        pass
 
 class SpeedBasedPolicy(MovementPolicy):
     def __init__(self, timestep_s, base_speed, grid_cell_m):

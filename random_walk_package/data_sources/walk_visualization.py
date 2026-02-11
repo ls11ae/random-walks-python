@@ -263,7 +263,7 @@ def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
     save_path.mkdir(parents=True, exist_ok=True)
 
     if len(traj_coll.trajectories) == 0:
-        return None
+        raise Exception("failed - no trajectories")
 
     # Center of first trajectory
     p = traj_coll.trajectories[0].df.geometry.iloc[0]

@@ -46,7 +46,7 @@ from .bindings import (TREE_COVER, GRASSLAND, WATER, create_terrain_map, Animal,
 #---------------------------------------------------
 # Movement Policies
 #---------------------------------------------------
-from random_walk_package.core.MovementPolicy import TimeStepPolicy, SpeedBasedPolicy, MovementPolicy
+from random_walk_package.core.MovementPolicy import TimeStepPolicy, SpeedBasedPolicy, MovementPolicy, FixedStepsPolicy
 
 #---------------------------------------------------
 # Serialization
@@ -93,6 +93,7 @@ __all__ = [
 
     # MovementPolicies
     "TimeStepPolicy",
+    "FixedStepsPolicy",
     "SpeedBasedPolicy",
     "MovementPolicyCfg",
     "MovementPolicy",
