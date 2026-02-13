@@ -272,7 +272,7 @@ class StateDependentWalker(MixedWalker):
                     )
 
                     T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), sub_start_time, sub_end_time)
-                    D = 1
+                    D = 1 if is_brownian else 8
 
                     kernel_radius = int(S * cell_size)
                     kernel_radius = max(rnge, kernel_radius)
