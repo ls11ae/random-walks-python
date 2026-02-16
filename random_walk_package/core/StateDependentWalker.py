@@ -140,7 +140,6 @@ class StateDependentWalker(MixedWalker):
     def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
         super()._process_movebank_data()
 
-
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
 
@@ -178,7 +177,7 @@ class StateDependentWalker(MixedWalker):
 
             # track segment boundaries so we can slice full_path per original segment
             for i in range(len(idx) - 1):
-                print(f"[{aid} / {len(steps_dict) - 1}] : ({i} / {len(idx) - 1})\n")
+                print(f"[{aid} | {len(steps_dict) - 1}] : ({i} / {len(idx) - 1})\n")
                 start_lat, start_lon = steps["geo_x"].iloc[i], steps["geo_y"].iloc[i]
                 end_lat, end_lon = steps["geo_x"].iloc[i + 1], steps["geo_y"].iloc[i + 1]
 
