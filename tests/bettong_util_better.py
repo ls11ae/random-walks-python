@@ -549,14 +549,14 @@ if __name__ == "__main__":
     bettongs = process_bettongs(file_path)
 
     # Select a short tomato chunk
-    bettong = bettongs["tomato"][37:43]  # 3 points -> 2 segments
+    bettong = bettongs["tomato"]
 
     # Global (track-level) grid definition
     xs, ys = zip(*[(x, y) for x, y, *_ in bettong])
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
 
-    padding = 100
+    padding = 150
     W = (max_x - min_x) + 2 * padding
     H = (max_y - min_y) + 2 * padding
     print(f"Global W: {W}, H: {H}")
@@ -659,6 +659,8 @@ if __name__ == "__main__":
     else:
         print("No valid segments produced any results; nothing written.")
 
+    df, total_mass = segment_worldcover_mass(home_range_mask, global_min_x, global_min_y, worldcover_mga55_tif)
+    print(df)
+    
     plot_worldcover_with_trajectory_and_contour(bettong, worldcover_mga55_tif, total_utilization, home_range_mask, global_min_x, global_min_y)
 
-    

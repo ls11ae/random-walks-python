@@ -93,7 +93,7 @@ def reproject_raster(in_tif, out_tif, dst_crs=CRS_MGA55):
 # -------------------------
 # Fetch ESA WorldCover via Planetary Computer
 # -------------------------
-def fetch_landcover_data_worldcover(bbox_wgs84, year=2021, output_filename="worldcover_clip_4326.tif"):
+def fetch_landcover_data_worldcover(bbox_wgs84, year=2020, output_filename="worldcover_clip_4326.tif"):
     """
     Fetch ESA WorldCover "map" for a bbox in EPSG:4326 (lon/lat), clip, and save GeoTIFF.
     """
@@ -133,6 +133,57 @@ def fetch_landcover_data_worldcover(bbox_wgs84, year=2021, output_filename="worl
 
     clipped.rio.to_raster(output_filename, compress="LZW", dtype="uint8")
     print(f"Saved clipped WorldCover to: {output_filename}")
+    return output_filename
+
+
+import numpy as np
+import rioxarray
+import stackstac
+from pystac_client import Client
+import planetary_computer
+
+CRS_WGS84 = "EPSG:4326"
+
+def fetch_ndvi_sentinel(bbox_wgs84, start_date, end_date,
+                        max_cloud=20,
+                        output_filename="ndvi_s2_clip_4326.tif"):
+
+    catalog = Client.open(
+        "https://planetarycomputer.microsoft.com/api/stac/v1",
+        modifier=planetary_computer.sign_inplace,
+    )
+
+    search = catalog.search(
+        collections=["sentinel-2-l2a"],
+        bbox=list(bbox_wgs84),
+        datetime=f"{start_date}/{end_date}",
+        query={"eo:cloud_cover": {"lt": max_cloud}},
+    )
+
+    items = list(search.get_items())
+    if not items:
+        raise RuntimeError("No Sentinel-2 items found for that AOI/date range.")
+
+    # Stack red + nir bands (B04=red, B08=nir). Sentinel reflectance scale is 1e-4.
+    stack = stackstac.stack(
+        items,
+        assets=["B04", "B08"],
+        bounds_latlon=bbox_wgs84,
+        epsg=4326,
+        resolution=10,     # 10 m output in EPSG:4326 is approximate; OK for many uses.
+        chunksize=2048,
+    ).astype("float32") * 1e-4
+
+    red = stack.sel(band="B04")
+    nir = stack.sel(band="B08")
+
+    # NDVI per scene, then take median over time for a composite
+    ndvi = (nir - red) / (nir + red + 1e-6)
+    ndvi_med = ndvi.median(dim="time", skipna=True)
+
+    ndvi_med = ndvi_med.rio.write_crs(CRS_WGS84)
+    ndvi_med.rio.to_raster(output_filename, compress="LZW", dtype="float32")
+
     return output_filename
 
 
@@ -372,14 +423,16 @@ def print_worldcover_per_step(bettong_traj, raster_tif_mga55):
 if __name__ == "__main__":
     file_path = "/home/mart/Code/eco/Gardiner- Habitat.Perception.Bettongs.csv"
     bettongs = process_bettongs(file_path)
-    bettong = bettongs["tomato"][35:45]
+    bettong = bettongs["lagartha"]
 
     padding = 100 
-    worldcover_mga55_tif = worldcover_trajectory_pipeline(bettong, pad_m=padding, year=2020)
+    # worldcover_mga55_tif = worldcover_trajectory_pipeline(bettong, pad_m=padding, year=2020)
 
     print_worldcover_per_step(bettong, worldcover_mga55_tif)
 
     
+    plot_worldcover_with_trajectory(bettong, worldcover_mga55_tif)
+    exit()
 
 
 
@@ -440,5 +493,4 @@ if __name__ == "__main__":
     print(f"Total sum of total_utilization: {total_sum}")
 
     # plot_single_utilisation_matrix(total_utilization, 1, W, H)
-    
-    plot_worldcover_with_trajectory_and_contour(bettong, worldcover_mga55_tif, total_utilization)
+    # plot_worldcover_with_trajectory_and_contour(bettong, worldcover_mga55_tif, total_utilization)

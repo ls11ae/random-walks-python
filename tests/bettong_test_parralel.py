@@ -131,7 +131,7 @@ def calculate_steps_grouped(bettongs, step_size=1):
 # -------------------------------------------------------------------
 # Heatmaps / GMM fitting
 # -------------------------------------------------------------------
-rnge = 40
+rnge = 50
 reso = rnge * 2 + 1
 
 def fit_data(axs, steps):
@@ -149,12 +149,16 @@ def fit_data(axs, steps):
     log_density = gmm.score_samples(grid)
     density = np.exp(log_density)
     Z = density.reshape(X.shape)
+    print("sum: ", sum(sum(Z)))
+    Z = Z / Z.sum()
+    
+    print("sum: ", sum(sum(Z)))
 
     axs.imshow(
         Z,
         extent=(-rnge, rnge, -rnge, rnge),
         origin="lower",
-        cmap="viridis",
+        cmap="plasma",
         interpolation="nearest",
     )
     return Z
@@ -179,42 +183,29 @@ def generate_heatmap(axs, coords):
 def pure_grouped(bettongs, step_size=1):
     a, b, c = calculate_steps_grouped(bettongs, step_size)
 
-    fig, axs = plt.subplots(2, 3, figsize=(12, 6))
+    fig, axs = plt.subplots(1, 1, figsize=(3, 3))
 
-    generate_heatmap(axs[0, 0], a)
-    generate_heatmap(axs[0, 1], b)
-    generate_heatmap(axs[0, 2], c)
+    # generate_heatmap(axs[0, 0], a)
+    # generate_heatmap(axs[0, 1], b)
+    # generate_heatmap(axs[0, 2], c)
+    
+    # for ax in axs:
+    axs.set_xlabel("dx")
+    axs.set_ylabel("dy")
+        
+    # axs[0].set_title("Denning")
+    # axs[1].set_title("Foraging")
+    # axs[2].set_title("Fast-traveling")
 
-    m_a = fit_data(axs[1, 0], a)
-    m_b = fit_data(axs[1, 1], b)
-    m_c = fit_data(axs[1, 2], c)
-
-    linked_pairs = [(axs[0, 0], axs[1, 0]), (axs[0, 1], axs[1, 1]), (axs[0, 2], axs[1, 2])]
-
-    def on_xlim_changed(event_ax):
-        global updating
-        if updating:
-            return
-
-        updating = True
-        for ax1, ax2 in linked_pairs:
-            if event_ax == ax1:
-                ax2.set_xlim(ax1.get_xlim())
-                ax2.set_ylim(ax1.get_ylim())
-            elif event_ax == ax2:
-                ax1.set_xlim(ax2.get_xlim())
-                ax1.set_ylim(ax2.get_ylim())
-
-        fig.canvas.draw_idle()
-        updating = False
-
-    for ax1, ax2 in linked_pairs:
-        ax1.callbacks.connect("xlim_changed", on_xlim_changed)
-        ax1.callbacks.connect("ylim_changed", on_xlim_changed)
-        ax2.callbacks.connect("xlim_changed", on_xlim_changed)
-        ax2.callbacks.connect("ylim_changed", on_xlim_changed)
+    m_a = fit_data(axs, a)
+    m_b = fit_data(axs, b)
+    m_c = fit_data(axs, c)
 
     plt.tight_layout()
+    # plt.savefig("bettong_gmm_foraging.png",bbox_inches="tight", pad_inches=0, dpi=300)
+    plt.show()
+    
+    
     return m_a, m_b, m_c
 
 
