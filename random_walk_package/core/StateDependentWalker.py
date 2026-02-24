@@ -16,38 +16,39 @@ from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_m
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
 from random_walk_package.data_sources.movebank_adapter import padded_bbox
 
-def merge_traj_collections(original_tc, result_df):
-    traj_id_col = original_tc.get_traj_id_col()
-    t_col = original_tc.to_point_gdf().index.name
-    crs = original_tc.get_crs()
+def merge_traj_collections(original, modified):
+    result = modified
 
-    df = result_df.copy()
-    df[t_col] = pd.to_datetime(df[t_col], utc=True)
-    df[t_col] = df[t_col].dt.tz_convert("UTC").dt.tz_localize(None)
+    orig_gdf = original.to_point_gdf().copy()
+    res_gdf = result.to_point_gdf().copy()
 
-    if "geometry" not in df.columns:
-        df = gpd.GeoDataFrame(
-            df,
-            geometry=gpd.points_from_xy(df["x"], df["y"]),
-            crs=crs
-        )
-    else:
-        df = gpd.GeoDataFrame(df, geometry="geometry", crs=crs)
+    traj_id_col = original.get_traj_id_col()
+    t_col = orig_gdf.index.name
 
-    df = df.dropna(subset=[traj_id_col, t_col, "geometry"])
-    df = df.sort_values([traj_id_col, t_col])
+    orig_gdf = orig_gdf.reset_index()
+    res_gdf = res_gdf.reset_index()
 
-    df = df.set_index(t_col)
+    new = pd.DataFrame()
 
-    # build TC
-    tc = mpd.TrajectoryCollection(
-        df,
+    new[t_col] = res_gdf.iloc[:, 0]
+    new[traj_id_col] = res_gdf["traj_id"]
+    new["geometry"] = res_gdf["geometry"]
+
+    for col in orig_gdf.columns:
+        if col not in new.columns:
+            new[col] = None
+
+    new = new[orig_gdf.columns]
+    new = gpd.GeoDataFrame(new, geometry="geometry", crs=original.get_crs())
+
+    result_tc = mpd.TrajectoryCollection(
+        new,
         traj_id_col=traj_id_col,
         t=t_col,
-        crs=crs
+        crs=original.get_crs()
     )
+    return result_tc
 
-    return tc
 
 def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
     dx = start_x - end_x
@@ -139,12 +140,8 @@ class StateDependentWalker(MixedWalker):
 
     def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
         super()._process_movebank_data()
-
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
-
-        t_col = self.original_data.t
-        id_col = self.original_data.get_traj_id_col()
 
         [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance,
                                                           rnge=rnge,
@@ -177,7 +174,7 @@ class StateDependentWalker(MixedWalker):
 
             # track segment boundaries so we can slice full_path per original segment
             for i in range(len(idx) - 1):
-                print(f"[{aid} | {len(steps_dict) - 1}] : ({i} / {len(idx) - 1})\n")
+                print(f"[{aid} | {len(steps_dict)}] : ({i} / {len(idx) - 1})\n")
                 start_lat, start_lon = steps["geo_x"].iloc[i], steps["geo_y"].iloc[i]
                 end_lat, end_lon = steps["geo_x"].iloc[i + 1], steps["geo_y"].iloc[i + 1]
 
@@ -313,15 +310,15 @@ class StateDependentWalker(MixedWalker):
                         )
                         for (y, x), t in zip(geo_walk, times):
                             animal_rows.append({
-                                id_col: animal_id,
-                                t_col: t,
+                                "traj_id": animal_id,
+                                "time": t,
                                 "geometry": Point(x, y)
                             })
                         dll.point2d_array_free(walk_ptr)
                     else:
                         animal_rows.append({
-                            id_col: animal_id,
-                            t_col: steps["time"].iloc[i],
+                            "traj_id": animal_id,
+                            "time": steps["time"].iloc[i],
                             "geometry": Point(start_lon, start_lat)
                         })
 
@@ -331,6 +328,12 @@ class StateDependentWalker(MixedWalker):
 
         # Combine all animals into a single GeoDataFrame and create one TrajectoryCollection
         combined_gdf = pd.concat(per_animal_gdfs, ignore_index=True)
-        combined_gdf[t_col] = pd.to_datetime(combined_gdf[t_col])
+        combined_gdf["time"] = pd.to_datetime(combined_gdf["time"])
 
-        return merge_traj_collections(self.original_data, combined_gdf)
+        traj_collection = mpd.TrajectoryCollection(
+            combined_gdf,
+            traj_id_col="traj_id",
+            t="time"
+        )
+
+        return merge_traj_collections(self.original_data, traj_collection)
