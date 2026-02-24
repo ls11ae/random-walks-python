@@ -68,9 +68,12 @@ if __name__ == "__main__":
 """
     input_file = "/home/omar/PycharmProjects/random-walks-python/tests/cats_input.pickle"
     out_dir = "random_walk_package/resources/move_apps"
+    walk_dir = os.path.join(out_dir, "walks")
 
     with open(input_file, "rb") as f:
         traj_col:mpd.TrajectoryCollection = pickle.load(f)
+        save_trajectory_collection_timed(traj_col, f"{str(walk_dir)}/trajectories_timed2.html")
+        exit()
     # animal type must be set Choice (Terrestrial, aerial or some better name for birds, Marine)
     # also for terrestrial: set behaviour towards water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
@@ -79,7 +82,6 @@ if __name__ == "__main__":
                                   out_directory=out_dir, n_hmm_states=2)  # data can also be a traj collection (MoveApp's input)
     # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
     mvm_pol = TimeStepPolicy(60 * 5) # this would be option 1
-    walk_dir = os.path.join(out_dir, "walks")
     traj_coll = walker.generate_walks(out_dir=walk_dir,
                                       dt_tolerance=3.0,
                                       rnge=100,

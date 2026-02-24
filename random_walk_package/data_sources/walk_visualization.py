@@ -259,8 +259,6 @@ def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
     Create a TimeDimension animated map for a MovingPandas TrajectoryCollection.
     One animated layer per trajectory.
     """
-    save_path = Path(save_path)
-    save_path.mkdir(parents=True, exist_ok=True)
 
     if len(traj_coll.trajectories) == 0:
         raise Exception("failed - no trajectories")
@@ -307,7 +305,7 @@ def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
         loop=False
     ).add_to(m)
 
-    output = save_path / "trajectories_timed.html"
+    output = save_path
     m.save(str(output))
     print(f"Trajectories saved to {output}")
     return output
