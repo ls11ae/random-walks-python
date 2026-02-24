@@ -103,7 +103,6 @@ def merge_traj_collections(original_tc, result_gdf, fill_method="ffill", nearest
         t=gdf.index.name,
         crs=original_tc.get_crs()
     )
-    return result_tc
 
 def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
     dx = start_x - end_x
@@ -195,8 +194,12 @@ class StateDependentWalker(MixedWalker):
 
     def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
         super()._process_movebank_data()
+
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
+
+        t_col = self.original_data.t
+        id_col = self.original_data.get_traj_id_col()
 
         [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance,
                                                           rnge=rnge,
@@ -365,15 +368,15 @@ class StateDependentWalker(MixedWalker):
                         )
                         for (y, x), t in zip(geo_walk, times):
                             animal_rows.append({
-                                "traj_id": animal_id,
-                                "time": t,
+                                id_col: animal_id,
+                                t_col: t,
                                 "geometry": Point(x, y)
                             })
                         dll.point2d_array_free(walk_ptr)
                     else:
                         animal_rows.append({
-                            "traj_id": animal_id,
-                            "time": steps["time"].iloc[i],
+                            id_col: animal_id,
+                            t_col: steps["time"].iloc[i],
                             "geometry": Point(start_lon, start_lat)
                         })
 
@@ -383,12 +386,6 @@ class StateDependentWalker(MixedWalker):
 
         # Combine all animals into a single GeoDataFrame and create one TrajectoryCollection
         combined_gdf = pd.concat(per_animal_gdfs, ignore_index=True)
-        combined_gdf["time"] = pd.to_datetime(combined_gdf["time"])
+        combined_gdf[t_col] = pd.to_datetime(combined_gdf[t_col])
 
-        traj_collection = mpd.TrajectoryCollection(
-            combined_gdf,
-            traj_id_col="traj_id",
-            t="time"
-        )
-
-        return merge_traj_collections(self.original_data, traj_collection)
+        return merge_traj_collections(self.original_data, combined_gdf)
