@@ -1,5 +1,6 @@
 import math
 
+from random_walk_package.core.move_apps_patch import merge_traj_collections
 import geopandas as gpd
 import movingpandas as mpd
 import numpy as np
@@ -14,7 +15,6 @@ from random_walk_package.bindings.data_structures.kernels import normalize_kerne
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single_kernel
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
-from random_walk_package.core.move_apps_patch import merge_traj_collections
 from random_walk_package.data_sources.movebank_adapter import padded_bbox
 
 def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
