@@ -53,7 +53,7 @@ def test_mixed_walk():
     os.makedirs(walks_dir, exist_ok=True)
     trajectory_collection = walker.generate_walks()
     save_trajectory_coll_leaflet(trajectory_collection, save_path=walks_dir)
-    save_trajectory_collection_timed(trajectory_collection, save_path=str(walks_dir))
+    save_trajectory_collection_timed(trajectory_collection, save_path=str(os.path.join(walks_dir, "test.html")))
     return trajectory_collection
 
 

@@ -14,95 +14,8 @@ from random_walk_package.bindings.data_structures.kernels import normalize_kerne
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single_kernel
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
+from random_walk_package.core.move_apps_patch import merge_traj_collections
 from random_walk_package.data_sources.movebank_adapter import padded_bbox
-def merge_traj_collections(original_tc, result_gdf, fill_method="ffill", nearest_tolerance=None):
-    orig = original_tc.to_point_gdf().copy()
-    res = result_gdf.copy()
-
-    traj_id_col = original_tc.get_traj_id_col()
-    t_col = orig.index.name  # z.B. "timestamp_utc"
-
-    orig = orig.reset_index().rename(columns={t_col: "_t"})
-    if t_col in res.columns:
-        res = res.rename(columns={t_col: "_t"})
-    else:
-        res = res.reset_index().rename(columns={res.index.name: "_t"})
-
-    orig_point = original_tc.to_point_gdf()
-    orig_dtypes = orig_point.dtypes
-    traj_id_dtype = orig_dtypes[traj_id_col]  # usually object
-
-    orig[traj_id_col] = orig[traj_id_col].astype("string")
-    res[traj_id_col]  = res[traj_id_col].astype("string")
-    orig["_t"] = pd.to_datetime(orig["_t"])
-    res["_t"]  = pd.to_datetime(res["_t"])
-
-    value_cols = [c for c in orig.columns if c not in ["_t", "geometry"]]
-    tol = pd.Timedelta(nearest_tolerance) if nearest_tolerance is not None else None
-
-    merged_parts = []
-    for tid, res_part in res.groupby(traj_id_col, sort=False):
-        orig_part = orig[orig[traj_id_col] == tid]
-
-        if orig_part.empty:
-            tmp = res_part[["_t", traj_id_col, "geometry"]].copy()
-            for c in value_cols:
-                if c not in tmp.columns:
-                    tmp[c] = None
-            merged_parts.append(tmp)
-            continue
-
-        res_part = res_part.sort_values("_t")
-        orig_part = orig_part.sort_values("_t")
-
-        direction = "backward" if fill_method == "ffill" else "nearest"
-        if fill_method not in ("ffill", "nearest"):
-            raise ValueError("fill_method must be 'ffill' or 'nearest'")
-
-        tmp = pd.merge_asof(
-            res_part[["_t", traj_id_col, "geometry"]],
-            orig_part[[traj_id_col, "_t"] + [c for c in value_cols if c != traj_id_col]],
-            by=traj_id_col,
-            on="_t",
-            direction=direction,
-            tolerance=tol
-        )
-        merged_parts.append(tmp)
-
-    merged = pd.concat(merged_parts, ignore_index=True)
-
-    orig_cols = orig_point.reset_index().columns.tolist()
-    target_cols = [("_t" if c == t_col else c) for c in orig_cols]
-
-    merged = merged.rename(columns={"_t": t_col})
-    gdf = gpd.GeoDataFrame(merged, geometry="geometry", crs=original_tc.get_crs())
-    gdf[t_col] = pd.to_datetime(gdf[t_col])
-    gdf = gdf.set_index(t_col)
-
-    # exact column order
-    gdf = gdf.reset_index().rename(columns={t_col: "_t"})
-    gdf = gdf.reindex(columns=target_cols)
-    gdf = gdf.rename(columns={"_t": t_col}).set_index(t_col)
-
-    try:
-        gdf[traj_id_col] = gdf[traj_id_col].astype(traj_id_dtype)
-    except Exception:
-        gdf[traj_id_col] = gdf[traj_id_col].astype("object")
-
-    # restore other columns dtypes too
-    for col, dt in orig_dtypes.items():
-        if col in gdf.columns and col != "geometry":
-            try:
-                gdf[col] = gdf[col].astype(dt)
-            except Exception:
-                pass
-
-    return mpd.TrajectoryCollection(
-        gdf,
-        traj_id_col=traj_id_col,
-        t=gdf.index.name,
-        crs=original_tc.get_crs()
-    )
 
 def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
     dx = start_x - end_x
@@ -163,7 +76,7 @@ class StateDependentWalker(MixedWalker):
                  time_col="timestamp",
                  lon_col="location-long",
                  lat_col="location-lat",
-                 id_col="individual-local-identifier",
+                 id_col="individual_local_identifier",
                  crs="EPSG:4326"):
         self.original_data = None
         if isinstance(data, mpd.TrajectoryCollection):
@@ -232,7 +145,7 @@ class StateDependentWalker(MixedWalker):
 
             # track segment boundaries so we can slice full_path per original segment
             for i in range(len(idx) - 1):
-                print(f"[{aid} | {len(steps_dict)}] : ({i} / {len(idx) - 1})\n")
+                print(f"[{aid-1} | {len(steps_dict)}] : ({i} / {len(idx) - 1})\n")
                 start_lat, start_lon = steps["geo_x"].iloc[i], steps["geo_y"].iloc[i]
                 end_lat, end_lon = steps["geo_x"].iloc[i + 1], steps["geo_y"].iloc[i + 1]
 

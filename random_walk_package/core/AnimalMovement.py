@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 import geopandas as gpd
 import movingpandas as mpd
@@ -55,76 +56,95 @@ class AnimalMovementProcessor:
         self.reference_speed = reference_speed
         self.terrain_paths = {}
         self.terrain_TIFFs = {}
-        self.cell_sizes_m = {}
         self.resolution = None
         self.env_samples = env_samples
         self.movement_policy = movement_policy
 
         # TrajectoryCollection
         if isinstance(data, mpd.TrajectoryCollection):
+            _orig_to_point_gdf = mpd.TrajectoryCollection.to_point_gdf
+
             traj_col = data
             gdf = traj_col.to_point_gdf().copy()
-
             orig_time = traj_col.t
             orig_id = traj_col.get_traj_id_col()
 
-            # Zeit auch als Spalte
+            # ensure time column exists
             if orig_time not in gdf.columns:
                 gdf[orig_time] = gdf.index
 
+            # ensure CRS is set and converted
+            if gdf.crs is None:
+                gdf = gdf.set_crs(target_crs)
+            if str(gdf.crs) != target_crs:
+                gdf = gdf.to_crs(target_crs)
 
-        # DataFrame / GeoDataFrame
-        elif isinstance(data, (pd.DataFrame, gpd.GeoDataFrame)):
+            # ensure x/y columns exist
+            gdf["x"] = gdf.geometry.x
+            gdf["y"] = gdf.geometry.y
 
-            gdf = gpd.GeoDataFrame(data.copy())
-
-            if time_col not in gdf.columns:
-                raise ValueError("time_col not found in dataframe")
-
-            if id_col not in gdf.columns:
-                raise ValueError("id_col not found in dataframe")
-
-            orig_time = time_col
-            orig_id = id_col
-
-            if "geometry" not in gdf.columns:
-                if lon_col not in gdf.columns or lat_col not in gdf.columns:
-                    raise ValueError("Need geometry or lon/lat columns")
-
-                gdf = gdf.set_geometry(
-                    gpd.points_from_xy(gdf[lon_col], gdf[lat_col]),
-                    crs="EPSG:4326"
-                )
-
+            gdf = gdf.dropna(subset=["x", "y", orig_time, orig_id])
+            self.traj = mpd.TrajectoryCollection(
+                gdf,
+                traj_id_col=orig_id,
+                t=orig_time,
+                x="x",
+                y="y",
+                crs=target_crs,
+            )
         else:
-            raise ValueError("Input must be TrajectoryCollection or DataFrame")
+        # DataFrame / GeoDataFrame
+            if isinstance(data, (pd.DataFrame, gpd.GeoDataFrame)):
+
+                gdf = gpd.GeoDataFrame(data.copy())
+
+                if time_col not in gdf.columns:
+                    raise ValueError("time_col not found in dataframe")
+
+                if id_col not in gdf.columns:
+                    raise ValueError("id_col not found in dataframe")
+
+                orig_time = time_col
+                orig_id = id_col
+
+                if "geometry" not in gdf.columns:
+                    if lon_col not in gdf.columns or lat_col not in gdf.columns:
+                        raise ValueError("Need geometry or lon/lat columns")
+
+                    gdf = gdf.set_geometry(
+                        gpd.points_from_xy(gdf[lon_col], gdf[lat_col]),
+                        crs="EPSG:4326"
+                    )
+
+            else:
+                raise ValueError("Input must be TrajectoryCollection or DataFrame")
 
 
-        if gdf.crs is None:
-            gdf = gdf.set_crs("EPSG:4326")
+            if gdf.crs is None:
+                gdf = gdf.set_crs("EPSG:4326")
 
-        if str(gdf.crs) != target_crs:
-            gdf = gdf.to_crs(target_crs)
+            if str(gdf.crs) != target_crs:
+                gdf = gdf.to_crs(target_crs)
 
-        gdf["x"] = gdf.geometry.x
-        gdf["y"] = gdf.geometry.y
+            gdf["x"] = gdf.geometry.x
+            gdf["y"] = gdf.geometry.y
 
-        if orig_time not in gdf.columns:
-            gdf[orig_time] = gdf.index
+            if orig_time not in gdf.columns:
+                gdf[orig_time] = gdf.index
 
-        gdf = gdf.dropna(subset=["x", "y", orig_time, orig_id])
+            gdf = gdf.dropna(subset=["x", "y", orig_time, orig_id])
 
-        self.traj = mpd.TrajectoryCollection(
-            gdf,
-            traj_id_col=orig_id,
-            t=orig_time,
-            x="x",
-            y="y",
-            crs=target_crs,
-        )
+            self.traj = mpd.TrajectoryCollection(
+                gdf,
+                traj_id_col=orig_id,
+                t=orig_time,
+                x="x",
+                y="y",
+                crs=target_crs,
+            )
 
-        self.time_col = orig_time
-        self.id_col = orig_id
+        self.time_col = self.traj.t
+        self.id_col = self.traj.get_traj_id_col()
         self.crs = target_crs
         self.start_dt = {
             str(traj.id): traj.get_start_time()
@@ -141,15 +161,9 @@ class AnimalMovementProcessor:
         return self.traj
 
     @property
-    def cell_sizes(self):
-        return self.cell_sizes_m
-
-    @property
     def terrain_path(self):
         return self.terrain_paths
 
-    def time_period(self):
-        return self.start_dt, self.end_dt
 
     @staticmethod
     def geo_to_utm(lat, lon):
@@ -198,7 +212,9 @@ class AnimalMovementProcessor:
         return nx, ny
 
     def create_landcover_data_txt(self, is_marine: bool = False, resolution: int = 200,
-                                  out_directory: str | None = None) -> dict[str, str]:
+                                  out_directory: str | None = None) -> dict[Any, str]:
+
+
         """
         Generate per-animal landcover data (TIFF + TXT), named with animal_id and bbox.
         
@@ -234,8 +250,6 @@ class AnimalMovementProcessor:
             utm_bbox, _ = self.bbox_utm(traj_id)
             # REGULAR GRID SHAPE (x/y)
             nx, ny = self.grid_shape_from_bbox(utm_bbox, resolution)
-            # SIZE OF A (SQUARE) GRID CELL IN METERS
-            self.cell_sizes_m[str(traj_id)] = (utm_bbox[2] - utm_bbox[0]) / nx
 
             # Output paths
             base_name = (

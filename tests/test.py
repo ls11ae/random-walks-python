@@ -1,19 +1,16 @@
 # debugging: gdb --args python -m tests.test
-import gzip
+import os.path
 import pickle
-import random
-import pandas as pd
-import numpy as np
-from random_walk_package import create_correlated_kernel_parameters
+
+from random_walk_package.core.move_apps_patch import apply_moveapps_id_dtype_patch, debug_patch_state, \
+    force_tc_id_object_inplace
+from random_walk_package import StateDependentWalker
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw, \
     update_kernels_mapping
-from random_walk_package.bindings.plotter import plot_walk_from_json
 from random_walk_package.core.MixedWalker import *
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
-from random_walk_package import StateDependentWalker
 from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed
-from tests.mixed_walk_test import test_marine_walker, test_time_walker, test_mixed_walk
-from random_walk_package.core.MarineMovement import shark_data_filter
+from tests.mixed_walk_test import test_marine_walker
 
 
 def weather_terrain_params(row):
@@ -61,48 +58,73 @@ def examine_traj_coll_pickle(file, out):
     save_trajectory_collection_timed(traj_col, str(walk_dir))
 
 
+
+
+
 if __name__ == "__main__":
+    import pandas as pd
     """output_file = "/home/omar/PycharmProjects/random-walks-python/tests/cats.pickle"
     examine_traj_coll_pickle(output_file, "output")
     examine_traj_coll_pickle(input_file, "input")
 """
+
+    apply_moveapps_id_dtype_patch()
+    debug_patch_state()
+    import movingpandas as mpd
+    import movingpandas.trajectory_collection as mpd_tc
+
+    print(mpd.TrajectoryCollection.to_point_gdf.__name__)
+    print(mpd_tc.TrajectoryCollection.to_point_gdf.__name__)
+
     input_file = "/home/omar/PycharmProjects/random-walks-python/tests/cats_input.pickle"
     out_dir = "random_walk_package/resources/move_apps"
-    walk_dir = os.path.join(out_dir, "walks")
 
     with open(input_file, "rb") as f:
         traj_col:mpd.TrajectoryCollection = pickle.load(f)
-        save_trajectory_collection_timed(traj_col, f"{str(walk_dir)}/trajectories_timed2.html")
-        exit()
+
+
     # animal type must be set Choice (Terrestrial, aerial or some better name for birds, Marine)
     # also for terrestrial: set behaviour towards water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
     # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
-    walker = StateDependentWalker(data=traj_col, animal_type=Animal.TERRESTRIAL, resolution=300,
-                                  out_directory=out_dir, n_hmm_states=2)  # data can also be a traj collection (MoveApp's input)
+    walker = StateDependentWalker(data=traj_col,
+                                  animal_type=Animal.TERRESTRIAL,
+                                  resolution=150,
+                                  id_col=traj_col.get_traj_id_col(),
+                                  out_directory=out_dir,
+                                  n_hmm_states=2)  # data can also be a traj collection (MoveApp's input)
     # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
     mvm_pol = TimeStepPolicy(60 * 5) # this would be option 1
+    walk_dir = os.path.join(out_dir, "walks")
     traj_coll = walker.generate_walks(out_dir=walk_dir,
                                       dt_tolerance=3.0,
                                       rnge=100,
                                       movement_policy=mvm_pol,
-                                      max_cell_size=20, water_mode=WaterMode.FORBID,
+                                      max_cell_size=5, water_mode=WaterMode.FORBID,
                                       is_brownian=True)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
-    print(traj_col.to_point_gdf().head(20))
-    print(traj_col.to_point_gdf().columns)
-    print(traj_col.to_point_gdf().dtypes)
+
+    id_col = traj_coll.get_traj_id_col()
+    print(traj_coll.trajectories[0].df[id_col].dtype)  # MUSS object sein
+    print(traj_coll.trajectories[0].df[id_col].map(type).value_counts().head())
 
     os.makedirs(walk_dir, exist_ok=True)
-    save_trajectory_collection_timed(traj_coll, str(walk_dir))  # creates leaflet html with TimestampedGeoJson
+    save_trajectory_collection_timed(traj_coll, str(os.path.join(walk_dir, "timed.html")))  # creates leaflet html with TimestampedGeoJson
     pickle_path = os.path.join(walk_dir, "cat_walks.pickle")
-    with gzip.open(pickle_path, 'wb') as f:
-        pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)   # this gets passed to the next MoveApp
-    exit()
-    # test_marine_walker()
-    plot_walk_from_json(
-        "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/tiger_sharks/kernels/204413/.json")
 
-    test_marine_walker()
+    force_tc_id_object_inplace(traj_coll)
+
+    with open(pickle_path, 'wb') as f:
+        pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open(pickle_path, 'rb') as f:
+        traj_collection = pickle.load(f)
+        id_col = traj_collection.get_traj_id_col()
+        print(traj_collection.to_point_gdf().dtypes)
+        print(traj_collection.trajectories[0].df[id_col].dtype)  # MUSS object sein
+        print(traj_collection.trajectories[0].df[id_col].map(type).value_counts().head())
+        s = traj_collection.to_point_gdf()[id_col]
+        print("dtype:", s.dtype, "array:", type(s.array))
+
     exit()
 
     study_path = 'random_walk_package/resources/tiger_sharks/shark_13_filtered.csv'
