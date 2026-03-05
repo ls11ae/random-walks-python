@@ -118,6 +118,10 @@ def merge_traj_collections(original_tc, result_gdf, fill_method="ffill", nearest
     gdf[t_col] = pd.to_datetime(gdf[t_col])
     gdf = gdf.set_index(t_col)
 
+    # restore old column-order
+    orig_cols = original_tc.to_point_gdf().columns
+    gdf = gdf.reindex(columns=orig_cols)
+
     return mpd.TrajectoryCollection(
         gdf,
         traj_id_col=traj_id_col,
