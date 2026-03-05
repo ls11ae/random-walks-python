@@ -1,6 +1,7 @@
 import math
 
-from random_walk_package.core.move_apps_patch import merge_traj_collections
+from random_walk_package.core.move_apps_patch import merge_traj_collections, apply_moveapps_id_dtype_patch, \
+    debug_patch_state, force_tc_id_object_inplace
 import geopandas as gpd
 import movingpandas as mpd
 import numpy as np
@@ -78,6 +79,9 @@ class StateDependentWalker(MixedWalker):
                  lat_col="location-lat",
                  id_col="individual_local_identifier",
                  crs="EPSG:4326"):
+        apply_moveapps_id_dtype_patch()
+        debug_patch_state()
+        force_tc_id_object_inplace(data)
         self.original_data = None
         if isinstance(data, mpd.TrajectoryCollection):
             import copy

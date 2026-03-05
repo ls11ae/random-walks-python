@@ -68,8 +68,7 @@ if __name__ == "__main__":
     examine_traj_coll_pickle(input_file, "input")
 """
 
-    apply_moveapps_id_dtype_patch()
-    debug_patch_state()
+
     import movingpandas as mpd
     import movingpandas.trajectory_collection as mpd_tc
 
@@ -111,7 +110,7 @@ if __name__ == "__main__":
     save_trajectory_collection_timed(traj_coll, str(os.path.join(walk_dir, "timed.html")))  # creates leaflet html with TimestampedGeoJson
     pickle_path = os.path.join(walk_dir, "cat_walks.pickle")
 
-    force_tc_id_object_inplace(traj_coll)
+
 
     with open(pickle_path, 'wb') as f:
         pickle.dump(traj_coll, f, protocol=pickle.HIGHEST_PROTOCOL)
