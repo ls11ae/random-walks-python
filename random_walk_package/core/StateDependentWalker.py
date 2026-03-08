@@ -1,4 +1,5 @@
 import math
+from typing import Any
 
 from random_walk_package.core.move_apps_patch import merge_traj_collections, apply_moveapps_id_dtype_patch, \
     debug_patch_state, force_tc_id_object_inplace
@@ -71,6 +72,97 @@ def resample_kernel_to_grid(K_meter, cell_size, S):
 
     return K_grid / K_grid.sum()
 
+
+def trajectory_segments(steps, max_cell_size, resolution):
+    if len(steps) == 0:
+        return []
+    segments = []
+    max_radius = max_cell_size * resolution / 2.0
+    start_idx = 0
+    ref_x = steps["geo_x"].iloc[0]
+    ref_y = steps["geo_y"].iloc[0]
+
+    for i in range(1, len(steps)):
+        x = steps["geo_x"].iloc[i]
+        y = steps["geo_y"].iloc[i]
+        dist = np.hypot(ref_x - x, ref_y - y)
+        if dist >= max_radius:
+            segments.append((start_idx, i - 1))
+            start_idx = i
+            ref_x, ref_y = x, y
+
+    segments.append((start_idx, len(steps) - 1))
+    return segments
+
+def merge_singletons(segments):
+    if not segments:
+        return segments
+    merged = []
+    i = 0
+    while i < len(segments):
+        s, e = segments[i]
+        if s == e:
+            if merged:
+                ps, pe = merged[-1]
+                merged[-1] = (ps, e)
+            elif i + 1 < len(segments):
+                ns, ne = segments[i + 1]
+                merged.append((s, ne))
+                i += 1
+            else:
+                merged.append((s, e))
+        else:
+            merged.append((s, e))
+        i += 1
+
+    return merged
+
+def make_overlapping(segments):
+    if not segments:
+        return []
+
+    out = [segments[0]]
+    for i in range(1, len(segments)):
+        _, prev_e = out[-1]
+        _, cur_e = segments[i]
+        out.append((prev_e, cur_e))
+    return out
+
+
+def bbox_of_segment(steps, segment):
+    s, e = segment
+    min_lon, min_lat = float("inf"), float("inf")
+    max_lon, max_lat = float("-inf"), float("-inf")
+
+    for i in range(s, e + 1):
+        lon = steps["geo_x"].iloc[i]
+        lat = steps["geo_y"].iloc[i]
+
+        min_lon = min(min_lon, lon)
+        min_lat = min(min_lat, lat)
+        max_lon = max(max_lon, lon)
+        max_lat = max(max_lat, lat)
+
+    return min_lon, min_lat, max_lon, max_lat
+
+
+def padded_utm_bbox(min_lon, min_lat, max_lon, max_lat, padding, max_cell_size):
+    min_utm_x, min_utm_y, zone, hemi = AnimalMovementProcessor.geo_to_utm(min_lat, min_lon)
+    max_utm_x, max_utm_y, _, _ = AnimalMovementProcessor.geo_to_utm(max_lat, max_lon)
+    # metric padding
+    dx = max_utm_x - min_utm_x
+    dy = max_utm_y - min_utm_y
+    pad_x = max(padding * dx, 2 * max_cell_size)
+    pad_y = max(padding * dy, 2 * max_cell_size)
+
+    min_utm_x -= pad_x
+    max_utm_x += pad_x
+    min_utm_y -= pad_y
+    max_utm_y += pad_y
+
+    return (min_utm_x, min_utm_y, max_utm_x, max_utm_y), zone, hemi
+
+
 class StateDependentWalker(MixedWalker):
     def __init__(self, data, animal_type, resolution, out_directory,
                  n_hmm_states=3,
@@ -79,6 +171,7 @@ class StateDependentWalker(MixedWalker):
                  lat_col="location-lat",
                  id_col="individual_local_identifier",
                  crs="EPSG:4326"):
+        print("Version 0.1.7")
         apply_moveapps_id_dtype_patch()
         debug_patch_state()
         force_tc_id_object_inplace(data)
@@ -98,15 +191,6 @@ class StateDependentWalker(MixedWalker):
         else:
             mapping = create_mixed_kernel_parameters(animal_type, 5)
         super().__init__(data, mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs, is_marine)
-
-    @staticmethod
-    def __should_resample(st_utm_x, st_utm_y, en_utm_x, en_utm_y, cell_size, cell_factor=3.0,dist_factor=4.0):
-        if cell_size > cell_factor:
-            return True
-        dx = en_utm_x - st_utm_x
-        dy = en_utm_y - st_utm_y
-        dist = (dx*dx + dy*dy)**0.5
-        return dist > dist_factor
 
 
     def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
@@ -140,114 +224,75 @@ class StateDependentWalker(MixedWalker):
         for animal_id, trajectory in steps_dict.items():
             aid += 1
             steps = trajectory.df
-            steps_df = steps_dict[animal_id].df
-            idx = steps_df.index
+            # segments as index-intervals with overlaps, e.g. [(0, 3), (3, 5), (5, 9)].
+            segments = trajectory_segments(steps, max_cell_size, self.resolution)
+            segments = merge_singletons(segments)
+            segments = make_overlapping(segments)
 
             animal_rows = []
 
-            global_bbox = self.animal_proc.bbox_geo(animal_id)
-
-            # track segment boundaries so we can slice full_path per original segment
-            for i in range(len(idx) - 1):
-                print(f"[{aid-1} | {len(steps_dict)}] : ({i} / {len(idx) - 1})\n")
-                start_lat, start_lon = steps["geo_x"].iloc[i], steps["geo_y"].iloc[i]
-                end_lat, end_lon = steps["geo_x"].iloc[i + 1], steps["geo_y"].iloc[i + 1]
-
-                # geo bbox
-                min_lon = min(start_lon, end_lon)
-                min_lat = min(start_lat, end_lat)
-                max_lon = max(start_lon, end_lon)
-                max_lat = max(start_lat, end_lat)
-                # add padding to geo bbox
-                min_lon, min_lat, max_lon, max_lat = padded_bbox(min_lon, min_lat, max_lon, max_lat, padding=0.0)
+            for segment in segments:
+                min_lon, min_lat, max_lon, max_lat = bbox_of_segment(steps, segment)
                 # convert bbox to UTM
-                min_utm_x, min_utm_y, zone, hemi = AnimalMovementProcessor.geo_to_utm(min_lat, min_lon)
-                max_utm_x, max_utm_y, _, _ = AnimalMovementProcessor.geo_to_utm(max_lat, max_lon)
+                print(f"min_lon: {min_lon}, min_lat: {min_lat}, max_lon: {max_lon}, max_lat: {max_lat}")
+                utm_bbox, zone, hemi = padded_utm_bbox(
+                    min_lon, min_lat, max_lon, max_lat,
+                    padding=0.2,
+                    max_cell_size=max_cell_size
+                )
+                min_utm_x, min_utm_y, max_utm_x, max_utm_y = utm_bbox
+                # regular grid
+                Nx, Ny = AnimalMovementProcessor.grid_shape_from_bbox(utm_bbox, self.resolution)
+                # padded geo bbox
+                min_lat, min_lon = AnimalMovementProcessor.utm_to_geo(min_utm_x, min_utm_y, zone, hemi)
+                max_lat, max_lon = AnimalMovementProcessor.utm_to_geo(max_utm_x, max_utm_y, zone, hemi)
                 epsg_code = 32600 + zone if hemi >= "N" else 32700 + zone
+                # terrain for this segment
+                terrain = None
+                # sample landcover of new bounds
+                if self.animal != Animal.AIRBORNE:
+                    terrain = landcover_to_discrete_ptr(file_path=self.animal_proc.terrain_TIFFs[str(animal_id)],
+                                                        res_x=Nx, res_y=Ny,
+                                                        min_lon=min_lon, min_lat=min_lat,
+                                                        max_lon=max_lon, max_lat=max_lat)
+                cell_size = (max_utm_x - min_utm_x) / Nx
+                cell_size = min(max(cell_size, 1.0), max_cell_size)
 
-                # start coordinates to UTM
-                st_utm_x, st_utm_y,_,_ = AnimalMovementProcessor.geo_to_utm(start_lat, start_lon)
-                en_utm_x, en_utm_y,_,_ = AnimalMovementProcessor.geo_to_utm(end_lat, end_lon)
+                # track segment boundaries so we can slice full_path per original segment
+                seg_start, seg_end = segment
+                for st_idx in range(seg_start, seg_end):
+                    en_idx = st_idx + 1
+                    print(f"[{aid-1} | {len(steps_dict)}] : ({st_idx} / {len(steps) - 1})\n")
+                    start_lon = steps["geo_x"].iloc[st_idx]
+                    start_lat = steps["geo_y"].iloc[st_idx]
+                    end_lon = steps["geo_x"].iloc[en_idx]
+                    end_lat = steps["geo_y"].iloc[en_idx]
 
-                start_time, end_time = steps["time"].iloc[i], steps["time"].iloc[i + 1]
+                    start_time, end_time = steps["time"].iloc[st_idx], steps["time"].iloc[en_idx]
+                    state = min(NUM_STATES - 1, steps["state"].iloc[st_idx])
 
-                state = min(NUM_STATES - 1, steps["state"].iloc[i])
+                    # start coordinates to UTM
+                    st_utm_x, st_utm_y,_,_ = AnimalMovementProcessor.geo_to_utm(start_lat, start_lon)
+                    en_utm_x, en_utm_y,_,_ = AnimalMovementProcessor.geo_to_utm(end_lat, end_lon)
 
-                # upper bound for grid
-                MAX_GRID_CELLS = 1000
-                MAX_CELL_SIZE = max_cell_size
-                max_window_size = MAX_GRID_CELLS * MAX_CELL_SIZE
-
-                dx = abs(en_utm_x - st_utm_x)
-                dy = abs(en_utm_y - st_utm_y)
-                dist = max(dx, dy)
-
-                if dist > max_window_size:
-                    n = int(np.ceil(dist / max_window_size))
-                else:
-                    n = 1
-
-                xs = np.linspace(st_utm_x, en_utm_x, n + 1)
-                ys = np.linspace(st_utm_y, en_utm_y, n + 1)
-                ts = pd.date_range(start=start_time, end=end_time, periods=n + 1)
-
-                for j in range(n):
-                    sub_st_x, sub_st_y = xs[j], ys[j]
-                    sub_en_x, sub_en_y = xs[j + 1], ys[j + 1]
-                    sub_start_time = ts[j]
-                    sub_end_time = ts[j + 1]
-
-                    min_utm_x = min(sub_st_x, sub_en_x)
-                    max_utm_x = max(sub_st_x, sub_en_x)
-                    min_utm_y = min(sub_st_y, sub_en_y)
-                    max_utm_y = max(sub_st_y, sub_en_y)
-
-                    # metric padding
-                    dx = max_utm_x - min_utm_x
-                    dy = max_utm_y - min_utm_y
-                    pad_x = max(0.2 * dx, 2 * MAX_CELL_SIZE)
-                    pad_y = max(0.2 * dy, 2 * MAX_CELL_SIZE)
-
-                    min_utm_x -= pad_x
-                    max_utm_x += pad_x
-                    min_utm_y -= pad_y
-                    max_utm_y += pad_y
-
-                    utm_bbox = (min_utm_x, min_utm_y, max_utm_x, max_utm_y)
-
-                    Nx, Ny = AnimalMovementProcessor.grid_shape_from_bbox(utm_bbox, self.resolution)
-                    Nx = min(Nx, MAX_GRID_CELLS)
-                    Ny = min(Ny, MAX_GRID_CELLS)
-
-                    min_lon, min_lat = AnimalMovementProcessor.utm_to_geo(min_utm_x, min_utm_y, zone, hemi)
-                    max_lon, max_lat = AnimalMovementProcessor.utm_to_geo(max_utm_x, max_utm_y, zone, hemi)
-
-                    terrain = None
-                    # sample landcover of new bounds
-                    if self.animal != Animal.AIRBORNE:
-                        terrain = landcover_to_discrete_ptr(file_path=self.animal_proc.terrain_TIFFs[str(animal_id)],
-                                                            res_x=Nx, res_y=Ny,
-                                                            min_lon=min_lon, min_lat=min_lat,
-                                                            max_lon=max_lon, max_lat=max_lat)
-
-                    cell_size = (max_utm_x - min_utm_x) / Nx
-                    cell_size = min(max(cell_size, 1.0), MAX_CELL_SIZE)
-
+                    # start, end GRID
                     start_x, start_y = AnimalMovementProcessor.utm_to_grid(
                         Nx, Ny, min_utm_x, min_utm_y, max_utm_x, max_utm_y,
-                        sub_st_x, sub_st_y
+                        st_utm_x, st_utm_y
                     )
                     end_x, end_y = AnimalMovementProcessor.utm_to_grid(
                         Nx, Ny, min_utm_x, min_utm_y, max_utm_x, max_utm_y,
-                        sub_en_x, sub_en_y
+                        en_utm_x, en_utm_y
                     )
 
-                    T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), sub_start_time, sub_end_time)
+                    # Walker parameters
+                    T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), start_time, end_time)
                     D = 1 if is_brownian else 8
 
+                    # kernel parameters
                     kernel_radius = int(S * cell_size)
                     kernel_radius = max(rnge, kernel_radius)
-
+                    # kernel
                     clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
                     grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
 
@@ -265,7 +310,6 @@ class StateDependentWalker(MixedWalker):
                                                      terrain=terrain,
                                                      start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
                         kernels_map3d_free(kmap)
-                        terrain_map_free(terrain)
                     else:
                         dp = correlated_walk_init(c_kernels, Nx, Ny,
                                                   T, start_x, start_y)
@@ -276,30 +320,32 @@ class StateDependentWalker(MixedWalker):
                         tensor_free(c_kernels)
 
                     if walk_ptr is not None:
-                        segment = get_walk_points(walk_ptr)
-                        geo_walk = AnimalMovementProcessor.grid_to_geo_walk(segment, utm_bbox, Nx, Ny, epsg_code)
+                        walk_segment = get_walk_points(walk_ptr)
+                        geo_walk = AnimalMovementProcessor.grid_to_geo_walk(walk_segment, utm_bbox, Nx, Ny, epsg_code)
                         times = pd.date_range(
-                            start=sub_start_time,
-                            end=sub_end_time,
+                            start=start_time,
+                            end=end_time,
                             periods=len(geo_walk)
                         )
-                        for (y, x), t in zip(geo_walk, times):
+                        print("geo_walk sample:", geo_walk[:5])
+                        for (lon, lat), t in zip(geo_walk, times):
                             animal_rows.append({
                                 id_col: animal_id,
                                 t_col: t,
-                                "geometry": Point(x, y)
+                                "geometry": Point(lon, lat)
                             })
                         dll.point2d_array_free(walk_ptr)
                     else:
                         animal_rows.append({
                             id_col: animal_id,
-                            t_col: steps["time"].iloc[i],
+                            t_col: steps["time"].iloc[st_idx],
                             "geometry": Point(start_lon, start_lat)
                         })
 
+                terrain_map_free(terrain)
+
             animal_gdf = gpd.GeoDataFrame(animal_rows, geometry="geometry" ,crs="EPSG:4326")
             per_animal_gdfs.append(animal_gdf)
-
 
         # Combine all animals into a single GeoDataFrame and create one TrajectoryCollection
         combined_gdf = pd.concat(per_animal_gdfs, ignore_index=True)

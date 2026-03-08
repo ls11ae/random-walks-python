@@ -1,3 +1,4 @@
+import math
 import os
 from dataclasses import dataclass
 from importlib import resources
@@ -167,8 +168,27 @@ class AnimalMovementProcessor:
 
     @staticmethod
     def geo_to_utm(lat, lon):
-        easting, northing, zone_no, zone_let = utm.from_latlon(lat, lon)
-        return easting, northing, zone_no, zone_let
+        try:
+            if lat is None or lon is None:
+                return None, None, None, None, False
+            lat = float(lat)
+            lon = float(lon)
+            if math.isnan(lat) or math.isnan(lon):
+                return None, None, None, None, False
+            lon = ((lon + 180.0) % 360.0) - 180.0
+            clipped = False
+            if lat > 84.0:
+                lat = 84.0
+                clipped = True
+            elif lat < -80.0:
+                lat = -80.0
+                clipped = True
+            easting, northing, zone_no, zone_let = utm.from_latlon(lat, lon)
+            if clipped:
+                print("[WARNING]: Coordinates clipped to valid UTM range")
+            return easting, northing, zone_no, zone_let
+        except Exception:
+            return None, None, None, None
 
     @staticmethod
     def utm_to_geo(utm_x, utm_y, zone_no, zone_let):
