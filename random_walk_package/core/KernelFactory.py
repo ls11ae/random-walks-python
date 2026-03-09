@@ -23,7 +23,7 @@ class KernelFactory:
                  time_col='timestamp',
                  geom_col='geometry',
                  provided_dir_col='direction',  # degrees
-                 feature_cols=('distance', 'angular_difference', 'speed', 'terrain'),  # additional data from the workflow
+                 feature_cols=('distance', 'angular_diffusivity', 'speed', 'terrain'),  # additional data from the workflow
                  scale=True,
                  num_states=3):
         self.columns = ColumnConfig(id_cols=id_cols,

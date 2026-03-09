@@ -2,26 +2,33 @@ import numpy as np
 from hmmlearn.hmm import GaussianHMM
 from sklearn.mixture import GaussianMixture
 
-from random_walk_package.core.hmm.preprocessing import process_trajectories
+from random_walk_package.core.hmm.preprocessing import process_trajectories, ColumnConfig
 
 
-def apply_hmm(arrays, seq_dfs, n_components=3, columns=None):
-    model = GaussianHMM(
-        n_components=n_components,
-        covariance_type='full',
-        n_iter=200,
-        random_state=42
-    )
-
+def apply_hmm(arrays, seq_dfs, n_components=3, columns:ColumnConfig=None):
     lengths = [arr.shape[0] for arr in arrays]
     stacked = np.vstack(arrays)
+    best_model = None
+    best_score = -np.inf
 
-    # Fit HMM
-    model.fit(stacked, lengths)
+    for seed in range(10):
+        model = GaussianHMM(
+            n_components=n_components,
+            covariance_type="diag",
+            n_iter=500,
+            tol=1e-3,
+            min_covar=1e-2,
+            random_state=seed
+        )
+        model.fit(stacked, lengths)
+        score = model.score(stacked, lengths)
+        if score > best_score:
+            best_score = score
+            best_model = model
 
     # Predict state sequence (0: resting, 1: foraging, 2: traveling)
-    stacked_state_seq = model.predict(stacked)
-    speed_column_index = 0
+    stacked_state_seq = best_model.predict(stacked)
+    speed_column_index = list(columns.feature_cols).index("speed")
     # Sort states by speed
     state_speeds = []
     for k in range(n_components):
@@ -41,7 +48,7 @@ def apply_hmm(arrays, seq_dfs, n_components=3, columns=None):
     # add state column to sequence dataframes
     state_seqs = []
     for arr in arrays:
-        raw_states = model.predict(arr)
+        raw_states = best_model.predict(arr)
         mapped_states = np.array([model_state_mapping[s] for s in raw_states])
         state_seqs.append(mapped_states)
 

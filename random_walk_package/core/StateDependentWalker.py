@@ -1,5 +1,8 @@
 import math
-from typing import Any
+import os
+
+from matplotlib import pyplot as plt
+from pyproj import Transformer
 
 from random_walk_package.core.move_apps_patch import merge_traj_collections, apply_moveapps_id_dtype_patch, \
     debug_patch_state, force_tc_id_object_inplace
@@ -17,7 +20,6 @@ from random_walk_package.bindings.data_structures.kernels import normalize_kerne
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single_kernel
 from random_walk_package.core.MovementPolicy import TimeStepPolicy
-from random_walk_package.data_sources.movebank_adapter import padded_bbox
 
 def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
     dx = start_x - end_x
@@ -145,23 +147,65 @@ def bbox_of_segment(steps, segment):
 
     return min_lon, min_lat, max_lon, max_lat
 
+def utm_zone_from_lon(lon):
+    return int((lon + 180) // 6) + 1
+
+def make_segment_transformer(min_lon, min_lat, max_lon, max_lat):
+    center_lon = 0.5 * (min_lon + max_lon)
+    center_lat = 0.5 * (min_lat + max_lat)
+
+    zone = utm_zone_from_lon(center_lon)
+    hemi = "N" if center_lat >= 0 else "S"
+    epsg = 32600 + zone if hemi == "N" else 32700 + zone
+
+    fwd = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+    inv = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
+
+    return fwd, inv, zone, hemi, epsg
 
 def padded_utm_bbox(min_lon, min_lat, max_lon, max_lat, padding, max_cell_size):
-    min_utm_x, min_utm_y, zone, hemi = AnimalMovementProcessor.geo_to_utm(min_lat, min_lon)
-    max_utm_x, max_utm_y, _, _ = AnimalMovementProcessor.geo_to_utm(max_lat, max_lon)
-    # metric padding
-    dx = max_utm_x - min_utm_x
-    dy = max_utm_y - min_utm_y
-    pad_x = max(padding * dx, 2 * max_cell_size)
-    pad_y = max(padding * dy, 2 * max_cell_size)
+    fwd, inv, zone, hemi, epsg = make_segment_transformer(min_lon, min_lat, max_lon, max_lat)
+    # all bbox corners in same crs
+    corners_lonlat = [
+        (min_lon, min_lat),
+        (min_lon, max_lat),
+        (max_lon, min_lat),
+        (max_lon, max_lat),
+    ]
+    corners_utm = [fwd.transform(lon, lat) for lon, lat in corners_lonlat]
 
-    min_utm_x -= pad_x
-    max_utm_x += pad_x
-    min_utm_y -= pad_y
-    max_utm_y += pad_y
+    xs = [p[0] for p in corners_utm]
+    ys = [p[1] for p in corners_utm]
 
-    return (min_utm_x, min_utm_y, max_utm_x, max_utm_y), zone, hemi
+    min_utm_x = min(xs)
+    max_utm_x = max(xs)
+    min_utm_y = min(ys)
+    max_utm_y = max(ys)
+    pad_x = max((max_utm_x - min_utm_x) * padding, max_cell_size)
+    pad_y = max((max_utm_y - min_utm_y) * padding, max_cell_size)
 
+    utm_bbox = (
+        min_utm_x - pad_x,
+        min_utm_y - pad_y,
+        max_utm_x + pad_x,
+        max_utm_y + pad_y,
+    )
+    return utm_bbox, zone, hemi, epsg, fwd, inv
+
+def grid_to_geo_walk(walk_segment, utm_bbox, width, height, inv_transformer):
+    min_x, min_y, max_x, max_y = utm_bbox
+    result = []
+
+    for x, y in walk_segment:
+        if width <= 1 or height <= 1:
+            result.append((np.nan, np.nan))
+            continue
+        utm_x = min_x + x / (width - 1) * (max_x - min_x)
+        utm_y = max_y - y / (height - 1) * (max_y - min_y)
+        lon, lat = inv_transformer.transform(utm_x, utm_y)
+        result.append((lon, lat))
+
+    return result
 
 class StateDependentWalker(MixedWalker):
     def __init__(self, data, animal_type, resolution, out_directory,
@@ -235,18 +279,18 @@ class StateDependentWalker(MixedWalker):
                 min_lon, min_lat, max_lon, max_lat = bbox_of_segment(steps, segment)
                 # convert bbox to UTM
                 print(f"min_lon: {min_lon}, min_lat: {min_lat}, max_lon: {max_lon}, max_lat: {max_lat}")
-                utm_bbox, zone, hemi = padded_utm_bbox(
+                utm_bbox, zone, hemi, epsg_code, fwd, inv = padded_utm_bbox(
                     min_lon, min_lat, max_lon, max_lat,
                     padding=0.2,
                     max_cell_size=max_cell_size
                 )
+                print(f"utm_bbox: {utm_bbox}")
                 min_utm_x, min_utm_y, max_utm_x, max_utm_y = utm_bbox
                 # regular grid
                 Nx, Ny = AnimalMovementProcessor.grid_shape_from_bbox(utm_bbox, self.resolution)
                 # padded geo bbox
-                min_lat, min_lon = AnimalMovementProcessor.utm_to_geo(min_utm_x, min_utm_y, zone, hemi)
-                max_lat, max_lon = AnimalMovementProcessor.utm_to_geo(max_utm_x, max_utm_y, zone, hemi)
-                epsg_code = 32600 + zone if hemi >= "N" else 32700 + zone
+                min_lon, min_lat = inv.transform(min_utm_x, min_utm_y)
+                max_lon, max_lat = inv.transform(max_utm_x, max_utm_y)
                 # terrain for this segment
                 terrain = None
                 # sample landcover of new bounds
@@ -272,9 +316,8 @@ class StateDependentWalker(MixedWalker):
                     state = min(NUM_STATES - 1, steps["state"].iloc[st_idx])
 
                     # start coordinates to UTM
-                    st_utm_x, st_utm_y,_,_ = AnimalMovementProcessor.geo_to_utm(start_lat, start_lon)
-                    en_utm_x, en_utm_y,_,_ = AnimalMovementProcessor.geo_to_utm(end_lat, end_lon)
-
+                    st_utm_x, st_utm_y = fwd.transform(start_lon, start_lat)
+                    en_utm_x, en_utm_y = fwd.transform(end_lon, end_lat)
                     # start, end GRID
                     start_x, start_y = AnimalMovementProcessor.utm_to_grid(
                         Nx, Ny, min_utm_x, min_utm_y, max_utm_x, max_utm_y,
@@ -285,14 +328,23 @@ class StateDependentWalker(MixedWalker):
                         en_utm_x, en_utm_y
                     )
 
+                    if start_x == end_x and start_y == end_y:
+                        animal_rows.append({
+                            id_col: animal_id,
+                            t_col: steps["time"].iloc[st_idx],
+                            "geometry": Point(start_lon, start_lat)
+                        })
+                        continue
+
                     # Walker parameters
                     T, S = t_pol.resolve((start_x, start_y), (end_x, end_y), start_time, end_time)
+                    T = int(np.ceil(T * 1.5))
                     D = 1 if is_brownian else 8
 
                     # kernel parameters
                     kernel_radius = int(S * cell_size)
-                    kernel_radius = max(rnge, kernel_radius)
-                    # kernel
+                    kernel_radius = min(rnge, kernel_radius)
+
                     clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
                     grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
 
@@ -321,7 +373,7 @@ class StateDependentWalker(MixedWalker):
 
                     if walk_ptr is not None:
                         walk_segment = get_walk_points(walk_ptr)
-                        geo_walk = AnimalMovementProcessor.grid_to_geo_walk(walk_segment, utm_bbox, Nx, Ny, epsg_code)
+                        geo_walk = grid_to_geo_walk(walk_segment, utm_bbox, Nx, Ny, inv)
                         times = pd.date_range(
                             start=start_time,
                             end=end_time,

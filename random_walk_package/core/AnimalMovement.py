@@ -651,6 +651,7 @@ class AnimalMovementProcessor:
         self.traj.add_distance(overwrite=True)
         data_gdf = self.traj.to_point_gdf()
         data_gdf = data_gdf.copy()
+        data_gdf["angular_diffusivity"] = np.abs(np.sin(np.deg2rad(data_gdf["angular_difference"])))
         # local mean utm zone
         mean_lon = data_gdf.geometry.x.mean()
         mean_lat = data_gdf.geometry.y.mean()

@@ -71,44 +71,54 @@ class TimeStepPolicy(MovementPolicy):
         start_time = pd.to_datetime(start_time)
         end_time = pd.to_datetime(end_time)
         start_point = np.array(start_point)
-        end_point= np.array(end_point)
+        end_point = np.array(end_point)
 
-    
-        dt_seconds = int((end_time - start_time).total_seconds())
-        if dt_seconds == 0:
-            dt_seconds = 0.0001
-             
+        dt_seconds = (end_time - start_time).total_seconds()
+        if dt_seconds <= 0:
+            dt_seconds = 1e-4
+
         calculated_speed = np.linalg.norm(end_point - start_point) / dt_seconds
-        if calculated_speed == 0:
-            calculated_speed = 1
+        if calculated_speed <= 0:
+            calculated_speed = 1.0
 
-        if reference_speed is not None :
+        if reference_speed is not None:
             reference_speed /= self.timestep_s
             movement_diffusivity = reference_speed / calculated_speed
             movement_diffusivity = max(1.2, movement_diffusivity)
-            
-        if np.isnan(movement_diffusivity) or np.isinf(movement_diffusivity):
-            movement_diffusivity = 1.5 
-        else: 
-            movement_diffusivity = movement_diffusivity if movement_diffusivity is not None else 1.5
 
-        grid_dist = int(chebyshev(start_point, end_point) * movement_diffusivity)
-        T = max(2, int(np.round(dt_seconds / self.timestep_s)))
-        S = max(1, int(np.round(grid_dist / T)))
+        if movement_diffusivity is None or np.isnan(movement_diffusivity) or np.isinf(movement_diffusivity):
+            movement_diffusivity = 1.5
+
+        grid_dist = manhattan(start_point, end_point) * movement_diffusivity
 
         MAX_S = 30
         MAX_T = 2000
+        MIN_S = 2
+        MIN_T = 3
+
+        T = max(MIN_T, int(np.ceil(dt_seconds / self.timestep_s)))
+        S = max(1, int(np.ceil(grid_dist / T)))
+        if S < MIN_S:
+            S = MIN_S
+            if grid_dist > 0:
+                T = max(MIN_T, int(np.ceil(grid_dist / S)))
+            else:
+                T = MIN_T
 
         if S > MAX_S:
             ratio = S / MAX_S
-            T *= ratio
+            T = int(np.ceil(T * ratio))
             S = MAX_S
+
         if T > MAX_T:
             ratio = T / MAX_T
             T = MAX_T
-            S *= ratio
+            S = int(np.ceil(S * ratio))
 
-        return int(np.ceil(T)), int(S)
+        T = max(MIN_T, min(T, MAX_T))
+        S = max(MIN_S, min(S, MAX_S))
+
+        return int(T), int(S)
 
 class FixedStepsPolicy(MovementPolicy):
     def __init__(self, time_steps):
