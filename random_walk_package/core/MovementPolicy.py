@@ -48,7 +48,7 @@ class TimeStepPolicy(MovementPolicy):
     def __init__(self, timestep_s):
         super().__init__(timestep_s)
 
-    def resolve(self, start_point, end_point, start_time, end_time, reference_speed:Optional[float]= None, movement_diffusivity:Optional[float] = 1.5):
+    def resolve(self, start_point, end_point, start_time, end_time, reference_speed:Optional[float]= None, movement_diffusivity:Optional[float] = 1.5) -> tuple[int, int]:
         """
         Calculate T as number of time steps and S as step size in grid cells
 
@@ -124,14 +124,41 @@ class FixedStepsPolicy(MovementPolicy):
     def __init__(self, time_steps):
         super().__init__(time_steps)
 
-    def resolve(self,
-                start_point,
-                end_point,
-                start_time,
-                end_time,
-                reference_speed:Optional[float]= None, movement_diffusivity:Optional[float] = 1.5
-                ) -> Tuple[int, int]:
-        pass
+    def resolve(
+        self,
+        start_point,
+        end_point,
+        start_time,
+        end_time,
+        reference_speed: Optional[float] = None,
+        movement_diffusivity: Optional[float] = 1.5
+    ) -> Tuple[int, int]:
+        start_time = pd.to_datetime(start_time)
+        end_time = pd.to_datetime(end_time)
+
+        dt_seconds = (end_time - start_time).total_seconds()
+        if dt_seconds <= 0:
+            dt_seconds = 1e-4
+
+        MIN_T = 3
+        MAX_T = 2000
+
+        fixed_T = int(np.ceil(self.timestep_s))
+        fixed_T = max(MIN_T, min(fixed_T, MAX_T))
+
+        effective_timestep_s = dt_seconds / fixed_T
+        if effective_timestep_s <= 0:
+            effective_timestep_s = 1e-4
+
+        tmp_policy = TimeStepPolicy(timestep_s=effective_timestep_s)
+        return tmp_policy.resolve(
+            start_point=start_point,
+            end_point=end_point,
+            start_time=start_time,
+            end_time=end_time,
+            reference_speed=reference_speed,
+            movement_diffusivity=movement_diffusivity,
+        )
 
 class SpeedBasedPolicy(MovementPolicy):
     def __init__(self, timestep_s, base_speed, grid_cell_m):
