@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "random_walk"
-version = "0.1.7"
+version = "0.1.8"
 description = "Random walk package with C backend"
 authors = [
     { name = "Kevin Buchin" },
