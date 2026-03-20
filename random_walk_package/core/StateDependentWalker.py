@@ -1,8 +1,7 @@
 import math
-import os
 
-from matplotlib import pyplot as plt
 from pyproj import Transformer
+from skimage.transform import resize
 
 from random_walk_package.core.move_apps_patch import merge_traj_collections, apply_moveapps_id_dtype_patch, \
     debug_patch_state, force_tc_id_object_inplace
@@ -341,14 +340,28 @@ class StateDependentWalker(MixedWalker):
                     T = int(np.ceil(T * 1.5))
                     D = 1 if is_brownian else 8
 
-                    # kernel parameters
-                    kernel_radius = int(S * cell_size)
-                    kernel_radius = min(rnge, kernel_radius)
+                    if self.animal is Animal.AIRBORNE:
+                        target = 2 * S + 1
+                        grid_kernel = resize(
+                            py_kernels[state],
+                            (target, target),
+                            order=1,
+                            mode="reflect",
+                            anti_aliasing=True,
+                            preserve_range=True
+                        )
+                        grid_kernel = np.maximum(grid_kernel, 0)
+                        grid_kernel /= grid_kernel.sum()
+                    else:
+                        # kernel parameters
+                        kernel_radius = int(S * cell_size)
+                        kernel_radius = min(rnge, kernel_radius)
 
-                    clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
-                    grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
+                        clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
+                        grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
 
                     h, w = grid_kernel.shape
+                    print(f"W{w} : S: {S}\n")
                     assert w == 2 * S + 1 and h == 2 * S + 1
                     c_kernels = correlated_kernels_from_matrix(grid_kernel, w,h, directions=D)
 
