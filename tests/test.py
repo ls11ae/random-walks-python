@@ -75,7 +75,7 @@ if __name__ == "__main__":
     print(mpd.TrajectoryCollection.to_point_gdf.__name__)
     print(mpd_tc.TrajectoryCollection.to_point_gdf.__name__)
 
-    input_file = "/home/omar/PycharmProjects/random-walks-python/tests/catsinput.pickle"
+    input_file = "/home/omar/PycharmProjects/random-walks-python/tests/rubythroat.pickle"
     out_dir = "random_walk_package/resources/move_apps"
 
     with open(input_file, "rb") as f:
@@ -88,20 +88,20 @@ if __name__ == "__main__":
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
     # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
     walker = StateDependentWalker(data=traj_col,
-                                  animal_type=Animal.TERRESTRIAL,
-                                  resolution=300,
+                                  animal_type=Animal.AIRBORNE,
+                                  resolution=600,
                                   id_col=traj_col.get_traj_id_col(),
                                   out_directory=out_dir,
                                   n_hmm_states=2)  # data can also be a traj collection (MoveApp's input)
     # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
-    mvm_pol = TimeStepPolicy(300) # this would be option 1
+    mvm_pol = TimeStepPolicy(3600 * 12) # this would be option 1
     walk_dir = os.path.join(out_dir, "walks")
     traj_coll = walker.generate_walks(out_dir=walk_dir,
                                       dt_tolerance=3.0,
-                                      rnge=100,
+                                      rnge=1000,
                                       movement_policy=mvm_pol,
-                                      max_cell_size=5, water_mode=WaterMode.FORBID,
-                                      is_brownian=True)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
+                                      max_cell_size=100, water_mode=WaterMode.ALLOW,
+                                      is_brownian=False)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
 
     id_col = traj_coll.get_traj_id_col()
     print(traj_coll.trajectories[0].df[id_col].dtype)  # MUSS object sein
