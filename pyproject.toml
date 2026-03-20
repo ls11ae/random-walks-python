@@ -17,7 +17,7 @@ dependencies = [
     "numpy",
     "utm",
     "scipy",
-    "skimage",
+    "scikit-image",
     "hmmlearn",
     "scikit-learn",
     "geopandas",
