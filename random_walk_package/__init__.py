@@ -2,7 +2,7 @@
 # --------------------------------------------------
 # Load the shared library first
 # --------------------------------------------------
-
+from .utils.move_apps_patch import debug_patch_state, apply_moveapps_id_dtype_patch
 from .wrapper import dll
 # --------------------------------------------------
 # Data processing helpers
@@ -108,4 +108,7 @@ __all__ = [
     "MixedWalker",
     "MixedTimeWalker",
     "StateDependentWalker",
+
+    "debug_patch_state",
+    "apply_moveapps_id_dtype_patch"
 ]

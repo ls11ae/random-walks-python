@@ -81,7 +81,7 @@ class MixedWalker:
         for intermediate points, return a single mpd.TrajectoryCollection containing
         all animals.
         """
-        self._process_movebank_data()
+        self.process_movebank_data()
         use_cuda = CUDA_AVAILABLE and self.has_cuda()
         steps_dict = self.animal_proc.create_movement_data_dict()
 

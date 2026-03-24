@@ -506,15 +506,7 @@ class AnimalMovementProcessor:
         serialize_kernel_paths_json(binary_paths, out_directory)
         return binary_paths
 
-    def get_hmm_kernels(self, dt_tolerance, rnge, out_dir=None, num_states=3):
-        """Computes HMM kernels from trajectory data"""
-        self.traj.add_speed(overwrite=True)
-        self.traj.add_direction(overwrite=True)
-        self.traj.add_angular_difference(overwrite=True)
-        self.traj.add_distance(overwrite=True)
-        data_gdf = self.traj.to_point_gdf()
-        data_gdf = data_gdf.copy()
-        data_gdf["angular_diffusivity"] = np.abs(np.sin(np.deg2rad(data_gdf["angular_difference"])))
+    def add_features(self, data_gdf):
         # local mean utm zone
         mean_lon = data_gdf.geometry.x.mean()
         mean_lat = data_gdf.geometry.y.mean()
@@ -540,6 +532,19 @@ class AnimalMovementProcessor:
             crs=TARGET_CRS
         )
         data_gdf_utm.reset_index()
+        return data_gdf_utm
+
+    def get_hmm_kernels(self, dt_tolerance, rnge, out_dir=None, num_states=3):
+        """Computes HMM kernels from trajectory data"""
+        self.traj.add_speed(overwrite=True)
+        self.traj.add_direction(overwrite=True)
+        self.traj.add_angular_difference(overwrite=True)
+        self.traj.add_distance(overwrite=True)
+
+        data_gdf = self.traj.to_point_gdf()
+        data_gdf = data_gdf.copy()
+        data_gdf["angular_diffusivity"] = np.abs(np.sin(np.deg2rad(data_gdf["angular_difference"])))
+        data_gdf_utm = self.add_features(data_gdf)
         # initialize HMM
         hmm_thingy = KernelFactory(data_gdf_utm, id_cols=self.id_col, num_states=num_states)
         # apply HMM to retrieve trajectories annotated with hidden states
