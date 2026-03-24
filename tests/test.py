@@ -2,13 +2,10 @@
 import os.path
 import pickle
 
-from random_walk_package.core.move_apps_patch import apply_moveapps_id_dtype_patch, debug_patch_state, \
-    force_tc_id_object_inplace
-from random_walk_package import StateDependentWalker
+from random_walk_package import StateDependentWalker, FixedStepsPolicy, TimeStepPolicy
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw, \
     update_kernels_mapping
 from random_walk_package.core.MixedWalker import *
-from random_walk_package.core.MovementPolicy import TimeStepPolicy
 from random_walk_package.data_sources.walk_visualization import save_trajectory_collection_timed
 from tests.mixed_walk_test import test_marine_walker
 
@@ -82,26 +79,25 @@ if __name__ == "__main__":
         traj_col:mpd.TrajectoryCollection = pickle.load(f)
         print(traj_col.to_point_gdf().dtypes)
 
-
+    data = pd.read_csv("random_walk_package/resources/leap_of_the_cat/The Leap of the Cat.csv")
     # animal type must be set Choice (Terrestrial, aerial or some better name for birds, Marine)
     # also for terrestrial: set behaviour towards water: 1. completely avoids water, cant cross water bodies 2. water is avoided but some points may be in water in the original dataset, if start in water
     # or must cross water (two points on either sides of a river for example, then it is possible) 3. water is like any other terrain
     # instead of resolution: user can set how fine-grained the walks should be. one step from one grid cell to another as the shortest unit. grid cell size (50m x 50x per cell for example)
-    walker = StateDependentWalker(data=traj_col,
-                                  animal_type=Animal.AIRBORNE,
+    walker = StateDependentWalker(data=data,
+                                  animal_type=Animal.TERRESTRIAL,
                                   resolution=600,
-                                  id_col=traj_col.get_traj_id_col(),
                                   out_directory=out_dir,
                                   n_hmm_states=2)  # data can also be a traj collection (MoveApp's input)
     # 3 options to determine number of steps and step size in grid: 1. specify 1 step every x seconds 2. fixed number of steps 3. automatic calculation but reference speed of animal must be provided
-    mvm_pol = TimeStepPolicy(3600 * 12) # this would be option 1
+    mvm_pol = TimeStepPolicy(60*60*4) # this would be option 1
     walk_dir = os.path.join(out_dir, "walks")
     traj_coll = walker.generate_walks(out_dir=walk_dir,
-                                      dt_tolerance=3.0,
-                                      rnge=1000,
+                                      dt_tolerance=100.0,
+                                      rnge=50,
                                       movement_policy=mvm_pol,
-                                      max_cell_size=100, water_mode=WaterMode.ALLOW,
-                                      is_brownian=False)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
+                                      max_cell_size=5, water_mode=WaterMode.FORBID,
+                                      is_brownian=True)  # dt tolerance is a threshold to determine if two records belong to the same trajectory. 2 means deviation in time up to double the median delta t are allowed (depends on regularity of dataset, maybe allow automatic detection)
 
     id_col = traj_coll.get_traj_id_col()
     print(traj_coll.trajectories[0].df[id_col].dtype)  # MUSS object sein

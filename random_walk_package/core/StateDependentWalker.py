@@ -1,16 +1,17 @@
-import math
-
-from pyproj import Transformer
+from movingpandas import Trajectory
 from skimage.transform import resize
 
-from random_walk_package.core.move_apps_patch import merge_traj_collections, apply_moveapps_id_dtype_patch, \
+from random_walk_package.utils.geo_transformations import padded_utm_bbox, grid_to_geo_walk, grid_shape_from_bbox, \
+    utm_to_grid
+from random_walk_package.utils.move_apps_patch import merge_traj_collections, apply_moveapps_id_dtype_patch, \
     debug_patch_state, force_tc_id_object_inplace
 import geopandas as gpd
 import movingpandas as mpd
 import numpy as np
 import pandas as pd
 from shapely.geometry import Point
-from random_walk_package import MixedWalker, get_walk_points, dll, tensor_free, tensor4D_free, AnimalMovementProcessor
+from random_walk_package import MixedWalker, get_walk_points, dll, tensor_free, tensor4D_free, \
+    FixedStepsPolicy
 from random_walk_package.bindings import kernels_map3d_free, Animal, create_mixed_kernel_parameters, \
     landcover_to_discrete_ptr, WaterMode, terrain_map_free
 from random_walk_package.bindings.correlated_walk import correlated_walk_init, correlated_backtrace
@@ -18,193 +19,10 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.data_structures.kernels import normalize_kernel, clip_kernel, \
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single_kernel
-from random_walk_package.core.MovementPolicy import TimeStepPolicy
+from random_walk_package.utils.trajectory_segmentation import trajectory_segments, merge_singletons, make_overlapping, \
+    bbox_of_segment
+from random_walk_package.utils.walker_utils import resample_kernel_to_grid, direction_from_points
 
-def direction_from_points(start_x, start_y, end_x, end_y, dirs=8):
-    dx = start_x - end_x
-    dy = start_y - end_y
-
-    if dx == 0 and dy == 0:
-        return 0
-
-    angle_deg = math.degrees(math.atan2(dy, dx))
-    angle_west_deg = (angle_deg - 180.0) % 360.0
-
-    step = 360.0 / dirs
-    return int(round(angle_west_deg / step)) % dirs
-
-
-def bilinear_sample(K, x, y):
-    h, w = K.shape
-
-    x0 = int(np.floor(x))
-    y0 = int(np.floor(y))
-    x1 = x0 + 1
-    y1 = y0 + 1
-
-    # outside kernel -> zero probability
-    if x0 < 0 or y0 < 0 or x1 >= h or y1 >= w:
-        return 0.0
-
-    dx = x - x0
-    dy = y - y0
-
-    return (
-        K[x0, y0] * (1 - dx) * (1 - dy) +
-        K[x1, y0] * dx       * (1 - dy) +
-        K[x0, y1] * (1 - dx) * dy +
-        K[x1, y1] * dx       * dy
-    )
-
-def resample_kernel_to_grid(K_meter, cell_size, S):
-    size = 2 * S + 1
-    center = K_meter.shape[0] // 2
-
-    K_grid = np.zeros((size, size), dtype=float)
-    for i in range(size):
-        for j in range(size):
-            dx_m = (i - S) * cell_size
-            dy_m = (j - S) * cell_size
-
-            x = center + dx_m
-            y = center + dy_m
-
-            K_grid[i, j] = bilinear_sample(K_meter, x, y)
-
-    return K_grid / K_grid.sum()
-
-
-def trajectory_segments(steps, max_cell_size, resolution):
-    if len(steps) == 0:
-        return []
-    segments = []
-    max_radius = max_cell_size * resolution / 2.0
-    start_idx = 0
-    ref_x = steps["geo_x"].iloc[0]
-    ref_y = steps["geo_y"].iloc[0]
-
-    for i in range(1, len(steps)):
-        x = steps["geo_x"].iloc[i]
-        y = steps["geo_y"].iloc[i]
-        dist = np.hypot(ref_x - x, ref_y - y)
-        if dist >= max_radius:
-            segments.append((start_idx, i - 1))
-            start_idx = i
-            ref_x, ref_y = x, y
-
-    segments.append((start_idx, len(steps) - 1))
-    return segments
-
-def merge_singletons(segments):
-    if not segments:
-        return segments
-    merged = []
-    i = 0
-    while i < len(segments):
-        s, e = segments[i]
-        if s == e:
-            if merged:
-                ps, pe = merged[-1]
-                merged[-1] = (ps, e)
-            elif i + 1 < len(segments):
-                ns, ne = segments[i + 1]
-                merged.append((s, ne))
-                i += 1
-            else:
-                merged.append((s, e))
-        else:
-            merged.append((s, e))
-        i += 1
-
-    return merged
-
-def make_overlapping(segments):
-    if not segments:
-        return []
-
-    out = [segments[0]]
-    for i in range(1, len(segments)):
-        _, prev_e = out[-1]
-        _, cur_e = segments[i]
-        out.append((prev_e, cur_e))
-    return out
-
-
-def bbox_of_segment(steps, segment):
-    s, e = segment
-    min_lon, min_lat = float("inf"), float("inf")
-    max_lon, max_lat = float("-inf"), float("-inf")
-
-    for i in range(s, e + 1):
-        lon = steps["geo_x"].iloc[i]
-        lat = steps["geo_y"].iloc[i]
-
-        min_lon = min(min_lon, lon)
-        min_lat = min(min_lat, lat)
-        max_lon = max(max_lon, lon)
-        max_lat = max(max_lat, lat)
-
-    return min_lon, min_lat, max_lon, max_lat
-
-def utm_zone_from_lon(lon):
-    return int((lon + 180) // 6) + 1
-
-def make_segment_transformer(min_lon, min_lat, max_lon, max_lat):
-    center_lon = 0.5 * (min_lon + max_lon)
-    center_lat = 0.5 * (min_lat + max_lat)
-
-    zone = utm_zone_from_lon(center_lon)
-    hemi = "N" if center_lat >= 0 else "S"
-    epsg = 32600 + zone if hemi == "N" else 32700 + zone
-
-    fwd = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
-    inv = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
-
-    return fwd, inv, zone, hemi, epsg
-
-def padded_utm_bbox(min_lon, min_lat, max_lon, max_lat, padding, max_cell_size):
-    fwd, inv, zone, hemi, epsg = make_segment_transformer(min_lon, min_lat, max_lon, max_lat)
-    # all bbox corners in same crs
-    corners_lonlat = [
-        (min_lon, min_lat),
-        (min_lon, max_lat),
-        (max_lon, min_lat),
-        (max_lon, max_lat),
-    ]
-    corners_utm = [fwd.transform(lon, lat) for lon, lat in corners_lonlat]
-
-    xs = [p[0] for p in corners_utm]
-    ys = [p[1] for p in corners_utm]
-
-    min_utm_x = min(xs)
-    max_utm_x = max(xs)
-    min_utm_y = min(ys)
-    max_utm_y = max(ys)
-    pad_x = max((max_utm_x - min_utm_x) * padding, max_cell_size)
-    pad_y = max((max_utm_y - min_utm_y) * padding, max_cell_size)
-
-    utm_bbox = (
-        min_utm_x - pad_x,
-        min_utm_y - pad_y,
-        max_utm_x + pad_x,
-        max_utm_y + pad_y,
-    )
-    return utm_bbox, zone, hemi, epsg, fwd, inv
-
-def grid_to_geo_walk(walk_segment, utm_bbox, width, height, inv_transformer):
-    min_x, min_y, max_x, max_y = utm_bbox
-    result = []
-
-    for x, y in walk_segment:
-        if width <= 1 or height <= 1:
-            result.append((np.nan, np.nan))
-            continue
-        utm_x = min_x + x / (width - 1) * (max_x - min_x)
-        utm_y = max_y - y / (height - 1) * (max_y - min_y)
-        lon, lat = inv_transformer.transform(utm_x, utm_y)
-        result.append((lon, lat))
-
-    return result
 
 class StateDependentWalker(MixedWalker):
     def __init__(self, data, animal_type, resolution, out_directory,
@@ -212,14 +30,14 @@ class StateDependentWalker(MixedWalker):
                  time_col="timestamp",
                  lon_col="location-long",
                  lat_col="location-lat",
-                 id_col="individual_local_identifier",
+                 id_col="individual-local-identifier",
                  crs="EPSG:4326"):
         print("Version 0.1.7")
         apply_moveapps_id_dtype_patch()
         debug_patch_state()
-        force_tc_id_object_inplace(data)
         self.original_data = None
         if isinstance(data, mpd.TrajectoryCollection):
+            force_tc_id_object_inplace(data)
             import copy
             data_copy = copy.deepcopy(data)
             self.original_data = data_copy
@@ -235,38 +53,44 @@ class StateDependentWalker(MixedWalker):
             mapping = create_mixed_kernel_parameters(animal_type, 5)
         super().__init__(data, mapping, resolution, out_directory, time_col, lon_col, lat_col, id_col, crs, is_marine)
 
-
-    def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
-        super()._process_movebank_data()
+    def get_kernels(self, dt_tolerance, rnge, out_dir, is_brownian):
+        super().process_movebank_data()
 
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
-
-        t_col = self.original_data.t
-        id_col = self.original_data.get_traj_id_col()
 
         [corZs, brwZs] = self.animal_proc.get_hmm_kernels(dt_tolerance=dt_tolerance,
                                                           rnge=rnge,
                                                           out_dir=out_dir,
                                                           num_states=self.n_hmm_states)
         Za, Zb, Zc = brwZs if is_brownian and self.animal is not Animal.AIRBORNE else corZs
-        rnge = Za.rnge
         py_kernels = [
             normalize_kernel(Z.Z)
             for Z in [Za, Zb, Zc]
             if Z.Z is not None
-            and np.sum(Z) != 0
+               and np.sum(Z) != 0
         ]
+        return py_kernels
+
+    def get_steps(self):
+        return self.animal_proc.create_movement_data_dict(has_states=True)
+
+    def generate_walks(self, out_dir=None, dt_tolerance=0.5, rnge=200, movement_policy=None, max_cell_size=10, water_mode:WaterMode=WaterMode.AVOID, is_brownian = False):
+        t_col = self.original_data.t
+        id_col = self.original_data.get_traj_id_col()
+
+        py_kernels = self.get_kernels(dt_tolerance, rnge, out_dir, is_brownian)
         NUM_STATES = len(py_kernels)
 
-        t_pol = TimeStepPolicy(timestep_s=20 * 60) if movement_policy is None else movement_policy
+        t_pol = FixedStepsPolicy(20) if movement_policy is None else movement_policy
 
-        steps_dict = self.animal_proc.create_movement_data_dict(has_states=True)
+        steps_dict = self.get_steps()
         per_animal_gdfs = []
         aid = 0
         for animal_id, trajectory in steps_dict.items():
+            print(f"ANIMAL: {animal_id}\n")
             aid += 1
-            steps = trajectory.df
+            steps: Trajectory = trajectory.df
             # segments as index-intervals with overlaps, e.g. [(0, 3), (3, 5), (5, 9)].
             segments = trajectory_segments(steps, max_cell_size, self.resolution)
             segments = merge_singletons(segments)
@@ -286,7 +110,7 @@ class StateDependentWalker(MixedWalker):
                 print(f"utm_bbox: {utm_bbox}")
                 min_utm_x, min_utm_y, max_utm_x, max_utm_y = utm_bbox
                 # regular grid
-                Nx, Ny = AnimalMovementProcessor.grid_shape_from_bbox(utm_bbox, self.resolution)
+                Nx, Ny = grid_shape_from_bbox(utm_bbox, self.resolution)
                 # padded geo bbox
                 min_lon, min_lat = inv.transform(min_utm_x, min_utm_y)
                 max_lon, max_lat = inv.transform(max_utm_x, max_utm_y)
@@ -318,14 +142,17 @@ class StateDependentWalker(MixedWalker):
                     st_utm_x, st_utm_y = fwd.transform(start_lon, start_lat)
                     en_utm_x, en_utm_y = fwd.transform(end_lon, end_lat)
                     # start, end GRID
-                    start_x, start_y = AnimalMovementProcessor.utm_to_grid(
+                    start_x, start_y = utm_to_grid(
                         Nx, Ny, min_utm_x, min_utm_y, max_utm_x, max_utm_y,
                         st_utm_x, st_utm_y
                     )
-                    end_x, end_y = AnimalMovementProcessor.utm_to_grid(
+                    end_x, end_y = utm_to_grid(
                         Nx, Ny, min_utm_x, min_utm_y, max_utm_x, max_utm_y,
                         en_utm_x, en_utm_y
                     )
+
+                    assert start_x < Nx and start_y < Ny
+                    assert end_x < Nx and end_y < Ny
 
                     if start_x == end_x and start_y == end_y:
                         animal_rows.append({
@@ -340,7 +167,7 @@ class StateDependentWalker(MixedWalker):
                     T = int(np.ceil(T * 1.5))
                     D = 1 if is_brownian else 8
 
-                    if self.animal is Animal.AIRBORNE:
+                    if self.animal == Animal.AIRBORNE or self.animal == Animal.MARINE:
                         target = 2 * S + 1
                         grid_kernel = resize(
                             py_kernels[state],

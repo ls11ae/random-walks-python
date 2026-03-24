@@ -110,7 +110,7 @@ def tensor_map_terrain_serialize_time(tensor_set_time, terrain: TerrainMapPtr,
     file = os.path.join(script_dir, 'resources', output_path)
     c_file = file.encode('ascii')
     if mapping is None:
-        mapping = create_mixed_kernel_parameters(animal_type=TERRESTRIAL, base_step_size=7)
+        mapping = create_mixed_kernel_parameters(animal_type=Animal.TERRESTRIAL, base_step_size=7)
     dll.tensor_map_terrain_serialize_time(tensor_set_time, terrain, mapping, c_file)
 
 
@@ -203,6 +203,7 @@ def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
 
 def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon,min_lat, max_lon,max_lat,
                               txt_output_path="terrain_movebank.txt") -> TerrainMapPtr | None:  # type: ignore
+    print(f"Terrain {file_path}\n")
     try:
         # BBox in Lon/Lat
         bbox_lonlat = (min_lon, min_lat, max_lon, max_lat)

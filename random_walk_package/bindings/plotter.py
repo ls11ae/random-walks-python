@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from random_walk_package.bindings import terrain_at
+from random_walk_package.utils.geo_transformations import padded_utm_bbox
+from random_walk_package.utils.trajectory_segmentation import bbox_of_segment
 
 
 def plot_walk(walk_points, terrain_width, terrain_height, title="Walk"):
@@ -224,6 +226,97 @@ def plot_walk_terrain(terrain, walk_points, terrain_width, terrain_height):
     plt.legend()
     plt.show()
 
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from matplotlib import cm
+
+def plot_animal_segments_overview(
+    steps,
+    segments,
+    animal_id=None,
+    show_segment_lines=True,
+    show_step_points=False,
+    use_padded_bbox=False,
+    max_cell_size=None,
+    resolution=None,
+):
+
+    xs = steps["geo_x"].to_numpy()
+    ys = steps["geo_y"].to_numpy()
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    ax.plot(xs, ys, color="black", linewidth=1.8, alpha=0.8, label="trajectory")
+
+    if show_step_points:
+        ax.scatter(xs, ys, s=10, color="black", alpha=0.5)
+
+    # Start/Ende der gesamten Trajektorie
+    ax.scatter(xs[0], ys[0], s=80, color="green", edgecolor="black", zorder=5, label="start")
+    ax.scatter(xs[-1], ys[-1], s=80, color="red", edgecolor="black", zorder=5, label="end")
+
+    cmap = cm.get_cmap("tab20", max(1, len(segments)))
+
+    for i, segment in enumerate(segments):
+        seg_start, seg_end = segment
+        color = cmap(i)
+
+        if show_segment_lines:
+            seg_x = xs[seg_start:seg_end + 1]
+            seg_y = ys[seg_start:seg_end + 1]
+            ax.plot(seg_x, seg_y, color=color, linewidth=3, alpha=0.95)
+
+            ax.scatter(seg_x[0], seg_y[0], s=45, color=color, edgecolor="black", zorder=6)
+            ax.scatter(seg_x[-1], seg_y[-1], s=45, color=color, marker="s", edgecolor="black", zorder=6)
+
+        # Box bestimmen
+        if not use_padded_bbox:
+            min_lon, min_lat, max_lon, max_lat = bbox_of_segment(steps, segment)
+        else:
+            if max_cell_size is None:
+                raise ValueError("use_padded_bbox=True benötigt max_cell_size")
+            min_lon, min_lat, max_lon, max_lat = bbox_of_segment(steps, segment)
+            utm_bbox, zone, hemi, epsg_code, fwd, inv = padded_utm_bbox(
+                min_lon, min_lat, max_lon, max_lat,
+                padding=0.2,
+                max_cell_size=max_cell_size
+            )
+            min_utm_x, min_utm_y, max_utm_x, max_utm_y = utm_bbox
+            min_lon, min_lat = inv.transform(min_utm_x, min_utm_y)
+            max_lon, max_lat = inv.transform(max_utm_x, max_utm_y)
+
+        rect = Rectangle(
+            (min_lon, min_lat),
+            max_lon - min_lon,
+            max_lat - min_lat,
+            fill=False,
+            edgecolor=color,
+            linewidth=2,
+            linestyle="--",
+            alpha=0.9
+        )
+        ax.add_patch(rect)
+
+        ax.text(
+            min_lon,
+            max_lat,
+            f"S{segment}",
+            color=color,
+            fontsize=10,
+            weight="bold",
+            verticalalignment="bottom"
+        )
+
+    title = f"Animal {animal_id} - {segments}" if animal_id is not None \
+            else "Trajectory with segment boxes"
+    ax.set_title(title)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.legend()
+    ax.set_aspect("equal", adjustable="box")
+    plt.tight_layout()
+    plt.show()
 
 def plot_walk_multistep(steps, walk_points, terrain_width, terrain_height):
     if walk_points is not None:

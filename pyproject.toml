@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "random_walk"
-version = "0.2.1"
+version = "0.2.2"
 description = "Random walk package with C backend"
 authors = [
     { name = "Kevin Buchin" },
@@ -36,6 +36,7 @@ dependencies = [
     "folium",
     "pytest",
     "pytest-cov",
+    "ipykernel>=6.31.0",
 ]
 
 [tool.scikit-build]
