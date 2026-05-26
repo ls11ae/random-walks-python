@@ -5,7 +5,7 @@ import numpy as np
 
 from random_walk_package import create_gaussian_kernel, MatrixPtr
 from random_walk_package.bindings.data_structures.kernels import kernel_from_array
-from random_walk_package.bindings.mixed_walk import mix_backtrace, mix_walk
+from random_walk_package.bindings.mixed_walk import mix_backtrace, mix_utilization_distribution, mix_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
 
 logger = logging.getLogger(__name__)
@@ -111,6 +111,24 @@ class WalkerHelper:
         except Exception as e:
             logger.error(f"Failed to backtrace walk segment: {e}")
             raise
+        
+    @staticmethod
+    def generate_utilization_distribution(dp_matrix: Any, T: int, tensor_map: Any, terrain: Any,
+                                 end_x: int, end_y: int, kernel_mapping: Any,
+                                 use_serialization: bool = False):
+
+        W = terrain.contents.width
+        H = terrain.contents.height
+
+        return mix_utilization_distribution(
+                dp_matrix, T, tensor_map, terrain,
+                end_x, end_y, use_serialization, "", "", kernel_mapping
+            )
+        
+        # Validate end position
+        if not (0 <= end_x < W and 0 <= end_y < H):
+            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
+                             f"for grid {W}x{H}")
 
     @staticmethod
     def generate_multistep_walk(terrain: Any, steps: List[Tuple[int, int]], T: int,
@@ -136,6 +154,7 @@ class WalkerHelper:
         full_path = np.empty((0, 2))
 
         for i in range(len(steps) - 1):
+            print(f"iteration {i} of {len(steps) - 1}", end="\r")
             start_x, start_y = steps[i]
             end_x, end_y = steps[i + 1]
 

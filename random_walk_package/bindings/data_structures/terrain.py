@@ -8,6 +8,12 @@ from random_walk_package.wrapper import dll, script_dir
 from .kernel_terrain_mapping import create_mixed_kernel_parameters
 
 # landcover types
+
+UNKNOWN = -1
+ROCKY_GROUNDS = 1
+GALLERIES = 2
+ANNUALS = 3
+PERENNIALS = 4
 TREE_COVER = 10
 SHRUBLAND = 20
 GRASSLAND = 30
@@ -193,6 +199,20 @@ def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
 
 def terrain_at(terrain, x, y):
     return dll.terrain_at(x, y, terrain)
+
+def numpy_to_terrain_map(landcover_array) -> TerrainMapPtr | None:  # type: ignore
+    try:
+        array_height, array_width = landcover_array.shape
+        terrain_ptr = dll.terrain_map_new(array_width, array_height)
+
+        for y in range(array_height):
+            for x in range(array_width):
+                dll.terrain_set(terrain_ptr, x, y, int(landcover_array[y, x]))
+
+        return terrain_ptr
+    except Exception as e:
+        print(f"Error converting numpy array to terrain map: {e}")
+        return None
 
 
 def landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, max_lat, max_lon, min_lat,

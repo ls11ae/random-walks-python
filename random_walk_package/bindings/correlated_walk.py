@@ -50,7 +50,7 @@ dll.correlated_utilization_distribution.argtypes = [
     c_ssize_t,  # end_y
     c_char_p,  # output_folder
 ]
-dll.correlated_utilization_distribution.restype = POINTER(POINTER(Tensor))
+dll.correlated_utilization_distribution.restype  = POINTER(Tensor)
 
 dll.correlated_multi_step.argtypes = [
     c_ssize_t,  # W

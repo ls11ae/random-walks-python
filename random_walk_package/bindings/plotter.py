@@ -41,6 +41,11 @@ def plot_combined_terrain(terrain, walk_points, terrain_width=None, terrain_heig
     # Define landmark types and their corresponding colors (RGBA format)
     # Opacity (alpha) is set to 0.5 for all, adjust as needed.
     landmark_colors_map = {
+        0: (0.0, 0.0, 0.0, 1),  # UNKNOWN: Transparent/Black
+        1: (1.0, 0.0, 1.0, 1),  # ROCKY_GROUNDS: Purple
+        2: (0.0, 1.0, 1.0, 1),  # GALLERIES: Light Blue
+        3: (0.0, 1.0, 0.0, 1),  # ANNUALS: Dark Green
+        4: (0.0, 0.5, 0.0, 1),  # PERENNIALS: Light Green
         10: (0.0, 0.4, 0.0, 0.5),  # TREE_COVER: Dark Green
         20: (0.5, 0.5, 0.0, 0.5),  # SHRUBLAND: Olive
         30: (0.0, 0.8, 0.0, 0.5),  # GRASSLAND: Light Green
@@ -86,19 +91,18 @@ def plot_combined_terrain(terrain, walk_points, terrain_width=None, terrain_heig
 
     # Plot walk path if provided
     if walk_points is not None and len(walk_points) > 0:
-        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-', label='Path', zorder=2)  # Red path
-        plt.scatter(walk_points[0, 0], walk_points[0, 1],
-                    color='black', s=50, label='Start', zorder=3)  # s for size
-        plt.scatter(walk_points[-1, 0], walk_points[-1, 1],
-                    color='blue', s=50, label='End', zorder=3)  # s for size
+        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-', label='Path', zorder=1)  # Red path
+        # plt.scatter(walk_points[0, 0], walk_points[0, 1],
+        #             color='black', s=50, label='Start', zorder=3)  # s for size
+        # plt.scatter(walk_points[-1, 0], walk_points[-1, 1],
+        #             color='blue', s=50, label='End', zorder=3)  # s for size
 
     # Plot steps if provided
     if steps is not None:
         for i, (x, y) in enumerate(steps):
-            plt.scatter(x, y, s=100, marker='s', color='orange',  # Changed color for visibility
-                        edgecolor='black', zorder=2)
-            plt.text(x, y, str(i), color='black', ha='center',  # Changed text color for visibility
-                     va='center', fontsize=9, zorder=3)
+            plt.scatter(x, y, s=2, marker='o', color='black', zorder=1)
+            # plt.text(x, y, str(i), color='black', ha='center',  # Changed text color for visibility
+            #          va='center', fontsize=9, zorder=3)
 
     # Configure axes and labels
     if title:
@@ -113,6 +117,8 @@ def plot_combined_terrain(terrain, walk_points, terrain_width=None, terrain_heig
     plt.legend(loc='upper right')
     plt.grid(True, linestyle=':', alpha=0.5)  # Optional grid
     plt.gca().set_aspect('equal', adjustable='box')  # Keep aspect ratio
+
+    plt.gca().invert_yaxis()
 
     plt.show()
 

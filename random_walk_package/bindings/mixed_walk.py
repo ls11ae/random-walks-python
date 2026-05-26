@@ -36,6 +36,22 @@ dll.m_walk_backtrace.argtypes = [
 ]
 dll.m_walk_backtrace.restype = Point2DArrayPtr
 
+dll.m_utilization_distribution.argtypes = [
+    POINTER(TensorPtr),
+    c_ssize_t,
+    TensorMapPtr,
+    TerrainMapPtr,
+    KernelParametersMappingPtr,  # mapping
+    c_ssize_t,
+    c_ssize_t,
+    c_ssize_t,
+    c_bool,
+    c_char_p,
+    c_char_p
+]
+dll.m_utilization_distribution.restype = POINTER(TensorPtr)
+
+
 dll.mixed_walk_time_compact.argtypes = [
     c_ssize_t,  # W
     c_ssize_t,  # H
@@ -154,6 +170,13 @@ def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bo
     walk_np = get_walk_points(walk_c)
     point2d_arr_free(walk_c)
     return walk_np
+
+
+def mix_utilization_distribution(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bool = False, serialize_path: str = "",
+                  dp_dir: str = "", mapping=None):
+    if mapping is None:
+        mapping = create_mixed_kernel_parameters(MEDIUM, 7)
+    return dll.m_utilization_distribution(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, 0, serialize, serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
 
 
 def time_walk_init(W, H, terrain, tensormap, T, start_x, start_y, use_serialized=False, serialization_path='',

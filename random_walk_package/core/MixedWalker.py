@@ -179,7 +179,32 @@ class MixedWalker:
     def generate_custom_walks(terrain, steps, T, kernel_mapping, plot=False, plot_title="Mixed Walk"):
         tensor_map = get_tensor_map_terrain(terrain, kernel_mapping)
         walk = WalkerHelper.generate_multistep_walk(terrain, steps, T, kernel_mapping, tensor_map)
+        print(f"Generated walk with {len(walk)} points.")
+        
         kernels_map3d_free(tensor_map)
         if plot:
             plot_combined_terrain(terrain=terrain, walk_points=walk, steps=steps, title="Mixed Walk")
         return walk
+    
+    
+    @staticmethod
+    def generate_utilization_distribution(terrain, start_x, start_y, end_x, end_y, T, kernel_mapping, plot=False, plot_title="Mixed Walk"):
+        tensor_map = get_tensor_map_terrain(terrain, kernel_mapping)
+        
+        density_map = WalkerHelper.generate_single_segment(terrain, start_x, start_y, T, kernel_mapping, tensor_map)
+        
+        utilization_map = WalkerHelper.generate_utilization_distribution(density_map, T, tensor_map, terrain, end_x, end_y, kernel_mapping)
+        
+        kernels_map3d_free(tensor_map)
+        dll.tensor4D_free(density_map, T)
+        
+        return utilization_map
+
+        # walk = WalkerHelper.generate_multistep_walk(density_map, T, tensor_map, terrain, end_x, end_y, kernel_mapping)
+        # print(f"Generated walk with {len(walk)} points.")
+        
+        # kernels_map3d_free(tensor_map)
+        # if plot:
+        #     plot_combined_terrain(terrain=terrain, walk_points=walk, steps=steps, title="Mixed Walk")
+        # return walk
+

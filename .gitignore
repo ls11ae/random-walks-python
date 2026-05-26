@@ -14,3 +14,11 @@ random-walks
 build/.ninja_deps
 build/.skbuild-info.json
 build/cmake_install.cmake
+
+*.pyc
+*.png
+*.tif
+*.csv
+csv_out*
+.github
+*.bin
