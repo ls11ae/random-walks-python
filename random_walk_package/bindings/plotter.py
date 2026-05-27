@@ -3,6 +3,7 @@ import json
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
 
 from random_walk_package.bindings import terrain_at
 
@@ -11,7 +12,8 @@ def plot_walk(walk_points, terrain_width, terrain_height, title="Walk"):
     if walk_points is not None:
         plt.ylim(-1, terrain_height)
         plt.xlim(-1, terrain_width)
-        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-o', markersize=4, linewidth=1, label='Path')  # Line with points
+        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-o', markersize=4, linewidth=1,
+                 label='Path')  # Line with points
         plt.scatter([walk_points[0, 0]], [walk_points[0, 1]], color='green', label='Start')  # First point
         plt.scatter([walk_points[-1, 0]], [walk_points[-1, 1]], color='blue', label='End')  # Last point
         plt.legend()
@@ -198,157 +200,193 @@ def plot_walk_from_json(json_path, title=None):
     plt.show()
 
 
-def plot_walk_terrain(terrain, walk_points, terrain_width, terrain_height):
-    plt.figure(figsize=(10, 10))
+def ud_isopleth_mask(ud, p=0.95):
+    ud = np.asarray(ud, dtype=float)
+    ud = np.clip(ud, 0, None)
+    s = ud.sum()
+    if s <= 0:
+        return np.zeros_like(ud, dtype=bool), np.nan
 
-    # Convert terrain to NumPy array
-    terrain_array = np.array([[terrain_at(terrain, x, y) for x in range(terrain_width)]
-                              for y in range(terrain_height)])
+    udn = ud / s
+    flat = udn.ravel()
+    idx = np.argsort(flat)[::-1]
+    csum = np.cumsum(flat[idx])
+    k = np.searchsorted(csum, p, side="left")
+    level = flat[idx[k]]
+    mask = (udn >= level)
+    return mask, level
 
-    # Define custom colormap
-    cmap = mcolors.ListedColormap([
-        (0.0, 0.0, 1.0, 0.5),  # Water (blue, 50% opacity)
-        (0.956, 0.643, 0.376, 0.5),  # Desert/Rock (sandybrown, 50% opacity)
-        (0.0, 0.5, 0.0, 0.5)  # Forest (green, 50% opacity)
-    ])
 
-    bounds = [0, 1, 2, 3]  # Define boundaries for each terrain type
+def plot_walk_terrain(
+        terrain,
+        walk_points,
+        terrain_width=None,
+        terrain_height=None,
+        ud=None,
+        ud_p=0.95,
+        show_home_range=True,
+):
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    if terrain_width is None:
+        terrain_width = terrain.width
+        terrain_height = terrain.height
+
+    terrain_array = np.array([
+        [terrain_at(terrain, x, y) for x in range(terrain_width)]
+        for y in range(terrain_height)
+    ], dtype=int)
+
+    landmark_colors_map = {
+        10: (0.0, 0.4, 0.0, 0.5),
+        20: (0.5, 0.5, 0.0, 0.5),
+        30: (0.0, 0.8, 0.0, 0.5),
+        40: (0.6, 0.8, 0.2, 0.5),
+        50: (0.5, 0.5, 0.5, 0.5),
+        60: (0.82, 0.71, 0.55, 0.5),
+        70: (0.9, 0.95, 1.0, 0.5),
+        80: (0.0, 0.0, 1.0, 0.5),
+        90: (0.25, 0.88, 0.82, 0.5),
+        95: (0.0, 0.5, 0.5, 0.5),
+        100: (0.33, 0.42, 0.18, 0.5),
+    }
+
+    classes = sorted(landmark_colors_map.keys())
+    colors = [landmark_colors_map[c] for c in classes]
+    cmap = mcolors.ListedColormap(colors)
+
+    class_to_idx = {c: i for i, c in enumerate(classes)}
+    indexed_terrain = np.vectorize(lambda v: class_to_idx.get(v, -1))(terrain_array)
+
+    bounds = np.arange(len(classes) + 1) - 0.5
     norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
-    # Display terrain as an image with the custom colormap
-    plt.imshow(terrain_array, cmap=cmap, norm=norm, origin='lower',
-               extent=(-0.5, terrain_width - 0.5, -0.5, terrain_height - 0.5))
+    ax.imshow(
+        indexed_terrain,
+        cmap=cmap,
+        norm=norm,
+        origin="lower",
+        extent=(-0.5, terrain_width - 0.5, -0.5, terrain_height - 0.5),
+    )
 
-    if walk_points is not None:
-        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-')  # Red line for the path
-        plt.scatter([walk_points[0, 0]], [walk_points[0, 1]], color='black', label='Start')  # First point
-        plt.scatter([walk_points[-1, 0]], [walk_points[-1, 1]], color='blue', label='End')  # Last point
-
-    plt.title("Walk")
-    plt.xlim(-1, terrain_width)
-    plt.ylim(terrain_height, -1)
-    plt.legend()
-    plt.show()
-
-
-def plot_walk_multistep(steps, walk_points, terrain_width, terrain_height):
-    if walk_points is not None:
-        # Create the plot
-        plt.figure(figsize=(10, 10))
-        plt.ylim(-1, terrain_height)
-        plt.xlim(-1, terrain_width)
-
-        # Plot the path without dots
-        plt.plot(walk_points[:, 0], walk_points[:, 1], 'b-', label='Path')
-
-        # Plot the steps as squares with step indices
-        for i, (x, y) in enumerate(steps):
-            plt.scatter(x, y, s=200, marker='s', color='red', edgecolor='black')  # Square marker
-            plt.text(x, y, str(i), color='white', ha='center', va='center', fontsize=12)  # Step index
-
-        # Add labels and legend
-        plt.xlabel('X')
-        plt.ylabel('Y')
-        plt.title('Correlated Walks with Steps')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+    # ── Home-range contour (optional) ──────────────────────────────────────
+    if show_home_range and ud is not None:
+        mask, level = ud_isopleth_mask(ud, p=ud_p)
+        udn = ud / ud.sum()
+        ax.contour(
+            udn,
+            levels=[level],
+            origin="lower",
+            linewidths=1.2,
+            colors="black",
+            antialiased=False,
+            zorder=10,
+            extent=(-0.5, terrain_width - 0.5, -0.5, terrain_height - 0.5),
+        )
+        # manual legend entry for the contour
+        from matplotlib.lines import Line2D
+        contour_handle = Line2D(
+            [0], [0], color="black", lw=1.2,
+            label=f"{int(ud_p * 100)}% home-range isopleth",
+        )
     else:
-        print("No path generated.")
+        contour_handle = None
 
-# def plot_dp_utilisation_matrix(utilization_distribution, T, W, H):
-#     utilization_array = np.zeros((H, W))
-    
-#     D = utilization_distribution[0][0].len
-    
-    
-#     for y in range(H):
-#         for x in range(W):
-#             utilization_array[y, x] = sum(utilization_distribution[T][0].data[d][0].data.points[y*H + x] for d in range(D))
+    # ── Walk trajectory ─────────────────────────────────────────────────────
+    extra_handles = []
+    if walk_points is not None:
+        walk_points = np.asarray(walk_points, dtype=float)
+        if walk_points.size > 0:
+            if walk_points.ndim == 1:
+                walk_points = walk_points.reshape(1, 2)
 
-    plt.figure(figsize=(10, 8))
-    plt.imshow(utilization_array, cmap='viridis', origin='lower')
-    plt.colorbar(label='Utilization Value')
-    plt.title(f'Utilization Distribution at T={T}')
-    plt.xlabel('X Coordinate')
-    plt.ylabel('Y Coordinate')
+            ax.plot(walk_points[:, 0], walk_points[:, 1], "r-", label="trajectory")
+            ax.scatter(walk_points[0, 0], walk_points[0, 1], color="black", zorder=5, label="Start")
+            ax.scatter(walk_points[-1, 0], walk_points[-1, 1], color="blue", zorder=5, label="End")
+
+    # ── Legend ──────────────────────────────────────────────────────────────
+    legend_handles = [
+        Patch(facecolor=landmark_colors_map[c], edgecolor="black", label=str(c))
+        for c in classes
+    ]
+    if contour_handle is not None:
+        legend_handles.append(contour_handle)
+
+    ax.legend(handles=legend_handles, loc="upper right")
+    ax.set_title("Walk")
+    ax.set_xlim(-1, terrain_width)
+    ax.set_ylim(terrain_height, -1)
+
+    plt.tight_layout()
     plt.show()
-    
-from matplotlib.colors import LogNorm
 
 
 def plot_single_utilisation_matrix(utilization_distribution, T, W, H, level=None):
-
-
-    
     # im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
     plt.figure(figsize=(10, 8))
-    
+
     # levels = [0.01, 0.5, 0.75]
-    vmin = utilization_distribution[utilization_distribution>0].min()
+    vmin = utilization_distribution[utilization_distribution > 0].min()
     vmax = utilization_distribution.max()
     levels = np.logspace(np.log10(vmin), np.log10(vmax), 100)
     CS = plt.contour(utilization_distribution, levels=levels, colors='white', linewidths=1)
-    
+
     plt.imshow(utilization_distribution, cmap='viridis', origin='lower')
-    plt.colorbar(label='Utilization Value', norm=LogNorm())
+    plt.colorbar(label='Utilization Value', norm=mcolors.LogNorm())
     plt.xlabel('X')
     plt.ylabel('Y')
-        
+
     plt.tight_layout()
     plt.show()
-    
-    
 
-    
+
 def plot_dp_utilisation_matrix(utilization_distribution, T, W, H, squish=False, level=None):
     D = utilization_distribution[0][0].len
-    
+
     n_cols = 1
     n_rows = 1
-    
+
     if not squish:
         # Decide subplot grid size (square-ish)
         n_cols = int(np.ceil(np.sqrt(T)))
         n_rows = int(np.ceil(T / n_cols))
-    
-    
+
     if squish:
         utilization_array = np.zeros((H, W))
         for y in range(H):
             for x in range(W):
                 utilization_array[y, x] = sum(
-                    utilization_distribution[t][0].data[d][0].data.points[y*W + x]
+                    utilization_distribution[t][0].data[d][0].data.points[y * W + x]
                     for d in range(D) for t in range(T)
                 ) / T
-        
+
         # im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
         plt.figure(figsize=(10, 8))
-        
+
         # levels = [0.01, 0.5, 0.75]
-        vmin = utilization_array[utilization_array>0].min()
+        vmin = utilization_array[utilization_array > 0].min()
         vmax = utilization_array.max()
         levels = np.logspace(np.log10(vmin), np.log10(vmax), 10)
         CS = plt.contour(utilization_array, levels=levels, colors='white', linewidths=1)
-        
-        plt.imshow(utilization_array, cmap='viridis', origin='lower', norm=LogNorm())
+
+        plt.imshow(utilization_array, cmap='viridis', origin='lower', norm=mcolors.LogNorm())
         plt.colorbar(label='Utilization Value')
         plt.xlabel('X')
         plt.ylabel('Y')
-    
+
     else:
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
         axes = axes.flatten()  # Flatten in case of single row/column
-        
+
         for t in range(T):
             utilization_array = np.zeros((H, W))
             for y in range(H):
                 for x in range(W):
                     utilization_array[y, x] = sum(
-                        utilization_distribution[t][0].data[d][0].data.points[y*W + x]
+                        utilization_distribution[t][0].data[d][0].data.points[y * W + x]
                         for d in range(D)
                     )
-            
+
             ax = axes[t]
             im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
             ax.set_title(f'T={t}')
@@ -360,25 +398,23 @@ def plot_dp_utilisation_matrix(utilization_distribution, T, W, H, squish=False, 
         for i in range(T, len(axes)):
             axes[i].axis('off')  # Completely remove axis, grid, and ticks
             axes[i].set_facecolor('white')  # Optional: ensure background is white
-        
+
     plt.tight_layout()
     plt.show()
     # plt.show(block=False)
     # plt.pause(0.001)
-    
+
 
 def plot_visit_matrix(visit, T, W, H, start_x, start_y, target_area):
     D = visit[0][0].len
-    
+
     n_cols = 1
     n_rows = 1
-    
-    
+
     n_cols = int(np.ceil(np.sqrt(T)))
     n_rows = int(np.ceil(T / n_cols))
-    
-    
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
     axes = axes.flatten()  # Flatten in case of single row/column
     # x = np.arange(W)# - 0.5
     # y = np.arange(H)# - 0.5
@@ -392,87 +428,83 @@ def plot_visit_matrix(visit, T, W, H, start_x, start_y, target_area):
     #     origin='lower'
     # )
     for t in range(T):
-    
+
         utilization_array = np.zeros((H, W))
         for y in range(H):
             for x in range(W):
                 utilization_array[y, x] = sum(
-                    visit[t][0].data[d][0].data.points[y*W + x]
+                    visit[t][0].data[d][0].data.points[y * W + x]
                     for d in range(D)
                 ) / D
-                
+
         ax = axes[t]
-        
-        
-        x = np.arange(W)# - 0.5
-        y = np.arange(H)# - 0.5
+
+        x = np.arange(W)  # - 0.5
+        y = np.arange(H)  # - 0.5
         X, Y = np.meshgrid(x, y)
         mask = np.zeros((H, W), dtype=int)
-        mask[start_y, start_x] = 1 
-        
+        mask[start_y, start_x] = 1
+
         ax.contour(
             X, Y,
-            mask.astype(int),      # convert bool → int
-            levels=[0.5],                 # draw boundary between 0/1
-            colors='Blue',                 # contour color
+            mask.astype(int),  # convert bool → int
+            levels=[0.5],  # draw boundary between 0/1
+            colors='Blue',  # contour color
             linewidths=4,
             origin='lower'
         )
         ax.contour(
             X, Y,
-            target_area.astype(int),      # convert bool → int
-            levels=[0.5],                 # draw boundary between 0/1
-            colors='red',                 # contour color
+            target_area.astype(int),  # convert bool → int
+            levels=[0.5],  # draw boundary between 0/1
+            colors='red',  # contour color
             linewidths=2,
             origin='lower'
         )
-        
-        
+
         im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
         ax.set_title(f'T={t}')
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
 
-        
     # Leave extra axes empty (no data, no axis labels)
     for i in range(T, len(axes)):
         axes[i].axis('off')  # Completely remove axis, grid, and ticks
         axes[i].set_facecolor('white')  # Optional: ensure background is white
-    
+
     # im = ax.imshow(utilization_array, cmap='viridis', origin='lower')
     # print(utilization_array)
-    
+
     plt.figure(figsize=(10, 8))
-    
-    
-    x = np.arange(W)# - 0.5
-    y = np.arange(H)# - 0.5
+
+    x = np.arange(W)  # - 0.5
+    y = np.arange(H)  # - 0.5
     X, Y = np.meshgrid(x, y)
     mask = np.zeros((H, W), dtype=int)
-    mask[start_y, start_x] = 1 
+    mask[start_y, start_x] = 1
     plt.contour(
         X, Y,
-        target_area.astype(int),      # convert bool → int
-        levels=[0.5],                 # draw boundary between 0/1
-        colors='red',                 # contour color
+        target_area.astype(int),  # convert bool → int
+        levels=[0.5],  # draw boundary between 0/1
+        colors='red',  # contour color
         linewidths=2,
         origin='lower'
     )
     plt.contour(
         X, Y,
-        mask.astype(int),      # convert bool → int
-        levels=[0.5],                 # draw boundary between 0/1
-        colors='orange',                 # contour color
+        mask.astype(int),  # convert bool → int
+        levels=[0.5],  # draw boundary between 0/1
+        colors='orange',  # contour color
         linewidths=4,
         origin='lower'
     )
-    
+
     # levels = [0.01, 0.5, 0.75]
-    vmin = utilization_array[utilization_array>0].min()
+    vmin = utilization_array[utilization_array > 0].min()
     vmax = utilization_array.max()
     levels = np.logspace(np.log10(vmin), np.log10(vmax), 10)
     # CS = plt.contour(utilization_array, levels=levels, colors='white', linewidths=1)
-    
+
     plt.imshow(utilization_array, cmap='viridis', origin='lower')
     plt.colorbar(label='Visit Probability')
     plt.xlabel('X')

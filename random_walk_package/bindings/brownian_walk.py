@@ -25,15 +25,6 @@ dll.brownian_backtrace.argtypes = [
 ]
 dll.brownian_backtrace.restype = POINTER(Point2DArray)
 
-dll.brownian_multi_step.argtypes = [
-    c_ssize_t,  # W
-    c_ssize_t,  # H
-    c_ssize_t,  # T
-    POINTER(Matrix),  # kernel
-    POINTER(Point2DArray),  # steps
-]
-dll.brownian_multi_step.restype = POINTER(Point2DArray)
-
 
 ##################### BIASED WALK ######################
 
@@ -99,15 +90,6 @@ def brownian_backtrace(dp_matrix, kernel, end_x, end_y):
     walk_c = dll.brownian_backtrace(dp_matrix, kernel, end_x, end_y)
     walk_np = get_walk_points(walk_c)
     dll.point2d_array_free(walk_c)
-    return walk_np
-
-
-def brownian_backtrace_multiple(kernel, points, time, width, height):
-    array_ptr = create_point2d_array(points)
-    multistep_walk = dll.brownian_multi_step(width, height, time, kernel, array_ptr)
-    walk_np = get_walk_points(multistep_walk)
-    dll.point2d_array_free(multistep_walk)
-    dll.point2d_array_free(array_ptr)
     return walk_np
 
 

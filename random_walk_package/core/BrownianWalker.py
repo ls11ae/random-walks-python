@@ -178,28 +178,6 @@ class BrownianWalker:
             logger.error(f"Failed to backtrace walk: {e}")
             raise
 
-    def multistep_walk(self, steps: typing.Union[np.ndarray, list[tuple[int, int]]], plot=False) -> np.ndarray:
-        """Generate multistep walk
-
-        Args:
-            steps: Array of step points
-            plot: Whether to plot the walk
-
-        Returns:
-            Full path as numpy array
-        """
-        if not self.is_ready_for_walk:
-            raise ValueError("Walker not properly initialized for multistep walk")
-        try:
-            result = brownian_backtrace_multiple(self.kernels, steps, self.T, self.W, self.H)
-            print("dkfj")
-        except Exception as e:
-            logger.error(f"Failed to generate multistep walk: {e}")
-            raise
-        if plot:
-            plot_walk_multistep(steps, result, self.W, self.H)
-        return result
-
     ####################################################################################################################
     ##################################### TERRAIN DEPENDANT BROWNIAN WALKS #############################################
     ####################################################################################################################
@@ -253,7 +231,7 @@ class BrownianWalker:
         try:
             # Use WalkerHelper for the core generation logic
             self.dp_matrix = WalkerHelper.generate_single_segment(
-                self.terrain, start_x, start_y, self.T, self.kernel_mapping,
+                start_x, start_y, self.T, self.kernel_mapping,
                 self.tensor_map, False, ""
             )
             self._is_initialized = True
@@ -290,8 +268,8 @@ class BrownianWalker:
         try:
             # Use WalkerHelper for the core backtrace logic
             walk_np = WalkerHelper.backtrace_single_segment(
-                self.dp_matrix, self.T, self.tensor_map, self.terrain,
-                end_x, end_y, self.kernel_mapping, False
+                self.dp_matrix, self.T, self.terrain,
+                end_x, end_y
             )
 
             logger.info(f"Successfully backtraced walk to ({end_x}, {end_y})")

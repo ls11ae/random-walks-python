@@ -30,37 +30,38 @@ dll.kernel_parameters_mapping_free.argtypes = [KernelParametersMappingPtr]
 dll.kernel_parameters_mapping_free.restype = None
 
 
-
-
-def kernel_mapping_free(kernel_parameters_map: KernelParametersMappingPtr): # pyright: ignore[reportInvalidTypeForm]
+def kernel_mapping_free(kernel_parameters_map: KernelParametersMappingPtr):  # pyright: ignore[reportInvalidTypeForm]
     dll.kernel_parameters_mapping_free(kernel_parameters_map)
 
 
-def create_mixed_kernel_parameters(animal_type: int, base_step_size: int) -> KernelParametersMappingPtr: # pyright: ignore[reportInvalidTypeForm]
+def create_mixed_kernel_parameters(animal_type: int,
+                                   base_step_size: int) -> KernelParametersMappingPtr:  # pyright: ignore[reportInvalidTypeForm]
     return dll.create_default_mixed_mapping(animal_type, base_step_size)
 
 
-def create_brownian_kernel_parameters(animal_type: int, base_step_size: int) -> KernelParametersMappingPtr: # pyright: ignore[reportInvalidTypeForm]
+def create_brownian_kernel_parameters(animal_type: int,
+                                      base_step_size: int) -> KernelParametersMappingPtr:  # pyright: ignore[reportInvalidTypeForm]
     return dll.create_default_brownian_mapping(animal_type, base_step_size)
 
 
-def create_correlated_kernel_parameters(animal_type: int, base_step_size: int) -> KernelParametersMappingPtr: # pyright: ignore[reportInvalidTypeForm]
+def create_correlated_kernel_parameters(animal_type: int,
+                                        base_step_size: int) -> KernelParametersMappingPtr:  # pyright: ignore[reportInvalidTypeForm]
     return dll.create_default_correlated_mapping(animal_type, base_step_size)
 
 
 def set_landmark_mapping(kernel_parameters_map: KernelParametersPtr, landmark: int,
-                         is_brownian: bool, step_size: int, directions: int, diffusity: float,
+                         is_brownian: bool, step_size: int, directions: int, len_diffusity: float = 1.0,
+                         angle_diffusity: float = 0.3,
                          max_bias_x: int | None = None, max_bias_y: int | None = None) -> None:
     if is_brownian:
         directions = 1  # Direction must be 1 for Brownian motion
-        
     kernel_parameters = create_kernel_parameters(is_brownian=is_brownian,
                                                  step_size=step_size,
                                                  directions=directions,
-                                                 diffusity=diffusity,
+                                                 len_diffusity=len_diffusity,
+                                                 angle_diff=angle_diffusity,
                                                  max_bias_x=max_bias_x if max_bias_x is not None else 0,
                                                  max_bias_y=max_bias_y if max_bias_y is not None else 0)
-
     dll.set_landmark_mapping(kernel_parameters_map, landmark, kernel_parameters)
 
 

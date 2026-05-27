@@ -7,9 +7,17 @@ from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll, script_dir
 from .kernel_terrain_mapping import create_mixed_kernel_parameters
 
+
 # landcover types
 
-UNKNOWN = -1
+
+class Animal(enum.IntEnum):
+    AIRBORNE = 0
+    TERRESTRIAL = 1
+    MARINE = 2
+
+
+UNKNOWN = 0
 ROCKY_GROUNDS = 1
 GALLERIES = 2
 ANNUALS = 3
@@ -199,6 +207,7 @@ def get_terrain_map(file, delim) -> TerrainMapPtr:  # type: ignore
 
 def terrain_at(terrain, x, y):
     return dll.terrain_at(x, y, terrain)
+
 
 def numpy_to_terrain_map(landcover_array) -> TerrainMapPtr | None:  # type: ignore
     try:

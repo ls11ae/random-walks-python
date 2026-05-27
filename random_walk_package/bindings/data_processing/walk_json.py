@@ -18,20 +18,6 @@ dll.save_walk_to_json_noterrain.restype = None
 dll.save_walk_to_json_onlywalk.argtypes = [Point2DArrayPtr, c_size_t, c_size_t, c_char_p]
 dll.save_walk_to_json_onlywalk.restype = None
 
-# load from file
-dll.load_full_walk.argtypes = [c_char_p, Point2DArrayPtr, Point2DArrayPtr, TerrainMapPtr]
-dll.load_full_walk.restype = None
-
-dll.load_walk_with_terrain.argtypes = [c_char_p, Point2DArrayPtr, TerrainMapPtr]
-dll.load_walk_with_terrain.restype = None
-
-dll.load_walk_with_steps.argtypes = [c_char_p, Point2DArrayPtr, Point2DArrayPtr]
-dll.load_walk_with_steps.restype = None
-
-dll.load_walk_only.argtypes = [c_char_p, Point2DArrayPtr]
-dll.load_walk_only.restype = None
-
-
 def walk_to_json(walk, json_file: str, steps=None, terrain_map=None, W=None, H=None):
     file = c_char_p(json_file.encode('ascii'))
 

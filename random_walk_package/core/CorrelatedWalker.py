@@ -132,7 +132,7 @@ class CorrelatedWalker:
             logger.error(f"Failed to set kernel: {e}")
             raise
 
-    def generate(self, start_x=None, start_y=None, target_area=None , use_serialization=False):
+    def generate(self, start_x=None, start_y=None, target_area=None, use_serialization=False):
         if self.kernels is None:
             self.set_kernel()
         if start_x is None:
@@ -152,41 +152,41 @@ class CorrelatedWalker:
         dp_folder = _dp_folder_name(self.D, self.W, self.H, self.T, start_x, start_x, False)
         if target_area is None:
             dp_mat = correlated_walk_init(kernel=self.kernels,
-                                        width=self.W,
-                                        height=self.H,
-                                        time=self.T,
-                                        start_x=start_x,
-                                        start_y=start_y,
-                                        use_serialization=use_serialization,
-                                        output_folder=dp_folder)
+                                          width=self.W,
+                                          height=self.H,
+                                          time=self.T,
+                                          start_x=start_x,
+                                          start_y=start_y,
+                                          use_serialization=use_serialization,
+                                          output_folder=dp_folder)
         else:
-            
+
             if target_area.dtype != np.bool_ or target_area.shape != (self.H, self.W):
                 raise ValueError(
                     f"target_area must be a boolean array of shape ({self.H}, {self.W})"
                 )
-            
+
             dp_mat = correlated_walk_visit_probability(kernel=self.kernels,
-                                        width=self.W,
-                                        height=self.H,
-                                        time=self.T,
-                                        start_x=start_x,
-                                        start_y=start_y,
-                                        target_area=target_area.ctypes.data_as(POINTER(c_bool)),
-                                        use_serialization=use_serialization,
-                                        output_folder=dp_folder)
+                                                       width=self.W,
+                                                       height=self.H,
+                                                       time=self.T,
+                                                       start_x=start_x,
+                                                       start_y=start_y,
+                                                       target_area=target_area.ctypes.data_as(POINTER(c_bool)),
+                                                       use_serialization=use_serialization,
+                                                       output_folder=dp_folder)
             return dp_mat
         # save path to serialized dp matrix
         self.dp_matrix = None if use_serialization else dp_mat
         # print(f"DP matrix serialized to: {dp_folder}")
         return dp_folder
-    
+
     # def visit_probability(self, start_x, start_y, end_x, end_y, target_area, dp_folder=None, initial_direction=0, plot=False):
     #     if target_area.dtype != np.bool_ or target_area.shape != (self.H, self.W):
     #         raise ValueError(
     #             f"target_area must be a boolean array of shape ({self.H}, {self.W})"
     #         )
-        
+
     #     visit_probability = visit_probability_calculation(dp_mat=self.dp_matrix if dp_folder is None else None,
     #                                 T=self.T, kernels=self.kernels,
     #                                 start_x=start_x, start_y=start_y,
@@ -197,19 +197,18 @@ class CorrelatedWalker:
     #     # if plot:
     #     #     plot_utilization(utilization_distribution, self.W, self.H, title="Correlated Walk")
     #     return visit_probability
-    
+
     def utilize(self, end_x, end_y, dp_folder=None, initial_direction=0, plot=False):
-        utilization_distribution = correlated_utilization_distribution(dp_mat=self.dp_matrix if dp_folder is None else None,
-                                    T=self.T, kernels=self.kernels,
-                                    end_x=end_x, end_y=end_y,
-                                    direction=initial_direction,
-                                    use_serialization=dp_folder is not None,
-                                    dp_folder=dp_folder)
+        utilization_distribution = correlated_utilization_distribution(
+            dp_mat=self.dp_matrix if dp_folder is None else None,
+            T=self.T, kernels=self.kernels,
+            end_x=end_x, end_y=end_y,
+            direction=initial_direction,
+            use_serialization=dp_folder is not None,
+            dp_folder=dp_folder)
         # if plot:
         #     plot_utilization(utilization_distribution, self.W, self.H, title="Correlated Walk")
         return utilization_distribution
-
-   
 
     def backtrace(self, end_x, end_y, dp_folder=None, initial_direction=0, plot=False):
         walk = correlated_backtrace(dp_mat=self.dp_matrix if dp_folder is None else None,
@@ -303,7 +302,7 @@ class CorrelatedWalker:
         try:
             # Use WalkerHelper for the core generation logic
             self.dp_matrix = WalkerHelper.generate_single_segment(
-                self.terrain, start_x, start_y, self.T, self.kernel_mapping,
+                start_x, start_y, self.T, self.kernel_mapping,
                 self.tensor_map, use_serialization, dp_folder
             )
             self._is_initialized = True
@@ -343,8 +342,8 @@ class CorrelatedWalker:
         try:
             # Use WalkerHelper for the core backtrace logic
             walk_np = WalkerHelper.backtrace_single_segment(
-                self.dp_matrix, self.T, self.tensor_map, self.terrain,
-                end_x, end_y, self.kernel_mapping, use_serialization
+                self.dp_matrix, self.T, self.terrain,
+                end_x, end_y
             )
 
             logger.info(f"Successfully backtraced walk to ({end_x}, {end_y})")

@@ -3,7 +3,9 @@ from typing import Optional, Any, Tuple, List
 
 import numpy as np
 
-from random_walk_package import create_gaussian_kernel, MatrixPtr
+from random_walk_package import create_gaussian_kernel, MatrixPtr, KernelParametersMapping, KernelParametersMappingPtr, \
+    Reachability
+from random_walk_package.bindings.data_structures.kernel_context import kernel_context_pool
 from random_walk_package.bindings.data_structures.kernels import kernel_from_array
 from random_walk_package.bindings.mixed_walk import mix_backtrace, mix_utilization_distribution, mix_walk
 from random_walk_package.bindings.plotter import plot_combined_terrain
@@ -32,26 +34,12 @@ class WalkerHelper:
             raise ValueError(f"Invalid step size: {S}")
 
     @staticmethod
-    def generate_single_segment(terrain: Any, start_x: int, start_y: int, T: int,
-                                kernel_mapping: Any, tensor_map: Any, use_serialization: bool = False,
-                                dp_folder: Optional[str] = None) -> Any:
-        """Generate a single walk segment from terrain data.
+    def generate_single_segment(kernel_context,
+                                T: int,
+                                start_x: int, start_y) -> Any:
 
-        Args:
-            terrain: Terrain map
-            start_x: Starting X coordinate
-            start_y: Starting Y coordinate
-            T: Time steps
-            kernel_mapping: Kernel mapping parameters
-            tensor_map: Tensor map for terrain
-            use_serialization: Whether to use serialized data
-            dp_folder: Folder for serialized data
-
-        Returns:
-            DP matrix for the walk segment
-        """
-        W = terrain.contents.width
-        H = terrain.contents.height
+        W = kernel_context.contents.terrain.contents.width
+        H = kernel_context.contents.terrain.contents.height
 
         # Validate start position
         if not (0 <= start_x < W and 0 <= start_y < H):
@@ -59,9 +47,9 @@ class WalkerHelper:
                              f"for terrain {W}x{H}")
 
         try:
+
             dp_matrix = mix_walk(
-                W, H, terrain, tensor_map, T,
-                start_x, start_y, use_serialization, True, dp_folder, kernel_mapping
+                kernel_context, T, start_x, start_y
             )
             logger.info(f"Successfully generated walk segment from terrain, start=({start_x}, {start_y})")
             return dp_matrix
@@ -70,9 +58,8 @@ class WalkerHelper:
             raise
 
     @staticmethod
-    def backtrace_single_segment(dp_matrix: Any, T: int, tensor_map: Any, terrain: Any,
-                                 end_x: int, end_y: int, kernel_mapping: Any,
-                                 use_serialization: bool = False) -> np.ndarray:
+    def backtrace_single_segment(dp_matrix: Any, T: int, kernel_context,
+                                 end_x: int, end_y: int) -> np.ndarray:
         """Backtrace a single walk segment from terrain data.
 
         Args:
@@ -88,6 +75,7 @@ class WalkerHelper:
         Returns:
             numpy array of walk points
         """
+        terrain = kernel_context.contents.terrain
         W = terrain.contents.width
         H = terrain.contents.height
 
@@ -98,8 +86,7 @@ class WalkerHelper:
 
         try:
             walk_np = mix_backtrace(
-                dp_matrix, T, tensor_map, terrain,
-                end_x, end_y, use_serialization, "", "", kernel_mapping
+                dp_matrix, T, kernel_context, end_x, end_y
             )
 
             if walk_np is None:
@@ -111,47 +98,27 @@ class WalkerHelper:
         except Exception as e:
             logger.error(f"Failed to backtrace walk segment: {e}")
             raise
-        
-    @staticmethod
-    def generate_utilization_distribution(dp_matrix: Any, T: int, tensor_map: Any, terrain: Any,
-                                 end_x: int, end_y: int, kernel_mapping: Any,
-                                 use_serialization: bool = False):
 
-        W = terrain.contents.width
-        H = terrain.contents.height
+    @staticmethod
+    def generate_utilization_distribution(DP_Matrix: Any,
+                                          T: Any,
+                                          kernel_context: Any,
+                                          end_x: Any,
+                                          end_y: Any):
 
         return mix_utilization_distribution(
-                dp_matrix, T, tensor_map, terrain,
-                end_x, end_y, use_serialization, "", "", kernel_mapping
-            )
-        
-        # Validate end position
-        if not (0 <= end_x < W and 0 <= end_y < H):
-            raise ValueError(f"End position ({end_x}, {end_y}) out of bounds "
-                             f"for grid {W}x{H}")
+            DP_Matrix, T, kernel_context, end_x, end_y
+        )
 
     @staticmethod
-    def generate_multistep_walk(terrain: Any, steps: List[Tuple[int, int]], T: int,
-                                kernel_mapping: Any, tensor_map: Any, plot: bool = False,
+    def generate_multistep_walk(steps: List[Tuple[int, int]], T: int,
+                                kernel_context, plot: bool = False,
                                 plot_title: str = "Correlated Walk on terrain with multiple steps") -> np.ndarray:
-        """Generate a multistep walk from terrain data.
-
-        Args:
-            terrain: Terrain map
-            steps: List of step points as (x, y) tuples
-            T: Time steps
-            kernel_mapping: Kernel mapping parameters
-            tensor_map: Tensor map for terrain
-            plot: Whether to plot the walk
-            plot_title: Title of the plot
-
-        Returns:
-            numpy array of walk points
-        """
         if len(steps) < 2:
             raise ValueError("At least two steps are required for multistep walk")
 
         full_path = np.empty((0, 2))
+        terrain = kernel_context.contents.terrain
 
         for i in range(len(steps) - 1):
             print(f"iteration {i} of {len(steps) - 1}", end="\r")
@@ -160,12 +127,12 @@ class WalkerHelper:
 
             # Generate segment
             dp_matrix = WalkerHelper.generate_single_segment(
-                terrain, start_x, start_y, T, kernel_mapping, tensor_map
+                kernel_context, T, start_x, start_y
             )
 
             # Backtrace segment
             segment = WalkerHelper.backtrace_single_segment(
-                dp_matrix, T, tensor_map, terrain, end_x, end_y, kernel_mapping
+                dp_matrix, T, terrain, end_x, end_y
             )
             full_path = np.vstack((full_path, segment[:-1]))
 
