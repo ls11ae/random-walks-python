@@ -23,100 +23,269 @@ def plot_walk(walk_points, terrain_width, terrain_height, title="Walk"):
         print("No path generated.")
 
 
-def plot_combined_terrain(terrain, walk_points, terrain_width=None, terrain_height=None, steps=None, title=None):
-    plt.figure(figsize=(10, 10))
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
-    # Convert terrain data (using the provided terrain_at_func) to a NumPy array
-    # The terrain_at_func is expected to return integer values from the landmarkType enum
+
+def plot_combined_terrain(
+    terrain,
+    walk_points,
+    terrain_width=None,
+    terrain_height=None,
+    steps=None,
+    title=None,
+    ax=None,
+    show=True,
+    save_path=None,
+):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 10))
+    else:
+        fig = ax.figure
+
     if terrain_width is None or terrain_height is None:
         terrain_width = terrain.contents.width
         terrain_height = terrain.contents.height
+
     try:
-        terrain_array = np.array([[terrain_at(terrain, x, y) for x in range(terrain_width)]
-                                  for y in range(terrain_height)])
+        terrain_array = np.array([
+            [terrain_at(terrain, x, y) for x in range(terrain_width)]
+            for y in range(terrain_height)
+        ])
     except Exception as e:
         print(f"Error generating terrain_array with terrain_at_func: {e}")
-        print(
-            "Ensure terrain_at_func correctly accesses terrain with x, y coordinates and returns landmarkType values.")
+        print("Ensure terrain_at_func correctly accesses terrain with x, y coordinates and returns landmarkType values.")
         return
 
-    # Define landmark types and their corresponding colors (RGBA format)
-    # Opacity (alpha) is set to 0.5 for all, adjust as needed.
     landmark_colors_map = {
-        10: (0.0, 0.4, 0.0, 0.5),  # TREE_COVER: Dark Green
-        20: (0.5, 0.5, 0.0, 0.5),  # SHRUBLAND: Olive
-        30: (0.0, 0.8, 0.0, 0.5),  # GRASSLAND: Light Green
-        40: (0.6, 0.8, 0.2, 0.5),  # CROPLAND: Yellow-Green
-        50: (0.5, 0.5, 0.5, 0.5),  # BUILT_UP: Grey
-        60: (0.82, 0.71, 0.55, 0.5),  # SPARSE_VEGETATION: Tan/Light Brown
-        70: (0.9, 0.95, 1.0, 0.5),  # SNOW_AND_ICE: Very Light Blue / White
-        80: (0.0, 0.0, 1.0, 0.5),  # WATER: Blue
-        90: (0.25, 0.88, 0.82, 0.5),  # HERBACEOUS_WETLAND: Aquamarine/Turquoise
-        95: (0.0, 0.5, 0.5, 0.5),  # MANGROVES: Teal
-        100: (0.33, 0.42, 0.18, 0.5)  # MOSS_AND_LICHEN: Dark Olive Green / Brownish Green
+        10: (0.0, 0.4, 0.0, 0.99),
+        #20: (0.5, 0.5, 0.0, 0.8),
+        30: (0.0, 0.8, 0.0, 0.99),
+        40: (0.6, 0.8, 0.2, 0.99),
+        50: (0.5, 0.5, 0.5, 0.99),
+        60: (0.82, 0.71, 0.55, 0.99),
+        #70: (0.9, 0.95, 1.0, 0.8),
+        80: (0.0, 0.0, 1.0, 0.7),
+        90: (0.45, 0.62, 0.52, 1.0),
+        #95: (0.0, 0.5, 0.5, 0.8),
+        #100: (0.33, 0.42, 0.18, 0.8),
     }
 
-    # Get sorted list of landmark values and corresponding colors
-    # These are the exact values expected in the terrain_array
+    landmark_labels = {
+        10: "Tree cover",
+        #20: "Shrubland",
+        30: "Grassland",
+        40: "Cropland",
+        50: "Built-up",
+        60: "Sparse vegetation",
+        #70: "Snow and ice",
+        80: "Water",
+        90: "Herbaceous wetland",
+        #95: "Mangroves",
+        #100: "Moss and lichen",
+    }
+
     sorted_landmark_values = sorted(landmark_colors_map.keys())
     cmap_colors_list = [landmark_colors_map[val] for val in sorted_landmark_values]
 
-    # Create bounds for BoundaryNorm
-    # The bounds ensure that each specific landmark value gets its designated color
-    plot_bounds = []
-    if not sorted_landmark_values:  # Handle empty landmark list
-        cmap = mcolors.ListedColormap([(0, 0, 0, 0)])  # transparent
+    if not sorted_landmark_values:
+        cmap = mcolors.ListedColormap([(0, 0, 0, 0)])
         norm = mcolors.BoundaryNorm([0, 1], cmap.N)
-    elif len(sorted_landmark_values) == 1:  # Handle single landmark type
-        plot_bounds = [sorted_landmark_values[0] - 0.5, sorted_landmark_values[0] + 0.5]
+    elif len(sorted_landmark_values) == 1:
+        bounds = [
+            sorted_landmark_values[0] - 0.5,
+            sorted_landmark_values[0] + 0.5,
+        ]
         cmap = mcolors.ListedColormap([cmap_colors_list[0]])
-        norm = mcolors.BoundaryNorm(plot_bounds, cmap.N)
+        norm = mcolors.BoundaryNorm(bounds, cmap.N)
     else:
-        plot_bounds.append(sorted_landmark_values[0] - 0.5)  # Lower bound for the first color
+        bounds = [sorted_landmark_values[0] - 0.5]
+
         for i in range(len(sorted_landmark_values) - 1):
-            # Midpoints between consecutive landmark values
-            plot_bounds.append((sorted_landmark_values[i] + sorted_landmark_values[i + 1]) / 2.0)
-        plot_bounds.append(sorted_landmark_values[-1] + 0.5)  # Upper bound for the last color
+            bounds.append(
+                (sorted_landmark_values[i] + sorted_landmark_values[i + 1]) / 2.0
+            )
+
+        bounds.append(sorted_landmark_values[-1] + 0.5)
 
         cmap = mcolors.ListedColormap(cmap_colors_list)
-        norm = mcolors.BoundaryNorm(plot_bounds, cmap.N)
+        norm = mcolors.BoundaryNorm(bounds, cmap.N)
 
-    # Display terrain with coordinate system origin at lower-left
-    plt.imshow(terrain_array, cmap=cmap, norm=norm, origin='lower',
-               extent=(-0.5, terrain_width - 0.5, -0.5, terrain_height - 0.5),
-               interpolation='nearest')  # 'nearest' is good for discrete categories
+    ax.imshow(
+        terrain_array,
+        cmap=cmap,
+        norm=norm,
+        origin="lower",
+        extent=(-0.5, terrain_width - 0.5, -0.5, terrain_height - 0.5),
+        interpolation="nearest",
+    )
 
-    # Plot walk path if provided
+    walk_colors = ["black", "red", "blue"]
+    walks = []
     if walk_points is not None and len(walk_points) > 0:
-        plt.plot(walk_points[:, 0], walk_points[:, 1], 'r-', label='Path', zorder=2)  # Red path
-        plt.scatter(walk_points[0, 0], walk_points[0, 1],
-                    color='black', s=50, label='Start', zorder=3)  # s for size
-        plt.scatter(walk_points[-1, 0], walk_points[-1, 1],
-                    color='blue', s=50, label='End', zorder=3)  # s for size
+        try:
+            walk_array = np.asarray(walk_points)
+        except ValueError:
+            walks = [np.asarray(walk) for walk in walk_points]
+        else:
+            if walk_array.ndim == 2:
+                walks = [walk_array]
+            else:
+                walks = [np.asarray(walk) for walk in walk_points]
 
-    # Plot steps if provided
+    if len(walks) > 3:
+        raise ValueError("plot_combined_terrain supports at most 3 walks.")
+
+    for walk_idx, walk in enumerate(walks):
+        if len(walk) == 0:
+            continue
+
+        ax.plot(
+            walk[:, 0],
+            walk[:, 1],
+            color=walk_colors[walk_idx],
+            linewidth=2,
+            label=f"Walk {walk_idx + 1}",
+            zorder=2,
+        )
+
+    non_empty_walks = [walk for walk in walks if len(walk) > 0]
+    if non_empty_walks:
+        first_walk = non_empty_walks[0]
+        ax.scatter(
+            first_walk[0, 0],
+            first_walk[0, 1],
+            color="lime",
+            edgecolor="black",
+            s=50,
+            label="Start",
+            zorder=3,
+        )
+
+        ax.scatter(
+            first_walk[-1, 0],
+            first_walk[-1, 1],
+            color="white",
+            edgecolor="black",
+            s=50,
+            label="End",
+            zorder=3,
+        )
+    step_color = "#D08A00"
     if steps is not None:
         for i, (x, y) in enumerate(steps):
-            plt.scatter(x, y, s=100, marker='s', color='orange',  # Changed color for visibility
-                        edgecolor='black', zorder=2)
-            plt.text(x, y, str(i), color='black', ha='center',  # Changed text color for visibility
-                     va='center', fontsize=9, zorder=3)
+            if i == 0 or i == len(steps) - 1:
+                continue
 
-    # Configure axes and labels
-    if title:
-        plt.title(title)
-    else:
-        plt.title("Terrain Map with Path")
+            ax.scatter(
+                x,
+                y,
+                s=100,
+                marker="s",
+                color=step_color,
+                edgecolor="black",
+                zorder=2,
+            )
 
-    plt.xlim(-1, terrain_width)
-    plt.ylim(terrain_height, -1)  # Y-axis inverted to match common array indexing (optional)
-    plt.xlabel("X Coordinate")
-    plt.ylabel("Y Coordinate")
-    plt.legend(loc='upper right')
-    plt.grid(True, linestyle=':', alpha=0.5)  # Optional grid
-    plt.gca().set_aspect('equal', adjustable='box')  # Keep aspect ratio
+            ax.text(
+                x,
+                y,
+                str(i),
+                color="black",
+                ha="center",
+                va="center",
+                fontsize=9,
+                zorder=3,
+            )
 
-    plt.show()
+    classes = sorted(landmark_colors_map.keys())
+
+    legend_handles = [
+        Patch(
+            facecolor=landmark_colors_map[c],
+            edgecolor="black",
+            label=landmark_labels[c],
+        )
+        for c in classes
+    ]
+
+    path_handles = [
+        Line2D(
+            [0],
+            [0],
+            color=walk_colors[i],
+            linewidth=2,
+            label=f"Walk {i + 1}",
+        )
+        for i in range(len(walks))
+    ]
+
+    start_handle = Line2D(
+        [0],
+        [0],
+        marker="o",
+        color="w",
+        markerfacecolor="lime",
+        markeredgecolor="black",
+        markersize=8,
+        label="Start",
+    )
+
+    end_handle = Line2D(
+        [0],
+        [0],
+        marker="o",
+        color="w",
+        markerfacecolor="white",
+        markeredgecolor="black",
+        markersize=8,
+        label="End",
+    )
+
+    ax.legend(
+        handles=legend_handles + path_handles + [start_handle, end_handle],
+        loc="upper left",
+        fontsize=9,
+    )
+
+    ax.set_xlim(-1, terrain_width)
+    ax.set_ylim(terrain_height, -1)
+
+    ax.set_xticks(np.arange(0, terrain_width + 1, 50))
+    ax.set_yticks(np.arange(0, terrain_height + 1, 50))
+
+    ax.tick_params(
+        axis="both",
+        which="both",
+        labelsize=7,
+        colors="gray",
+        length=2,
+        width=0.5,
+    )
+
+    for spine in ax.spines.values():
+        spine.set_color("lightgray")
+        spine.set_linewidth(0.5)
+
+    ax.grid(
+        True,
+        linestyle=":",
+        linewidth=0.5,
+        alpha=0.4,
+    )
+
+    ax.set_aspect("equal", adjustable="box")
+
+    ax.set_title(title)
+    fig.tight_layout()
+    if save_path is not None:
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+    if show:
+        plt.show()
+    return ax
 
 
 def plot_walk_from_json(json_path, title=None):

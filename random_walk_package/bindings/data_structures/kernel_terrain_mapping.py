@@ -29,13 +29,6 @@ dll.get_parameters_of_terrain.restype = KernelParametersPtr
 dll.kernel_parameters_mapping_free.argtypes = [KernelParametersMappingPtr]
 dll.kernel_parameters_mapping_free.restype = None
 
-dll.create_default_marine_mapping.argtypes = [c_int, c_ssize_t, c_float, c_float]
-dll.create_default_marine_mapping.restype = KernelParametersMappingPtr
-
-dll.update_mapping.argtypes = [KernelParametersMappingPtr, c_int, c_int, c_ssize_t, c_float]
-dll.update_mapping.restype = None
-
-
 
 def marine_kernels_baseline_crw(step_size: int, directions: int, angle_diffusity,
                                 len_diffusivity: float) -> KernelParametersMappingPtr:
