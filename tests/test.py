@@ -101,7 +101,7 @@ def crop_terrain_txt(file, points, padding=10, max_padding=50):
 
 
 if __name__ == "__main__":
-    source_file = "random_walk_package/resources/grid_upper_left_400.txt"
+    source_file = "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/grid_upper_left_400.txt"
     points = [(100, 100), (100, 200), (200, 230), (204, 320), (70, 330)]
 
     """points = [
@@ -182,10 +182,10 @@ if __name__ == "__main__":
     m_walk_sets = generate_walks("m_walk", generate_m_walk, backtrace_m_walk)
     m_walk2_sets = generate_walks("m_walk2", generate_m_walk2, backtrace_m_walk2)
 
-    m_walk_png = "tests/m_walk.png"
-    m_walk2_png = "tests/m_walk2.png"
-    comparison_png = "tests/m_walk_comparison.png"
-    comparison2_png = "tests/m_walk_comparison_2.png"
+    m_walk_png = "m_walk.png"
+    m_walk2_png = "m_walk2.png"
+    comparison_png = "m_walk_comparison.png"
+    comparison2_png = "m_walk_comparison_2.png"
 
     plot_combined_terrain(
         terrain,
