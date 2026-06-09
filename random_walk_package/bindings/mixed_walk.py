@@ -19,6 +19,17 @@ dll.m_walk.argtypes = [
     c_char_p]
 dll.m_walk.restype = POINTER(TensorPtr)
 
+dll.m_walk2.argtypes = [
+    c_ssize_t,  # W
+    c_ssize_t,  # H
+    TerrainMapPtr,  # terrain_map
+    TensorMapPtr,  # kernels_map
+    c_ssize_t,  # T
+    c_ssize_t,  # start x
+    c_ssize_t,  # start y
+]
+dll.m_walk2.restype = POINTER(TensorPtr)
+
 dll.tensor_set_free.argtypes = [TensorSetPtr]
 dll.tensor_set_free.restype = None
 
@@ -36,6 +47,17 @@ dll.m_walk_backtrace.argtypes = [
     c_char_p
 ]
 dll.m_walk_backtrace.restype = Point2DArrayPtr
+
+dll.m_walk2_backtrace.argtypes = [
+    POINTER(TensorPtr),
+    c_ssize_t,
+    TensorMapPtr,
+    TerrainMapPtr,
+    c_ssize_t,
+    c_ssize_t,
+    c_ssize_t,
+]
+dll.m_walk2_backtrace.restype = Point2DArrayPtr
 
 dll.mixed_walk_time_compact.argtypes = [
     c_ssize_t,  # W
@@ -126,6 +148,17 @@ def mix_walk(W, H, terrain_map, kernels_map, T, start_x, start_y, serialize: boo
     return result
 
 
+def mix_walk2(W, H, terrain_map, kernels_map, T, start_x, start_y):
+    return dll.m_walk2(
+        c_ssize_t(W),
+        c_ssize_t(H),
+        terrain_map,
+        kernels_map,
+        c_ssize_t(T),
+        c_ssize_t(start_x),
+        c_ssize_t(start_y))
+
+
 def mix_backtrace_c(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bool = False, serialize_path: str = "",
                     dp_dir: str = "", mapping=None):
     walk_c = dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, 0, serialize,
@@ -139,7 +172,16 @@ def mix_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, serialize: bo
         mapping = create_mixed_kernel_parameters(TERRESTRIAL, 7)
     walk_c = dll.m_walk_backtrace(DP_Matrix, T, tensor_map, terrain, mapping, end_x, end_y, 0, serialize,
                                   serialize_path.encode('utf-8'), dp_dir.encode('utf-8'))
-    if walk_c is None:
+    if not walk_c:
+        raise ValueError("Walk failed to backtrace. Maybe try again with higher T?")
+    walk_np = get_walk_points(walk_c)
+    point2d_arr_free(walk_c)
+    return walk_np
+
+
+def mix_backtrace2(DP_Matrix, T, tensor_map, terrain, end_x, end_y, direction=0):
+    walk_c = dll.m_walk2_backtrace(DP_Matrix, T, tensor_map, terrain, end_x, end_y, direction)
+    if not walk_c:
         raise ValueError("Walk failed to backtrace. Maybe try again with higher T?")
     walk_np = get_walk_points(walk_c)
     point2d_arr_free(walk_c)
