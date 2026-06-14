@@ -4,7 +4,7 @@ import pandas as pd
 from pyproj import Proj
 from scipy.stats import circmean
 
-from random_walk_package.data_sources.geo_fetcher import lonlat_bbox_to_utm, fetch_landcover_data
+from environmentcma import fetch_landcover_data, lonlat_bbox_to_utm
 
 
 def shark_data_filter(data_path):

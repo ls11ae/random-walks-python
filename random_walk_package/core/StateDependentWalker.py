@@ -1,7 +1,7 @@
 from movingpandas import Trajectory
 from skimage.transform import resize
 
-from random_walk_package.utils.geo_transformations import padded_utm_bbox, grid_to_geo_walk, grid_shape_from_bbox, \
+from environmentcma import padded_utm_bbox, grid_to_geo_walk, grid_shape_from_bbox, \
     utm_to_grid
 from random_walk_package.utils.move_apps_patch import merge_traj_collections, apply_moveapps_id_dtype_patch, \
     debug_patch_state, force_tc_id_object_inplace
@@ -19,8 +19,13 @@ from random_walk_package.bindings.data_structures.kernel_terrain_mapping import 
 from random_walk_package.bindings.data_structures.kernels import normalize_kernel, clip_kernel, \
     correlated_kernels_from_matrix
 from random_walk_package.bindings.mixed_walk import single_state_walk, kernels_map_single_kernel
-from random_walk_package.utils.trajectory_segmentation import trajectory_segments, merge_singletons, make_overlapping, \
-    bbox_of_segment
+from segmentationcma import (
+    UTMDistanceCriterion,
+    annotate_segments_dataframe,
+    bbox_of_segment,
+    make_overlapping,
+    segment_dataframe,
+)
 from random_walk_package.utils.walker_utils import resample_kernel_to_grid, direction_from_points
 
 
@@ -63,14 +68,15 @@ class StateDependentWalker(MixedWalker):
                                                           rnge=rnge,
                                                           out_dir=out_dir,
                                                           num_states=self.n_hmm_states)
-        Za, Zb, Zc = brwZs if is_brownian and self.animal is not Animal.AIRBORNE else corZs
-        py_kernels = [
-            normalize_kernel(Z.Z)
-            for Z in [Za, Zb, Zc]
-            if Z.Z is not None
-               and np.sum(Z) != 0
-        ]
-        return py_kernels
+        selected_kernels = brwZs if is_brownian and self.animal is not Animal.AIRBORNE else corZs
+        state_kernels = {
+            Z.state_value: normalize_kernel(Z.Z)
+            for Z in selected_kernels
+            if Z.Z is not None and np.sum(Z) != 0
+        }
+        if not state_kernels:
+            raise ValueError("No usable state kernels were generated.")
+        return state_kernels
 
     def get_steps(self):
         return self.animal_proc.create_movement_data_dict(has_states=True)
@@ -80,7 +86,6 @@ class StateDependentWalker(MixedWalker):
         id_col = self.original_data.get_traj_id_col()
 
         py_kernels = self.get_kernels(dt_tolerance, rnge, out_dir, is_brownian)
-        NUM_STATES = len(py_kernels)
 
         t_pol = FixedStepsPolicy(20) if movement_policy is None else movement_policy
 
@@ -91,10 +96,11 @@ class StateDependentWalker(MixedWalker):
             print(f"ANIMAL: {animal_id}\n")
             aid += 1
             steps: Trajectory = trajectory.df
-            # segments as index-intervals with overlaps, e.g. [(0, 3), (3, 5), (5, 9)].
-            segments = trajectory_segments(steps, max_cell_size, self.resolution)
-            segments = merge_singletons(segments)
-            segments = make_overlapping(segments)
+            criterion = UTMDistanceCriterion.from_cell_grid(max_cell_size, self.resolution)
+            base_segments = segment_dataframe(steps, criterion, merge_single_point_segments=True)
+            steps = annotate_segments_dataframe(steps, segments=base_segments, segment_col="segment_id")
+            # Overlapping segments are used for local terrain boxes, e.g. [(0, 3), (3, 5), (5, 9)].
+            segments = make_overlapping(base_segments)
 
             animal_rows = []
 
@@ -136,7 +142,7 @@ class StateDependentWalker(MixedWalker):
                     end_lat = steps["geo_y"].iloc[en_idx]
 
                     start_time, end_time = steps["time"].iloc[st_idx], steps["time"].iloc[en_idx]
-                    state = min(NUM_STATES - 1, steps["state"].iloc[st_idx])
+                    state = steps["state"].iloc[st_idx]
 
                     # start coordinates to UTM
                     st_utm_x, st_utm_y = fwd.transform(start_lon, start_lat)
@@ -158,7 +164,8 @@ class StateDependentWalker(MixedWalker):
                         animal_rows.append({
                             id_col: animal_id,
                             t_col: steps["time"].iloc[st_idx],
-                            "geometry": Point(start_lon, start_lat)
+                            "geometry": Point(start_lon, start_lat),
+                            "segment_id": int(steps["segment_id"].iloc[st_idx]),
                         })
                         continue
 
@@ -170,7 +177,7 @@ class StateDependentWalker(MixedWalker):
                     if self.animal == Animal.AIRBORNE or self.animal == Animal.MARINE:
                         target = 2 * S + 1
                         grid_kernel = resize(
-                            py_kernels[state],
+                            py_kernels.get(state, next(iter(py_kernels.values()))),
                             (target, target),
                             order=1,
                             mode="reflect",
@@ -184,7 +191,9 @@ class StateDependentWalker(MixedWalker):
                         kernel_radius = int(S * cell_size)
                         kernel_radius = min(rnge, kernel_radius)
 
-                        clipped_kernel = normalize_kernel(clip_kernel(py_kernels[state], kernel_radius))
+                        clipped_kernel = normalize_kernel(
+                            clip_kernel(py_kernels.get(state, next(iter(py_kernels.values()))), kernel_radius)
+                        )
                         grid_kernel = resample_kernel_to_grid(clipped_kernel, cell_size, S)
 
                     h, w = grid_kernel.shape
@@ -224,14 +233,16 @@ class StateDependentWalker(MixedWalker):
                             animal_rows.append({
                                 id_col: animal_id,
                                 t_col: t,
-                                "geometry": Point(lon, lat)
+                                "geometry": Point(lon, lat),
+                                "segment_id": int(steps["segment_id"].iloc[st_idx]),
                             })
                         dll.point2d_array_free(walk_ptr)
                     else:
                         animal_rows.append({
                             id_col: animal_id,
                             t_col: steps["time"].iloc[st_idx],
-                            "geometry": Point(start_lon, start_lat)
+                            "geometry": Point(start_lon, start_lat),
+                            "segment_id": int(steps["segment_id"].iloc[st_idx]),
                         })
 
                 terrain_map_free(terrain)

@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from random_walk_package.bindings import terrain_at
-from random_walk_package.utils.geo_transformations import padded_utm_bbox
-from random_walk_package.utils.trajectory_segmentation import bbox_of_segment
+from environmentcma import padded_utm_bbox
+from segmentationcma import bbox_of_segment
 
 
 def plot_walk(walk_points, terrain_width, terrain_height, title="Walk"):

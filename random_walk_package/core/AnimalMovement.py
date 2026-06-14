@@ -1,27 +1,33 @@
 
 import os
 from dataclasses import dataclass
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
 import movingpandas as mpd
 import numpy as np
+import pandas as pd
 from movingpandas import Trajectory
 from pandas import DataFrame
 from pyproj import CRS
 
+from environmentcma import (
+    clamp_lonlat_bbox,
+    create_weather_csvs,
+    fetch_landcover_data,
+    fetch_ocean_cover_tif,
+    grid_shape_from_bbox,
+    grid_to_geo,
+    landcover_to_discrete_txt,
+    marine_cover_path,
+    padded_bbox,
+    utm_to_grid,
+)
 from random_walk_package.bindings import parse_terrain, terrain_map_free, terrain_at
 from random_walk_package.bindings.data_processing.movebank_parser import df_add_properties, df_add_properties2
 from random_walk_package.core.KernelFactory import KernelFactory
-from random_walk_package.data_sources.geo_fetcher import *
-from random_walk_package.data_sources.land_cover_adapter import landcover_to_discrete_txt
-from random_walk_package.data_sources.movebank_adapter import padded_bbox, clamp_lonlat_bbox
-from random_walk_package.data_sources.ocean_cover import fetch_ocean_cover_tif
-from random_walk_package.data_sources.open_meteo_api import create_weather_csvs
 from random_walk_package.data_sources.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
-from random_walk_package.utils.geo_transformations import utm_to_grid, grid_shape_from_bbox, grid_to_geo
 
 
 @dataclass
@@ -213,7 +219,7 @@ class AnimalMovementProcessor:
         out_directory = Path(out_directory, "landcover")
         out_directory.mkdir(exist_ok=True, parents=True)
 
-        shapefile_path = resources.files("random_walk_package.resources.marine_cover") / "ne_10m_land.shp"
+        shapefile_path = marine_cover_path()
 
         results = {}
         for traj in self.traj.trajectories:
@@ -416,7 +422,7 @@ class AnimalMovementProcessor:
 
         parquet_root = out_directory / "env_parquet"
         parquet_root.mkdir(exist_ok=True, parents=True)
-        #AnimalMovementProcessor.convert_env_csv_to_parquet(env_path, parquet_root, time_col=time_stamp)
+        AnimalMovementProcessor.convert_env_csv_to_parquet(env_path, parquet_root, time_col=time_stamp)
         if self.reference_speed is None:
             diffusivity = 1.5
         else:

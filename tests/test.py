@@ -4,6 +4,7 @@ import pickle
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+
 from random_walk_package import StateDependentWalker, FixedStepsPolicy, TimeStepPolicy, tensor4D_free, \
     set_forbidden_landmark
 from random_walk_package.bindings.data_structures.kernel_terrain_mapping import marine_kernels_baseline_crw, \
@@ -60,9 +61,6 @@ def examine_traj_coll_pickle(file, out):
     save_trajectory_collection_timed(traj_col, str(walk_dir))
 
 
-
-
-
 def crop_terrain_txt(file, points, padding=10, max_padding=50):
     padding = min(padding, max_padding)
 
@@ -80,7 +78,9 @@ def crop_terrain_txt(file, points, padding=10, max_padding=50):
     min_y = max(0, min(y for _, y in points) - padding)
     max_y = min(height - 1, max(y for _, y in points) + padding)
 
-    crop_file = Path("/tmp/random_walk_test_terrain_crop.txt")
+    crop_file = Path("random_walk_test_terrain_crop.txt")
+    crop_file.parent.mkdir(parents=True, exist_ok=True)
+
     with open(crop_file, "w") as f:
         for row in rows[min_y:max_y + 1]:
             f.write(" ".join(str(value) for value in row[min_x:max_x + 1]))
@@ -92,7 +92,7 @@ def crop_terrain_txt(file, points, padding=10, max_padding=50):
     ]
 
     print(
-        f"Cropped terrain to {crop_file} with bounds "
+        f"Cropped terrain saved to {crop_file} with bounds "
         f"x={min_x}:{max_x}, y={min_y}:{max_y}"
     )
     print(f"Adjusted points for cropped grid: {cropped_points}")
@@ -101,6 +101,9 @@ def crop_terrain_txt(file, points, padding=10, max_padding=50):
 
 
 if __name__ == "__main__":
+    walk = "/home/omar/CLionProjects/random-walks/mixed_walk_main.json"
+    plot_walk_from_json(walk)
+    exit()
     source_file = "/home/omar/PycharmProjects/random-walks-python/random_walk_package/resources/grid_upper_left_400.txt"
     points = [(100, 100), (100, 200), (200, 230), (204, 320), (70, 330)]
 

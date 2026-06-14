@@ -1,20 +1,8 @@
-from dataclasses import dataclass
-
 import geopandas as gpd
-import numpy as np
 
-from random_walk_package.core.hmm.kernels import pure_cor_grouped, pure_brw_grouped
-from random_walk_package.core.hmm.models import apply_hmm
-from random_walk_package.core.hmm.preprocessing import ColumnConfig, preprocess_hmm
-from random_walk_package.core.hmm.utils import merge_states_to_gdf
-
-
-@dataclass
-class Kernel2D:
-    Z: np.ndarray
-    rnge: float
-    reso: int
-    dx: float
+from hmmcma import HMMStateAnnotator
+from hmmcma.preprocessing import ColumnConfig
+from kernelcma import Kernel2D, StateKernelFactory
 
 
 class KernelFactory:
@@ -24,6 +12,7 @@ class KernelFactory:
                  geom_col='geometry',
                  provided_dir_col='direction',  # degrees
                  feature_cols=('distance', 'angular_diffusivity', 'speed', 'terrain'),  # additional data from the workflow
+                 state_col='state',
                  scale=True,
                  num_states=3):
         self.columns = ColumnConfig(id_cols=id_cols,
@@ -33,34 +22,26 @@ class KernelFactory:
                                     feature_cols=feature_cols)
 
         self.gdf = gdf
+        self.state_col = state_col
         self.scale = scale
-        self.__trajectories = None
-        self.__threshold = None
         self.__state_mapping = None
         self.__num_states = num_states
 
-    def __preprocess(self):
-        return preprocess_hmm(self.gdf, self.columns, self.scale)
-
     def apply_hmm(self):
-        arrays, scaler, seq_dfs = self.__preprocess()
-        self.__trajectories, self.__threshold, self.__state_mapping = apply_hmm(arrays, seq_dfs, n_components=self.__num_states,columns=self.columns)
-        self.gdf = merge_states_to_gdf(self.gdf, seq_dfs, self.columns)
+        annotator = HMMStateAnnotator(
+            columns=self.columns,
+            scale=self.scale,
+            num_states=self.__num_states,
+        )
+        self.gdf, self.__trajectories, self.__threshold, self.__state_mapping = annotator.annotate(self.gdf)
         return self.gdf
 
     def get_state_kernels(self, dt_tolerance, rnge, reso, out=None):
-        dx = 2 * rnge / reso
-        print(f"dx: {dx}\n")
-        Za, Zb, Zc = pure_cor_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out, self.__num_states)
-        Ba, Bb, Bc = pure_brw_grouped(self.__threshold, dt_tolerance, self.__trajectories, rnge, reso, out, self.__num_states)
-
-        # correlated kernels
-        crw_Za = Kernel2D(Za, rnge, reso, dx)
-        crw_Zb = Kernel2D(Zb, rnge, reso, dx)
-        crw_Zc = Kernel2D(Zc, rnge, reso, dx)
-        # brownian kernels
-        brw_Za = Kernel2D(Ba, rnge, reso, dx)
-        brw_Zb = Kernel2D(Bb, rnge, reso, dx)
-        brw_Zc = Kernel2D(Bc, rnge, reso, dx)
-
-        return [(crw_Za, crw_Zb, crw_Zc), (brw_Za, brw_Zb, brw_Zc)]
+        factory = StateKernelFactory(
+            self.gdf,
+            id_col=self.columns.id_col,
+            time_col=self.columns.time_col,
+            geom_col=self.columns.geom_col,
+            state_col=self.state_col,
+        )
+        return factory.get_state_kernels(dt_tolerance, rnge, reso, out)

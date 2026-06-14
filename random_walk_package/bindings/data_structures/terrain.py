@@ -8,7 +8,7 @@ from random_walk_package.bindings.data_structures.types import *
 from random_walk_package.wrapper import dll, script_dir
 from .kernel_terrain_mapping import create_mixed_kernel_parameters
 from ..mixed_walk import build_state_tensor
-from ...data_sources.geo_fetcher import lonlat_bbox_to_utm
+from environmentcma import lonlat_bbox_to_utm
 
 # landcover types
 TREE_COVER = 10
