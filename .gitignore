@@ -4,7 +4,7 @@ dist/
 build/CMakeFiles/rules.ninja
 build/CMakeFiles/InstallScripts.json
 build/CMakeFiles/rules.ninja
-random_walk_package/
+randomwalks/
 librandom_walk.so
 .vscode/settings.json
 .vscode/tasks.json
@@ -22,3 +22,14 @@ build/cmake_install.cmake
 csv_out*
 .github
 *.bin
+
+# Keep package source/resource moves visible despite broad local ignores.
+!randomwalks/
+!randomwalks/bindings/
+!randomwalks/resources/
+!randomwalks/resources/kernel_mappings/
+!randomwalks/resources/kernel_mappings/*.csv
+
+junk/
+junk/**/__pycache__/
+junk/**/*.pyc

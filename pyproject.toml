@@ -4,38 +4,68 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "random_walk"
-version = "0.1.0"
+version = "0.2.2"
 description = "Random walk package with C backend"
 authors = [
-    { name = "Kevin Buchin" },
+    { name = "Omar Chatila" },
     { name = "Mart Hagedoorn" },
-    { name = "Alexander Korn" },
-    { name = "Omar Chatila" }
+    { name = "Kevin Buchin" },
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "numpy",
+    "utm",
+    "scipy",
+    "scikit-image",
+    "scikit-learn",
+    "geopandas",
+    "pyproj",
+    "movingpandas",
+    "rasterio",
     "matplotlib",
     "PyQt6",
+    "rioxarray",
+    "pyarrow",
+    "xarray",
     "requests",
     "pandas",
     "pystac_client",
     "planetary_computer",
-    "rioxarray",
-    "xarray",
     "memory_profiler",
-    "folium"
+    "folium",
+    "pytest",
+    "pytest-cov",
+    "ipykernel>=6.31.0",
+    "environmentcma @ git+https://github.com/Omar-Chatila/cma_environment.git",
+    "hmmcma @ git+https://github.com/Omar-Chatila/cma_hmm",
+    "segmentationcma @ git+https://github.com/Omar-Chatila/cma_segmentation.git",
+    "kernelcma @ git+https://github.com/Omar-Chatila/cma_kernels.git",
 ]
 
 [tool.scikit-build]
 cmake.version = ">=3.15"
-cmake.args = [
-    "-DENABLE_CUDA=ON",
-    "-DRW_BUILD_BENCHMARKS=OFF"
-]
+cmake.args = ["-DENABLE_CUDA=OFF",
+    "-DBUILD_TESTING=OFF"]
 build.verbose = true
 build-dir = "build"
-install.components = ["random_walk"]
 
 [tool.scikit-build.wheel]
-packages = ["random_walk_package"]
+packages = ["randomwalks"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["randomwalks*"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+log_cli = true
+testpaths = [
+    "tests"
+]
+pythonpath = [
+    ".", "randomwalks"
+]
+
+[tool.setuptools.package-data]
+randomwalks = ["resources/**/*"]
