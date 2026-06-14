@@ -22,7 +22,6 @@ from environmentcma import (
 from kernelcma import KernelFactory
 from pyproj import CRS
 
-from randomwalks.bindings import TerrainMapHandle
 from randomwalks.bindings.data_structures.Terrain import TerrainMapHandle
 from randomwalks.bindings.movebank_parser import df_add_properties2
 from randomwalks.bindings.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
@@ -562,38 +561,3 @@ class AnimalMovementProcessor:
             crs=self.crs
         )
         return crwZ, brwZ
-
-    def angular_diffusivity(self, t_prev, t_current, t_next):
-        """
-        Docstring for angular_diffusivity
-        
-        
-        :param t_prev: timestamp for the start of a vector A
-        :param t_current: timestamp for the end of a vector A, start of the vector B
-        :param t_next: timestamp for the end of a vector B
-        """
-        # Rotate so that vector b->a aligns with x-axis
-        pos_prev = self.traj.get_locations_at(t_prev)
-        print(pos_prev)
-        pos_current = self.traj.get_locations_at(t_current)
-        pos_next = self.traj.get_locations_at(t_next)
-        prev_piece = np.array([pos_current.geometry.iloc[0].x - pos_prev.geometry.iloc[0].x,
-                               pos_current.geometry.iloc[0].y - pos_prev.geometry.iloc[0].y])  # placeholder
-        current_piece = np.array([pos_next.geometry.iloc[0].x - pos_current.geometry.iloc[0].x,
-                                  pos_next.geometry.iloc[0].y - pos_current.geometry.iloc[0].y])
-        angle_prev_to_xy = np.arctan2(prev_piece[1], prev_piece[0])
-        cos_alpha = np.cos(-angle_prev_to_xy)
-        sin_alpha = np.sin(-angle_prev_to_xy)
-        rotation_matrix = np.array([
-            [cos_alpha, -sin_alpha],
-            [sin_alpha, cos_alpha]
-        ])
-
-        # Rotate next piece vector into the new coordinate system
-        rotated_b = rotation_matrix @ current_piece
-
-        # Calculate angle of rotated B with respect to new x-axis
-        angle_rad = np.arctan2(rotated_b[1], rotated_b[0])
-        angular_diffusivity = np.abs(np.sin(angle_rad))
-
-        return angular_diffusivity
