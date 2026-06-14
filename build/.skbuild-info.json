@@ -1,8 +1,0 @@
-{
-  "source_dir": "/home/omar/Documents/random_walks/random-walk_py",
-  "build_dir": "/home/omar/Documents/random_walks/random-walk_py/build",
-  "cmake_path": "/usr/bin/cmake",
-  "skbuild_path": "/tmp/pip-build-env-zb9k6frn/overlay/lib/python3.13/site-packages/scikit_build_core",
-  "skbuild_version": "0.11.5",
-  "python_executable": "/home/omar/Documents/random_walks/random-walk_py/myenv/bin/python"
-}

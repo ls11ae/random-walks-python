@@ -1,6 +1,7 @@
 build/
 dist/
 *.egg-info/
+.idea/
 build/CMakeFiles/rules.ninja
 build/CMakeFiles/InstallScripts.json
 build/CMakeFiles/rules.ninja
