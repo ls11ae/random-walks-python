@@ -3,7 +3,7 @@ import ctypes
 import sys
 from pathlib import Path
 
-# Get the absolute path to the current file (random_walk_package/random_walk_package/)
+# Get the absolute path to the current file
 _base_dir = Path(__file__).resolve().parent
 
 # Go one directory up to reach the folder where the .so file is copied

@@ -1,5 +1,4 @@
 import ctypes
-import enum
 import os
 
 from randomwalks.bindings.data_structures.types import *
@@ -47,7 +46,7 @@ MESA_LANDCOVER_COLORS = {
     20: (0.67, 0.55, 0.26, 0.85),
     30: (0.0, 0.78, 0.0, 0.75),
     40: (0.78, 0.82, 0.24, 0.78),
-    50: (0.72, 0.22, 0.16, 0.85),
+    50: (0.72, 0.22, 0.16, 0.45),
     60: (0.82, 0.71, 0.55, 0.85),
     70: (0.9, 0.95, 1.0, 0.9),
     80: (0.0, 0.24, 0.8, 0.78),
@@ -129,7 +128,7 @@ class TerrainMapHandle:
     dll.load_meta_info.restype = KernelMapMeta
     load_meta_info_ptr = dll.load_meta_info
 
-    def __init__(self, width=None, height=None, *, ptr=None, owned=True):
+    def __init__(self, width=None, height=None, *, ptr=None):
         if ptr is None:
             if width is None or height is None:
                 raise ValueError("width and height are required when ptr is not provided")
@@ -137,11 +136,10 @@ class TerrainMapHandle:
         if not ptr:
             raise RuntimeError("Failed to allocate TerrainMap")
         self._ptr = ptr
-        self._owned = owned
 
     @classmethod
-    def from_ptr(cls, ptr, *, owned=False):
-        return cls(ptr=ptr, owned=owned)
+    def from_ptr(cls, ptr):
+        return cls(ptr=ptr)
 
     @classmethod
     def from_file(cls, file, delim=" "):
@@ -153,7 +151,7 @@ class TerrainMapHandle:
     @classmethod
     def single_value(cls, land_type, width, height):
         ptr = cls.single_value_ptr(land_type, width, height)
-        return cls.from_ptr(ptr, owned=True)
+        return cls.from_ptr(ptr)
 
     @property
     def ptr(self):
@@ -196,7 +194,7 @@ class TerrainMapHandle:
             _mapping_ptr(mapping),
             _reachability_value(reachability),
         )
-        return KernelsMap3DHandle.from_ptr(ptr, owned=True)
+        return KernelsMap3DHandle.from_ptr(ptr)
 
     def serialize_tensor_map(self, mapping, output_path, reachability=Reachability.SOFT):
         self.tensor_map_serialize_ptr(
@@ -211,10 +209,10 @@ class TerrainMapHandle:
         ptr = _landcover_to_discrete_ptr(file_path, res_x, res_y, min_lon, min_lat, max_lon, max_lat)
         if not ptr:
             raise RuntimeError("Failed to convert landcover raster to discrete terrain")
-        return cls.from_ptr(ptr, owned=True)
+        return cls.from_ptr(ptr)
 
     def free(self):
-        if self._owned and self._ptr:
+        if self._ptr:
             self.free_ptr(self._ptr)
         self._ptr = None
 
@@ -242,15 +240,14 @@ class KernelsMap3DHandle:
     dll.dir_kernels_free.restype = None
     dir_kernels_free = dll.dir_kernels_free
 
-    def __init__(self, *, ptr=None, owned=True):
+    def __init__(self, *, ptr=None):
         if not ptr:
             raise ValueError("ptr is required")
         self._ptr = ptr
-        self._owned = owned
 
     @classmethod
-    def from_ptr(cls, ptr, *, owned=False):
-        return cls(ptr=ptr, owned=owned)
+    def from_ptr(cls, ptr):
+        return cls(ptr=ptr)
 
     @property
     def ptr(self):
@@ -261,7 +258,7 @@ class KernelsMap3DHandle:
         return self._ptr.contents
 
     def free(self):
-        if self._owned and self._ptr:
+        if self._ptr:
             self.free_ptr(self._ptr)
         self._ptr = None
 

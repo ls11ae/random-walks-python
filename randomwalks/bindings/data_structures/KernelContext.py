@@ -28,24 +28,23 @@ class KernelContextHandle:
         self._ptr = ptr
         self._owned = owned
         self._mapping = mapping
-        self._terrain = mapping.terrain if mapping else None
 
     @classmethod
-    def on_fly(cls, mapping, reachability):
-        ptr = cls.on_fly_ptr(_terrain_ptr(mapping.terrain), _mapping_ptr(mapping), _reachability_value(reachability))
+    def on_fly(cls, terrain, mapping, reachability):
+        ptr = cls.on_fly_ptr(_terrain_ptr(terrain), _mapping_ptr(mapping), _reachability_value(reachability))
         return cls(ptr=ptr, owned=True, mapping=mapping)
 
     @classmethod
-    def pool(cls, mapping, reachability):
-        ptr = cls.pool_ptr(_terrain_ptr(mapping.terrain), _mapping_ptr(mapping), _reachability_value(reachability))
+    def pool(cls, terrain, mapping, reachability):
+        ptr = cls.pool_ptr(_terrain_ptr(terrain), _mapping_ptr(mapping), _reachability_value(reachability))
         return cls(ptr=ptr, owned=True, mapping=mapping)
 
     @classmethod
-    def serialization(cls, mapping, reachability, directory):
+    def serialization(cls, terrain, mapping, reachability, directory):
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         ptr = cls.serialization_ptr(
-            _terrain_ptr(mapping.terrain),
+            _terrain_ptr(terrain),
             _mapping_ptr(mapping),
             _reachability_value(reachability),
             str(directory).encode("utf-8"),
@@ -63,6 +62,10 @@ class KernelContextHandle:
     @property
     def contents(self):
         return self._ptr.contents
+
+    @property
+    def terrain(self):
+        return self._ptr.contents.terrain
 
     def free(self):
         if self._owned and self._ptr:

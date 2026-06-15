@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import copy
 from enum import IntEnum
 
 import numpy as np
+from segmentationcma.core import bbox_of_segment
 
 from randomwalks.bindings.data_structures.KernelContext import KernelContextHandle
 from randomwalks.bindings.data_structures.KernelMapping import KPM_KIND_KERNELS, KernelMapping
@@ -17,33 +17,25 @@ from randomwalks.core.WalkerHelper import WalkerHelper
 
 
 class StateDependentWalker(MixedWalker):
-    def __init__(self, data, animal_type, resolution, out_directory, terrain: TerrainMapHandle, n_hmm_states=3,
+    def __init__(self, data, animal_type, resolution, out_directory, n_hmm_states=3,
                  time_col="timestamp", lon_col="location-long", lat_col="location-lat",
                  id_col="individual-local-identifier", crs="EPSG:4326"):
-        super().__init__(terrain)
-        import movingpandas as mpd
-
-        self.original_data = None
-        if isinstance(data, mpd.TrajectoryCollection):
-            self.original_data = copy.deepcopy(data)
-
         self.animal = _coerce_animal(animal_type)
         self.n_hmm_states = n_hmm_states
         is_marine = self.animal in (Animal.MARINE, Animal.AIRBORNE)
-        self._init_movebank_pipeline(
+        super().__init__(
             data,
-            None,
-            resolution,
-            out_directory,
-            time_col,
-            lon_col,
-            lat_col,
-            id_col,
-            crs,
-            is_marine,
-            None,
-            None,
+            kernel_mapping=None,
+            resolution=resolution,
+            out_directory=out_directory,
+            time_col=time_col,
+            lon_col=lon_col,
+            lat_col=lat_col,
+            id_col=id_col,
+            crs=crs,
+            is_marine=is_marine,
         )
+        self.original_data = self.data
 
     def get_kernels(self, dt_tolerance, rnge, out_dir=None, is_brownian=False):
         super().process_movebank_data()
@@ -86,6 +78,7 @@ class StateDependentWalker(MixedWalker):
         import movingpandas as mpd
         import pandas as pd
         from shapely.geometry import Point
+        from environmentcma.crs import grid_shape_from_bbox, grid_to_geo_walk, padded_utm_bbox, utm_to_grid
 
         py_kernels = self.get_kernels(dt_tolerance, rnge, out_dir, is_brownian)
         t_col = self.original_data.t
@@ -102,8 +95,8 @@ class StateDependentWalker(MixedWalker):
 
             for segment in segments:
                 seg_start, seg_end = segment
-                min_lon, min_lat, max_lon, max_lat = _bbox_of_segment(steps, segment)
-                utm_bbox, epsg_code, fwd, inv = _padded_utm_bbox(
+                min_lon, min_lat, max_lon, max_lat = bbox_of_segment(steps, segment)
+                utm_bbox, epsg_code, fwd, inv = padded_utm_bbox(
                     min_lon,
                     min_lat,
                     max_lon,
@@ -112,7 +105,7 @@ class StateDependentWalker(MixedWalker):
                     max_cell_size=max_cell_size,
                 )
                 min_utm_x, min_utm_y, max_utm_x, max_utm_y = utm_bbox
-                nx, ny = _grid_shape_from_bbox(utm_bbox, self.resolution)
+                nx, ny = grid_shape_from_bbox(utm_bbox, self.resolution)
 
                 if self.animal == Animal.AIRBORNE:
                     terrain = TerrainMapHandle.single_value(MesaLandcover.GRASSLAND, nx, ny)
@@ -143,8 +136,8 @@ class StateDependentWalker(MixedWalker):
 
                         st_utm_x, st_utm_y = fwd.transform(start_lon, start_lat)
                         en_utm_x, en_utm_y = fwd.transform(end_lon, end_lat)
-                        start_x, start_y = _utm_to_grid(nx, ny, utm_bbox, st_utm_x, st_utm_y)
-                        end_x, end_y = _utm_to_grid(nx, ny, utm_bbox, en_utm_x, en_utm_y)
+                        start_x, start_y = utm_to_grid(nx, ny, utm_bbox, st_utm_x, st_utm_y)
+                        end_x, end_y = utm_to_grid(nx, ny, utm_bbox, en_utm_x, en_utm_y)
 
                         if start_x == end_x and start_y == end_y:
                             animal_rows.append(
@@ -186,7 +179,7 @@ class StateDependentWalker(MixedWalker):
                         if segment_points is None:
                             segment_points = [(start_x, start_y), (end_x, end_y)]
 
-                        geo_walk = _grid_to_geo_walk(segment_points, utm_bbox, nx, ny, inv)
+                        geo_walk = grid_to_geo_walk(segment_points, utm_bbox, nx, ny, inv)
                         times = pd.date_range(start=start_time, end=end_time, periods=len(geo_walk))
                         for (lon, lat), t in zip(geo_walk, times):
                             animal_rows.append(
@@ -285,7 +278,7 @@ def _kernel_mapping_for_state(terrain, kernel, directions, forbid_water=False):
     return mapping
 
 
-def _segments_for_steps(steps, max_cell_size, resolution):
+def _segments_for_steps(steps, max_cell_size: int, resolution):
     try:
         from segmentationcma import UTMDistanceCriterion, annotate_segments_dataframe, make_overlapping, \
             segment_dataframe
@@ -298,67 +291,6 @@ def _segments_for_steps(steps, max_cell_size, resolution):
     annotated = annotate_segments_dataframe(steps, segments=base_segments, segment_col="segment_id")
     steps["segment_id"] = annotated["segment_id"]
     return make_overlapping(base_segments)
-
-
-def _bbox_of_segment(steps, segment):
-    seg_start, seg_end = segment
-    segment_df = steps.iloc[seg_start: seg_end + 1]
-    return (
-        float(segment_df["geo_x"].min()),
-        float(segment_df["geo_y"].min()),
-        float(segment_df["geo_x"].max()),
-        float(segment_df["geo_y"].max()),
-    )
-
-
-def _padded_utm_bbox(min_lon, min_lat, max_lon, max_lat, padding=0.2, max_cell_size=10):
-    from pyproj import CRS, Transformer
-
-    mean_lon = (min_lon + max_lon) / 2
-    mean_lat = (min_lat + max_lat) / 2
-    zone = int((mean_lon + 180) // 6) + 1
-    epsg_code = 32600 + zone if mean_lat >= 0 else 32700 + zone
-    crs = CRS.from_epsg(epsg_code)
-    fwd = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
-    inv = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-
-    min_x, min_y = fwd.transform(min_lon, min_lat)
-    max_x, max_y = fwd.transform(max_lon, max_lat)
-    if min_x > max_x:
-        min_x, max_x = max_x, min_x
-    if min_y > max_y:
-        min_y, max_y = max_y, min_y
-
-    pad_x = max((max_x - min_x) * padding, max_cell_size)
-    pad_y = max((max_y - min_y) * padding, max_cell_size)
-    return (min_x - pad_x, min_y - pad_y, max_x + pad_x, max_y + pad_y), epsg_code, fwd, inv
-
-
-def _grid_shape_from_bbox(utm_bbox, resolution):
-    min_x, min_y, max_x, max_y = utm_bbox
-    width = max(1, int(np.ceil((max_x - min_x) / resolution)))
-    height = max(1, int(np.ceil((max_y - min_y) / resolution)))
-    return width, height
-
-
-def _utm_to_grid(width, height, utm_bbox, utm_x, utm_y):
-    min_x, min_y, max_x, max_y = utm_bbox
-    x_scale = (width - 1) / (max_x - min_x) if max_x != min_x and width > 1 else 0
-    y_scale = (height - 1) / (max_y - min_y) if max_y != min_y and height > 1 else 0
-    x = int(np.clip(round((utm_x - min_x) * x_scale), 0, width - 1))
-    y = int(np.clip(round((utm_y - min_y) * y_scale), 0, height - 1))
-    return x, y
-
-
-def _grid_to_geo_walk(walk, utm_bbox, width, height, inv):
-    min_x, min_y, max_x, max_y = utm_bbox
-    walk = np.asarray(walk, dtype=np.int64)
-    result = []
-    for x, y in walk:
-        utm_x = min_x + (x / (width - 1)) * (max_x - min_x) if width > 1 else min_x
-        utm_y = min_y + (y / (height - 1)) * (max_y - min_y) if height > 1 else min_y
-        result.append(inv.transform(utm_x, utm_y))
-    return result
 
 
 __all__ = ["StateDependentWalker"]

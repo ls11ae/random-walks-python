@@ -1,11 +1,16 @@
 from importlib.resources import as_file, files
+from pathlib import Path
 
+from randomwalks.bindings.data_structures import Terrain
 from randomwalks.bindings.data_structures.types import *
 from randomwalks.wrapper import dll
+from importlib import resources
 
 KPM_KIND_PARAMETERS = int(KernelMapKind.PARAMETERS)
 KPM_KIND_KERNELS = int(KernelMapKind.KERNELS)
-MESA_DEFAULT_MAPPING_RESOURCE = "resources/kernel_mappings/mesa_mixed_terrestrial.csv"
+
+MESA_DEFAULT_MAPPING_RESOURCE = (
+    resources.files("randomwalks").joinpath("resources", "kernel_mappings", "mesa_mixed_terrestrial.csv"))
 RESOURCE_PACKAGE = "randomwalks"
 
 
@@ -14,8 +19,8 @@ class KernelMapping:
     dll.kernel_mapping_new.restype = KernelParametersMappingPtr
     new = dll.kernel_mapping_new
 
-    dll.kernel_mapping_load_csv.argtypes = [KernelParametersMappingPtr, c_char_p]
-    dll.kernel_mapping_load_csv.restype = c_bool
+    dll.kernel_mapping_load_csv.argtypes = [c_char_p]
+    dll.kernel_mapping_load_csv.restype = KernelParametersMappingPtr
     load_csv_ptr = dll.kernel_mapping_load_csv
 
     dll.set_terrain_params.argtypes = [KernelParametersMappingPtr, c_int, KernelParametersPtr]
@@ -83,19 +88,14 @@ class KernelMapping:
             raise RuntimeError("Failed to allocate KernelParametersMapping")
         self._ptr = ptr
         self._owned = owned
-        self._terrain = terrain
 
     @classmethod
     def from_ptr(cls, ptr, *, owned=False, terrain=None):
         return cls(ptr=ptr, owned=owned, terrain=terrain)
 
     @classmethod
-    def mesa_default(cls, terrain, resource=MESA_DEFAULT_MAPPING_RESOURCE):
-        mapping = cls(terrain)
-        if not mapping.load_resource(resource):
-            mapping.free()
-            raise ValueError(f"Failed to load kernel mapping resource '{resource}'")
-        return mapping
+    def mesa_default(cls, resource=MESA_DEFAULT_MAPPING_RESOURCE):
+        return cls.from_ptr(cls.load_csv_ptr(resource.__str__().encode("utf-8")))
 
     @classmethod
     def uniform(cls, terrain, *, is_brownian, step_size, directions,
@@ -123,23 +123,12 @@ class KernelMapping:
         return self._ptr.contents
 
     @property
-    def terrain(self):
-        return self._terrain
-
-    @property
     def terrain_values(self):
         contents = self.contents
         return [int(contents.terrain_values[i]) for i in range(contents.terrain_count)]
 
-    def load_csv(self, filename):
-        return bool(self.load_csv_ptr(self._ptr, filename.encode("utf-8")))
-
-    def load_resource(self, resource=MESA_DEFAULT_MAPPING_RESOURCE, package=RESOURCE_PACKAGE):
-        resource_ref = files(package)
-        for part in resource.split("/"):
-            resource_ref = resource_ref.joinpath(part)
-        with as_file(resource_ref) as path:
-            return self.load_csv(str(path))
+    def load_resource(self, resource=MESA_DEFAULT_MAPPING_RESOURCE):
+        return bool(self.load_csv_ptr(self._ptr, str(resource).encode("utf-8")))
 
     def set_parameters(self, terrain, *, is_brownian, step_size, directions,
                        len_diffusity=1.0, angle_diffusity=0.3,

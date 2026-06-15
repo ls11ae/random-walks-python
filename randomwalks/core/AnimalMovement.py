@@ -19,12 +19,13 @@ from environmentcma import (
     padded_bbox,
     utm_to_grid,
 )
-from kernelcma import KernelFactory
+from kernelcma import StateKernelFactory
 from pyproj import CRS
 
 from randomwalks.bindings.data_structures.Terrain import TerrainMapHandle
 from randomwalks.bindings.movebank_parser import df_add_properties2
 from randomwalks.bindings.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
+from randomwalks.core.WalkerHelper import WalkerHelper
 
 
 @dataclass
@@ -42,6 +43,84 @@ class MovementTrajectory:
 
     def __len__(self):
         return len(self.df)
+
+
+def coerce_trajectory_collection(
+        data,
+        time_col="timestamp",
+        lon_col="location-long",
+        lat_col="location-lat",
+        id_col="tag-local-identifier",
+        target_crs="EPSG:4326",
+):
+    if isinstance(data, (str, os.PathLike)):
+        data = pd.read_csv(data)
+        if time_col in data.columns:
+            data[time_col] = pd.to_datetime(data[time_col], errors="coerce")
+
+    if isinstance(data, mpd.TrajectoryCollection):
+        traj_col = data
+        gdf = traj_col.to_point_gdf().copy()
+        orig_time = traj_col.t
+        orig_id = traj_col.get_traj_id_col()
+
+        if orig_time not in gdf.columns:
+            gdf[orig_time] = gdf.index
+
+        if gdf.crs is None:
+            gdf = gdf.set_crs(target_crs)
+        if str(gdf.crs) != target_crs:
+            gdf = gdf.to_crs(target_crs)
+
+        gdf["x"] = gdf.geometry.x
+        gdf["y"] = gdf.geometry.y
+        gdf = gdf.dropna(subset=["x", "y", orig_time, orig_id])
+
+        return mpd.TrajectoryCollection(
+            gdf,
+            traj_id_col=orig_id,
+            t=orig_time,
+            x="x",
+            y="y",
+            crs=target_crs,
+        )
+
+    if not isinstance(data, (pd.DataFrame, gpd.GeoDataFrame)):
+        raise ValueError("Input must be a TrajectoryCollection, DataFrame, GeoDataFrame, or CSV path")
+
+    gdf = gpd.GeoDataFrame(data.copy())
+
+    if time_col not in gdf.columns:
+        raise ValueError("time_col not found in dataframe")
+    if id_col not in gdf.columns:
+        raise ValueError(f"id_col: {id_col} not found in dataframe")
+
+    if "geometry" not in gdf.columns:
+        if lon_col not in gdf.columns or lat_col not in gdf.columns:
+            raise ValueError("Need geometry or lon/lat columns")
+        gdf = gdf.set_geometry(
+            gpd.points_from_xy(gdf[lon_col], gdf[lat_col]),
+            crs="EPSG:4326",
+        )
+
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+    if str(gdf.crs) != target_crs:
+        gdf = gdf.to_crs(target_crs)
+
+    gdf[time_col] = pd.to_datetime(gdf[time_col], errors="coerce")
+    gdf["x"] = gdf.geometry.x
+    gdf["y"] = gdf.geometry.y
+    gdf = gdf.dropna(subset=["x", "y", time_col, id_col])
+
+    return mpd.TrajectoryCollection(
+        gdf,
+        traj_id_col=id_col,
+        t=time_col,
+        x="x",
+        y="y",
+        crs=target_crs,
+    )
 
 
 class AnimalMovementProcessor:
@@ -64,88 +143,14 @@ class AnimalMovementProcessor:
         self.resolution = None
         self.env_samples = env_samples
         self.movement_policy = movement_policy
-
-        # TrajectoryCollection
-        if isinstance(data, mpd.TrajectoryCollection):
-            _orig_to_point_gdf = mpd.TrajectoryCollection.to_point_gdf
-
-            traj_col = data
-            gdf = traj_col.to_point_gdf().copy()
-            orig_time = traj_col.t
-            orig_id = traj_col.get_traj_id_col()
-
-            # ensure time column exists
-            if orig_time not in gdf.columns:
-                gdf[orig_time] = gdf.index
-
-            # ensure CRS is set and converted
-            if gdf.crs is None:
-                gdf = gdf.set_crs(target_crs)
-            if str(gdf.crs) != target_crs:
-                gdf = gdf.to_crs(target_crs)
-
-            # ensure x/y columns exist
-            gdf["x"] = gdf.geometry.x
-            gdf["y"] = gdf.geometry.y
-
-            gdf = gdf.dropna(subset=["x", "y", orig_time, orig_id])
-            self.traj = mpd.TrajectoryCollection(
-                gdf,
-                traj_id_col=orig_id,
-                t=orig_time,
-                x="x",
-                y="y",
-                crs=target_crs,
-            )
-        else:
-            # DataFrame / GeoDataFrame
-            if isinstance(data, (pd.DataFrame, gpd.GeoDataFrame)):
-
-                gdf = gpd.GeoDataFrame(data.copy())
-
-                if time_col not in gdf.columns:
-                    raise ValueError("time_col not found in dataframe")
-
-                if id_col not in gdf.columns:
-                    raise ValueError(f"id_col: {id_col} not found in dataframe")
-
-                orig_time = time_col
-                orig_id = id_col
-
-                if "geometry" not in gdf.columns:
-                    if lon_col not in gdf.columns or lat_col not in gdf.columns:
-                        raise ValueError("Need geometry or lon/lat columns")
-
-                    gdf = gdf.set_geometry(
-                        gpd.points_from_xy(gdf[lon_col], gdf[lat_col]),
-                        crs="EPSG:4326"
-                    )
-
-            else:
-                raise ValueError("Input must be TrajectoryCollection or DataFrame")
-
-            if gdf.crs is None:
-                gdf = gdf.set_crs("EPSG:4326")
-
-            if str(gdf.crs) != target_crs:
-                gdf = gdf.to_crs(target_crs)
-
-            gdf["x"] = gdf.geometry.x
-            gdf["y"] = gdf.geometry.y
-
-            if orig_time not in gdf.columns:
-                gdf[orig_time] = gdf.index
-
-            gdf = gdf.dropna(subset=["x", "y", orig_time, orig_id])
-
-            self.traj = mpd.TrajectoryCollection(
-                gdf,
-                traj_id_col=orig_id,
-                t=orig_time,
-                x="x",
-                y="y",
-                crs=target_crs,
-            )
+        self.traj = coerce_trajectory_collection(
+            data,
+            time_col=time_col,
+            lon_col=lon_col,
+            lat_col=lat_col,
+            id_col=id_col,
+            target_crs=target_crs,
+        )
 
         self.time_col = self.traj.t
         self.id_col = self.traj.get_traj_id_col()
@@ -278,13 +283,12 @@ class AnimalMovementProcessor:
     def create_movement_data(self, traj_id, has_states):
         traj_utm = self.traj_utm(traj_id)
         utm_bbox, _ = self.bbox_utm(traj_id)
-        xmin, ymin, xmax, ymax = utm_bbox
 
         nx, ny = grid_shape_from_bbox(utm_bbox, self.resolution)
         df = traj_utm.df.copy()
 
         gx, gy = utm_to_grid(
-            nx, ny, xmin, ymin, xmax, ymax,
+            nx, ny, utm_bbox,
             df.geometry.x.values,
             df.geometry.y.values
         )
@@ -315,6 +319,32 @@ class AnimalMovementProcessor:
         geo = [grid_to_geo(x, y, utm_bounds, width, height, epsg) for x, y in path]
         df = pd.DataFrame(geo, columns=["longitude", "latitude"])
         return df
+
+    def movebank_path_to_gdf(self, full_path, steps_df, animal_id, idx, segment_boundaries):
+        if len(steps_df) > 0:
+            last_row = steps_df.iloc[-1]
+            last_grid = (int(last_row["grid_x"]), int(last_row["grid_y"]))
+            if len(full_path) == 0 or tuple(full_path[-1]) != last_grid:
+                full_path.append(last_grid)
+
+        geodetic_path_df = self.grid_to_geo_path(full_path, animal_id)
+        if not isinstance(geodetic_path_df, pd.DataFrame):
+            geodetic_path_df = pd.DataFrame(geodetic_path_df, columns=["longitude", "latitude"])
+
+        rows = WalkerHelper.create_timed_df(
+            steps_df,
+            geodetic_path_df,
+            animal_id,
+            idx,
+            segment_boundaries,
+            traj_id_col=self.id_col,
+        )
+        if not rows:
+            return None
+
+        final_df = pd.concat(rows, ignore_index=True)
+        final_df["geometry"] = gpd.points_from_xy(final_df.longitude, final_df.latitude)
+        return gpd.GeoDataFrame(final_df, geometry="geometry", crs="EPSG:4326")
 
     def fetch_open_meteo_weather(self, output_folder: str, samples_per_dimension: int = 5):
         self.env_samples = samples_per_dimension
@@ -547,7 +577,7 @@ class AnimalMovementProcessor:
         data_gdf["angular_diffusivity"] = np.abs(np.sin(np.deg2rad(data_gdf["angular_difference"])))
         data_gdf_utm = self.add_features(data_gdf)
         # initialize HMM
-        hmm_thingy = KernelFactory(data_gdf_utm, id_cols=self.id_col, num_states=num_states)
+        hmm_thingy = StateKernelFactory(data_gdf_utm, id_cols=self.id_col, num_states=num_states)
         # apply HMM to retrieve trajectories annotated with hidden states
         gdf = hmm_thingy.apply_hmm()
         # compute kernels from states

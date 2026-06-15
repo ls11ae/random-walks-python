@@ -7,7 +7,7 @@ add_subdirectory(random-walks)
 
 install(TARGETS random_walk
     COMPONENT random_walk
-    LIBRARY DESTINATION random_walk_package
-    RUNTIME DESTINATION random_walk_package
-    ARCHIVE DESTINATION random_walk_package
+    LIBRARY DESTINATION randomwalks
+    RUNTIME DESTINATION randomwalks
+    ARCHIVE DESTINATION randomwalks
 )

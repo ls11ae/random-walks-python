@@ -89,13 +89,19 @@ def test_correlated_dp_temp_serialization_directory_is_cleaned():
     assert not dp_folder.exists()
 
 
-def test_mixed_kernel_context_temp_serialization_directory_is_cleaned():
+def test_mixed_custom_walk_serialization_with_explicit_directory(tmp_path):
     terrain = TerrainMapHandle.single_value(MesaLandcover.GRASSLAND, 5, 5)
-    walker = MixedWalker(terrain, T=3, context=ComputationMode.SERIALIZATION)
-    context_dir = Path(walker.serialization_dir)
+    context_dir = tmp_path / "mixed_context"
 
-    assert (context_dir / "kernel_pool").exists()
-
-    walker.close()
-
-    assert not context_dir.exists()
+    try:
+        walk = MixedWalker.generate_custom_walks(
+            terrain,
+            [(1, 1), (3, 3)],
+            3,
+            context=ComputationMode.SERIALIZATION,
+            serialization_dir=context_dir,
+        )
+        assert (context_dir / "kernel_pool").exists()
+        assert walk.shape[1] == 2
+    finally:
+        terrain.free()

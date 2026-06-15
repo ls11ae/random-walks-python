@@ -1,8 +1,12 @@
+import pickle
 import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
+
+from randomwalks.bindings.walk_visualization import save_trajectory_coll_leaflet
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -14,7 +18,7 @@ from randomwalks import (
     MesaLandcover,
     MixedWalker,
     TerrainMapHandle,
-    plot_terrain_walk,
+    plot_terrain_walk, Reachability,
 )
 
 
@@ -52,13 +56,14 @@ def test_mixed_walker_utilization_distribution_is_valid():
     steps = [(2, 2), (6, 6)]
     terrain = TerrainMapHandle.single_value(MesaLandcover.GRASSLAND, 20, 20)
 
-    with MixedWalker(terrain, T=5) as walker:
-        ud = walker.utilization_distribution(steps=steps, T=5)
-
+    try:
+        ud = MixedWalker.generate_custom_utilization_distribution(terrain, steps=steps, T=5)
         assert ud.shape == (20, 20)
         assert np.isfinite(ud).all()
         assert ud.sum() > 0
         assert ud[steps[0][1], steps[0][0]] > 0
+    finally:
+        terrain.free()
 
 
 def test_plot_terrain_walk_legend_only_contains_present_landcovers():
@@ -76,3 +81,19 @@ def test_plot_terrain_walk_legend_only_contains_present_landcovers():
     assert "Grassland" in labels
     assert "Tree cover" not in labels
     assert "Permanent water" not in labels
+
+
+def test_movebank_walks():
+    data = pd.read_csv(ROOT / "tests" / "data" / "The Leap of the Cat.csv")
+    with MixedWalker(data=data,
+                     resolution=400,
+                     reachability=Reachability.HARD,
+                     out_directory=ROOT / "tests" / "data" / "movebank_output") as walker:
+        walker.process_movebank_data()
+        traj_col = walker.generate_walks()
+        pickle_path = ROOT / "tests" / "data" / "movebank_output" / "trajectories.pickle"
+        pickle.dump(traj_col, open(pickle_path, "wb"))
+        save_trajectory_coll_leaflet(traj_col, save_path=ROOT / "tests" / "data" / "movebank_output")
+
+
+test_movebank_walks()
