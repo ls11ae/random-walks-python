@@ -84,7 +84,7 @@ class CorrelatedWalkBinding:
             use_serialization,
             _optional_path(output_folder),
         )
-        return None if use_serialization else Tensor4DHandle.from_ptr(ptr, time, owned=True)
+        return None if use_serialization else Tensor4DHandle.from_ptr(ptr, time)
 
     @classmethod
     def backtrace(cls, dp_matrix, kernels, time, end_x, end_y,

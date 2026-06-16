@@ -3,7 +3,12 @@ from __future__ import annotations
 from enum import IntEnum
 
 import numpy as np
+import pandas as pd
+import geopandas as gpd
+import movingpandas as mpd
+from environmentcma.crs import grid_shape_from_bbox, utm_to_grid, grid_to_geo_walk, padded_utm_bbox
 from segmentationcma.core import bbox_of_segment
+from shapely import Point
 
 from randomwalks.bindings.data_structures.KernelContext import KernelContextHandle
 from randomwalks.bindings.data_structures.KernelMapping import KPM_KIND_KERNELS, KernelMapping
@@ -17,7 +22,7 @@ from randomwalks.core.WalkerHelper import WalkerHelper
 
 
 class StateDependentWalker(MixedWalker):
-    def __init__(self, data, animal_type, resolution, out_directory, n_hmm_states=3,
+    def __init__(self, data, animal_type, resolution, out_directory, movement_policy, n_hmm_states=3,
                  time_col="timestamp", lon_col="location-long", lat_col="location-lat",
                  id_col="individual-local-identifier", crs="EPSG:4326"):
         self.animal = _coerce_animal(animal_type)
@@ -25,7 +30,6 @@ class StateDependentWalker(MixedWalker):
         is_marine = self.animal in (Animal.MARINE, Animal.AIRBORNE)
         super().__init__(
             data,
-            kernel_mapping=None,
             resolution=resolution,
             out_directory=out_directory,
             time_col=time_col,
@@ -33,12 +37,13 @@ class StateDependentWalker(MixedWalker):
             lat_col=lat_col,
             id_col=id_col,
             crs=crs,
+            movement_policy=movement_policy,
             is_marine=is_marine,
         )
         self.original_data = self.data
 
     def get_kernels(self, dt_tolerance, rnge, out_dir=None, is_brownian=False):
-        super().process_movebank_data()
+        super()._process_movebank_data()
 
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
@@ -64,26 +69,29 @@ class StateDependentWalker(MixedWalker):
     def get_steps(self):
         return self.animal_proc.create_movement_data_dict(has_states=True)
 
-    def generate_walks(
+    def generate_walks(self, mapping=None, serialization_dir=None, amount=1,
+                       dt_tolerance=0.5,
+                       rnge=200,
+                       max_cell_size=10,
+                       water_mode: WaterMode = WaterMode.AVOID,
+                       is_brownian=False):
+        self._randomwalks_core(out_dir=serialization_dir, dt_tolerance=dt_tolerance, rnge=rnge,
+                               max_cell_size=max_cell_size,
+                               water_mode=water_mode, is_brownian=is_brownian)
+
+    def _randomwalks_core(
             self,
             out_dir=None,
             dt_tolerance=0.5,
             rnge=200,
-            movement_policy=None,
             max_cell_size=10,
             water_mode: WaterMode = WaterMode.AVOID,
             is_brownian=False,
     ):
-        import geopandas as gpd
-        import movingpandas as mpd
-        import pandas as pd
-        from shapely.geometry import Point
-        from environmentcma.crs import grid_shape_from_bbox, grid_to_geo_walk, padded_utm_bbox, utm_to_grid
-
         py_kernels = self.get_kernels(dt_tolerance, rnge, out_dir, is_brownian)
         t_col = self.original_data.t
         id_col = self.original_data.get_traj_id_col()
-        movement_policy = movement_policy or FixedStepsPolicy(20)
+        movement_policy = self.movement_policy
 
         steps_dict = self.get_steps()
         per_animal_gdfs = []
@@ -161,7 +169,7 @@ class StateDependentWalker(MixedWalker):
                             directions,
                             forbid_water=water_mode == WaterMode.FORBID,
                         )
-                        context = KernelContextHandle.pool(mapping, Reachability.SOFT)
+                        context = KernelContextHandle.pool(terrain, mapping, Reachability.SOFT)
 
                         try:
                             segment_points = MixedWalkBinding.single_state_walk(

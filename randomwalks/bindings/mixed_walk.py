@@ -1,3 +1,6 @@
+import numpy as np
+
+from randomwalks import KernelContextHandle
 from randomwalks.bindings.data_structures.Point2D import Point2DArrayHandle
 from randomwalks.bindings.data_structures.Tensor import Tensor4DHandle
 from randomwalks.bindings.data_structures.types import *
@@ -53,38 +56,39 @@ class MixedWalkBinding:
     time_walk_env_binary_ptr = dll.time_walk_env_binary
 
     @classmethod
-    def walk(cls, kernel_context, T, start_x, start_y):
-        ptr = cls.m_walk(_context_ptr(kernel_context), c_ssize_t(T), c_ssize_t(start_x), c_ssize_t(start_y))
-        return Tensor4DHandle.from_ptr(ptr, T, owned=True)
+    def walk(cls, kernel_context: KernelContextHandle, T, start_x, start_y):
+        ptr = cls.m_walk(kernel_context.ptr, c_ssize_t(T), c_ssize_t(start_x), c_ssize_t(start_y))
+        return Tensor4DHandle.from_ptr(ptr, T)
 
     @classmethod
-    def backtrace(cls, dp_matrix, kernel_context, end_x, end_y):
-        dp_ptr = dp_matrix.ptr if hasattr(dp_matrix, "ptr") else dp_matrix
+    def backtrace(cls, dp_matrix: Tensor4DHandle, kernel_context: KernelContextHandle, end_x, end_y):
+        dp_ptr = dp_matrix.ptr
         T = dp_matrix.T if hasattr(dp_matrix, "T") else None
         if T is None:
             raise ValueError("Tensor4DHandle with a T value is required")
-
-        walk_handle = Point2DArrayHandle.from_ptr(
-            cls.m_walk_backtrace(dp_ptr, T, _context_ptr(kernel_context), end_x, end_y),
-            owned=True,
-        )
+        try:
+            walk_handle = Point2DArrayHandle.from_ptr(cls.m_walk_backtrace(dp_ptr, T, kernel_context.ptr, end_x, end_y))
+        except Exception as e:
+            print(f"Error in backtrace: {e}")
+            print(f"Backtrace failed for end_x={end_x}, end_y={end_y}")
+            return np.array((end_x, end_y), dtype=np.int64)
         return walk_handle.to_numpy()
 
     @classmethod
-    def utilization_distribution(cls, dp_matrix, kernel_context, end_x, end_y):
-        dp_ptr = dp_matrix.ptr if hasattr(dp_matrix, "ptr") else dp_matrix
+    def utilization_distribution(cls, dp_matrix: Tensor4DHandle, kernel_context: KernelContextHandle, end_x, end_y):
+        dp_ptr = dp_matrix.ptr
         T = dp_matrix.T if hasattr(dp_matrix, "T") else None
         if T is None:
             raise ValueError("Tensor4DHandle with a T value is required")
 
-        ptr = cls.mixed_utilization_distribution(dp_ptr, T, _context_ptr(kernel_context), end_x, end_y)
-        return Tensor4DHandle.from_ptr(ptr, T, owned=True)
+        ptr = cls.mixed_utilization_distribution(dp_ptr, T, kernel_context.ptr, end_x, end_y)
+        return Tensor4DHandle.from_ptr(ptr, T)
 
     @classmethod
-    def single_state_walk(cls, kernel_context, T, start_x, start_y, end_x, end_y):
+    def single_state_walk(cls, kernel_context: KernelContextHandle, T, start_x, start_y, end_x, end_y):
         ptr = cls.single_state_walk_ptr(
             c_ssize_t(T),
-            _context_ptr(kernel_context),
+            kernel_context.ptr,
             c_ssize_t(start_x),
             c_ssize_t(start_y),
             c_ssize_t(end_x),
@@ -92,10 +96,7 @@ class MixedWalkBinding:
         )
         if not ptr:
             return None
-        walk_handle = Point2DArrayHandle.from_ptr(
-            ptr,
-            owned=True,
-        )
+        walk_handle = Point2DArrayHandle.from_ptr(ptr)
         try:
             return walk_handle.to_numpy()
         finally:
@@ -103,17 +104,17 @@ class MixedWalkBinding:
 
     @classmethod
     def time_walk_env_binary(
-        cls,
-        *,
-        T,
-        mapping,
-        terrain,
-        env_binary_path,
-        env_weights,
-        start_point,
-        end_point,
-        start_time,
-        end_time,
+            cls,
+            *,
+            T,
+            mapping,
+            terrain,
+            env_binary_path,
+            env_weights,
+            start_point,
+            end_point,
+            start_time,
+            end_time,
     ):
         ptr = cls.time_walk_env_binary_ptr(
             c_size_t(T),
@@ -126,18 +127,11 @@ class MixedWalkBinding:
         )
         if not ptr:
             return None
-        walk_handle = Point2DArrayHandle.from_ptr(
-            ptr,
-            owned=True,
-        )
+        walk_handle = Point2DArrayHandle.from_ptr(ptr)
         try:
             return walk_handle.to_numpy()
         finally:
             walk_handle.free()
-
-
-def _context_ptr(kernel_context):
-    return kernel_context.ptr if hasattr(kernel_context, "ptr") else kernel_context
 
 
 def _mapping_ptr(mapping):

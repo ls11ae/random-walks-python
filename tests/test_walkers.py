@@ -5,8 +5,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from movingpandas import TrajectoryCollection
 
-from randomwalks.bindings.walk_visualization import save_trajectory_coll_leaflet
+from randomwalks.bindings.walk_visualization import save_trajectory_coll_leaflet, LeafletTiles
+from randomwalks.core import MovementPolicy
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -18,7 +20,7 @@ from randomwalks import (
     MesaLandcover,
     MixedWalker,
     TerrainMapHandle,
-    plot_terrain_walk, Reachability,
+    plot_terrain_walk, Reachability, TimeStepPolicy,
 )
 
 
@@ -85,15 +87,27 @@ def test_plot_terrain_walk_legend_only_contains_present_landcovers():
 
 def test_movebank_walks():
     data = pd.read_csv(ROOT / "tests" / "data" / "The Leap of the Cat.csv")
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 6)
     with MixedWalker(data=data,
-                     resolution=400,
+                     resolution=200,
                      reachability=Reachability.HARD,
-                     out_directory=ROOT / "tests" / "data" / "movebank_output") as walker:
-        walker.process_movebank_data()
-        traj_col = walker.generate_walks()
+                     out_directory=ROOT / "tests" / "data" / "movebank_output",
+                     movement_policy=movement_policy) as walker:
+        traj_col = walker.generate_utilization_distribution(sample_walks=2)
         pickle_path = ROOT / "tests" / "data" / "movebank_output" / "trajectories.pickle"
         pickle.dump(traj_col, open(pickle_path, "wb"))
         save_trajectory_coll_leaflet(traj_col, save_path=ROOT / "tests" / "data" / "movebank_output")
 
 
+def test_leaflet_map():
+    traj_col: TrajectoryCollection = pickle.load(
+        open(ROOT / "tests" / "data" / "movebank_output" / "trajectories.pickle", "rb"))
+    print(traj_col.to_point_gdf().head(20))
+    save_trajectory_coll_leaflet(traj_col, save_path=ROOT / "tests" / "data" / "movebank_output",
+                                 terrain_overlays=True,
+                                 terrain_opacity=0.4,
+                                 tiles=LeafletTiles.CARTODB_POSITRON_NO_LABELS)
+
+
 test_movebank_walks()
+test_leaflet_map()

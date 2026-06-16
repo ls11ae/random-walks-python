@@ -15,7 +15,7 @@ class Point2DHandle:
     dll.point_2d_free.restype = None
     free_ptr = dll.point_2d_free
 
-    def __init__(self, x=None, y=None, *, ptr=None, owned=True):
+    def __init__(self, x=None, y=None, *, ptr=None):
         if ptr is None:
             if x is None or y is None:
                 raise ValueError("x and y are required when ptr is not provided")
@@ -23,15 +23,10 @@ class Point2DHandle:
         if not ptr:
             raise RuntimeError("Failed to allocate Point2D")
         self._ptr = ptr
-        self._owned = owned
 
     @classmethod
-    def from_ptr(cls, ptr, *, owned=False):
-        return cls(ptr=ptr, owned=owned)
-
-    @classmethod
-    def from_points(cls, points):
-        return cls(points=list(points), owned=True)
+    def from_ptr(cls, ptr):
+        return cls(ptr=ptr)
 
     @property
     def ptr(self):
@@ -42,9 +37,9 @@ class Point2DHandle:
         return self._ptr.contents
 
     def free(self):
-        if self._owned and self._ptr:
+        if self._ptr:
             self.free_ptr(self._ptr)
-        self._ptr = None
+            self._ptr = None
 
     def __bool__(self):
         return bool(self._ptr)
@@ -70,7 +65,7 @@ class Point2DArrayHandle:
     dll.point2d_array_free.restype = None
     free_ptr = dll.point2d_array_free
 
-    def __init__(self, points: List[Tuple[int, int]] = None, *, length=None, ptr=None, owned=True):
+    def __init__(self, points: List[Tuple[int, int]] = None, *, length=None, ptr=None):
         if ptr is None:
             if points is None:
                 if length is None:
@@ -82,7 +77,6 @@ class Point2DArrayHandle:
         if not ptr:
             raise RuntimeError("Failed to allocate Point2DArray")
         self._ptr = ptr
-        self._owned = owned
 
     @staticmethod
     def __get_walk_points(walk) -> np.ndarray:
@@ -102,8 +96,8 @@ class Point2DArrayHandle:
         return np.array(points, dtype=np.int64)
 
     @classmethod
-    def from_ptr(cls, ptr, *, owned=False):
-        return cls(ptr=ptr, owned=owned)
+    def from_ptr(cls, ptr):
+        return cls(ptr=ptr)
 
     @property
     def ptr(self):
@@ -117,8 +111,7 @@ class Point2DArrayHandle:
         return Point2DArrayHandle.__get_walk_points(self._ptr)
 
     def free(self):
-        if self._owned and self._ptr:
-            self.free_ptr(self._ptr)
+        self.free_ptr(self._ptr)
         self._ptr = None
 
     def __bool__(self):
@@ -159,10 +152,10 @@ def _point2d_array_grid_new(height, width, times):
     grid.width = width
     grid.times = times
 
-    data = (POINTER(POINTER(Point2DArray)) * height)()
+    data = (POINTER(POINTER(Point2DArray)) * height)
     row_buffers = []
     for y in range(height):
-        row = (POINTER(Point2DArray) * width)()
+        row = (POINTER(Point2DArray) * width)
         row_buffers.append(row)
         data[y] = row
         for x in range(width):

@@ -117,8 +117,8 @@ class Tensor4DHandle:
         return self._T
 
     @classmethod
-    def from_ptr(cls, ptr, T, *, owned=True):
-        return cls(T=T, ptr=ptr, owned=owned)
+    def from_ptr(cls, ptr, T):
+        return cls(T=T, ptr=ptr)
 
     def to_numpy_sum(self, width, height, *, average=True):
         if not self._ptr:
@@ -144,6 +144,7 @@ class Tensor4DHandle:
         return acc
 
     def free(self):
+        print("freeing 4D tensor")
         if self._owned and self._ptr:
             self.free_4d(self._ptr, self._T)
         self._ptr = None
