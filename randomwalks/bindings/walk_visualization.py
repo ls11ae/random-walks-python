@@ -279,8 +279,8 @@ def _bounds_for_key(overlay_bounds, key):
 def _looks_like_single_bounds(bounds):
     if isinstance(bounds, Mapping):
         return (
-            {"min_lon", "min_lat", "max_lon", "max_lat"}.issubset(bounds)
-            or {"west", "south", "east", "north"}.issubset(bounds)
+                {"min_lon", "min_lat", "max_lon", "max_lat"}.issubset(bounds)
+                or {"west", "south", "east", "north"}.issubset(bounds)
         )
     try:
         array = np.asarray(bounds, dtype=float)
@@ -357,7 +357,7 @@ def _parse_landcover_grid_path(path):
     }
 
 
-def _add_start_end_markers(m, coords, color, label_prefix):
+def _add_start_end_markers(target, coords, color, label_prefix):
     if not coords:
         return
     start = coords[0]
@@ -366,12 +366,12 @@ def _add_start_end_markers(m, coords, color, label_prefix):
         location=start,
         tooltip=f"{label_prefix} start",
         icon=folium.Icon(color="green", icon="play", prefix="fa")
-    ).add_to(m)
+    ).add_to(target)
     folium.Marker(
         location=end,
         tooltip=f"{label_prefix} end",
         icon=folium.Icon(color="red", icon="stop", prefix="fa")
-    ).add_to(m)
+    ).add_to(target)
 
 
 def _find_coord_index(coords, target, tol=1e-5):
@@ -381,7 +381,7 @@ def _find_coord_index(coords, target, tol=1e-5):
     return None
 
 
-def _add_step_boxes(m, coords, steps_for_animal, color):
+def _add_step_boxes(target, coords, steps_for_animal, color):
     if not coords or not steps_for_animal:
         return
     for i, step_coord in enumerate(steps_for_animal, start=1):
@@ -402,7 +402,7 @@ def _add_step_boxes(m, coords, steps_for_animal, color):
                     f'box-shadow: 0 1px 2px rgba(0,0,0,0.3);">{i}</div>'
                 )
             )
-        ).add_to(m)
+        ).add_to(target)
 
 
 def walks_to_osm_multi(
@@ -465,6 +465,7 @@ def walks_to_osm_multi(
 
     colors = _color_cycle()
     color_count = len(colors)
+    has_walk_layers = False
 
     for idx, (animal_id, coords) in enumerate(geodetic_walks.items()):
         if not coords:
@@ -481,13 +482,22 @@ def walks_to_osm_multi(
         )
 
         if draw_walks:
-            folium.PolyLine(coords, color=color, weight=3, tooltip=f"Animal {animal_id}").add_to(m)
-            _add_start_end_markers(m, coords, color, label_prefix=f"Animal {animal_id}")
+            walk_layer = folium.FeatureGroup(
+                name=f"Animal {animal_id} walk",
+                overlay=True,
+                control=True,
+                show=True,
+            )
+            folium.PolyLine(coords, color=color, weight=3, tooltip=f"Animal {animal_id}").add_to(walk_layer)
+            _add_start_end_markers(walk_layer, coords, color, label_prefix=f"Animal {animal_id}")
 
             if annotated and step_annotations and animal_id in step_annotations:
-                _add_step_boxes(m, coords, step_annotations[animal_id], color)
+                _add_step_boxes(walk_layer, coords, step_annotations[animal_id], color)
 
-    if terrain_overlay_map or ud_overlay_map:
+            walk_layer.add_to(m)
+            has_walk_layers = True
+
+    if terrain_overlay_map or ud_overlay_map or has_walk_layers:
         folium.LayerControl().add_to(m)
 
     os.makedirs(out_path, exist_ok=True)
@@ -585,9 +595,16 @@ def walk_to_osm(
         utilization_distribution_opacity=utilization_distribution_opacity,
     )
 
+    walk_layer = None
     if draw_walk:
+        walk_layer = folium.FeatureGroup(
+            name=f"{animal_id} walk",
+            overlay=True,
+            control=True,
+            show=True,
+        )
         # Draw the single polyline (keeps the original 'red' default)
-        folium.PolyLine(walk_coords, color="red", weight=3).add_to(m)
+        folium.PolyLine(walk_coords, color="red", weight=3).add_to(walk_layer)
 
     if draw_walk and annotated and original_coords is not None:
         coords_list = [tuple(pt) for pt in original_coords.to_list()]  # Serie -> List[tuple]
@@ -599,11 +616,11 @@ def walk_to_osm(
                 fill=True,
                 fill_opacity=0.7,
                 tooltip=f"Original {idx}"
-            ).add_to(m)
+            ).add_to(walk_layer)
 
     if draw_walk:
         # Start/End markers
-        _add_start_end_markers(m, walk_coords, color="red", label_prefix=f"Animal {animal_id}")
+        _add_start_end_markers(walk_layer, walk_coords, color="red", label_prefix=f"Animal {animal_id}")
 
     # Optional step boxes: if a dict is provided, try to use by animal_id
     # If a plain list is passed (not per-animal), also accept under the special key or fallback
@@ -615,9 +632,12 @@ def walk_to_osm(
         steps_for_animal = None
 
     if draw_walk and annotated and steps_for_animal:
-        _add_step_boxes(m, walk_coords, steps_for_animal, color="red")
+        _add_step_boxes(walk_layer, walk_coords, steps_for_animal, color="red")
 
-    if terrain_overlay_map or ud_overlay_map:
+    if walk_layer is not None:
+        walk_layer.add_to(m)
+
+    if terrain_overlay_map or ud_overlay_map or walk_layer is not None:
         folium.LayerControl().add_to(m)
 
     # Save
@@ -720,6 +740,7 @@ def save_trajectory_coll_leaflet(
 
     # combined map
     m_all = folium.Map(location=center, zoom_start=14, tiles=tiles, attr="Tiles © Esri")
+    has_combined_walk_layers = False
 
     for idx, (base_id, trajectories) in enumerate(trajectory_groups.items()):
         color = colors[idx % len(colors)]
@@ -738,6 +759,7 @@ def save_trajectory_coll_leaflet(
             terrain_opacity=terrain_opacity,
             utilization_distribution_opacity=utilization_distribution_opacity,
         )
+        has_single_walk_layers = False
         for version_idx, traj in enumerate(trajectories):
             traj_id = str(traj.id)
             version_color = color if version_idx == 0 else colors[(idx + version_idx) % len(colors)]
@@ -748,19 +770,37 @@ def save_trajectory_coll_leaflet(
             polyline_kwargs = {}
             if len(trajectories) > 1:
                 polyline_kwargs["tooltip"] = label
-            folium.PolyLine(coords, color=version_color, weight=4, opacity=0.8, **polyline_kwargs).add_to(m_single)
+            walk_layer = folium.FeatureGroup(
+                name=f"{label} walk",
+                overlay=True,
+                control=True,
+                show=True,
+            )
+            folium.PolyLine(coords, color=version_color, weight=4, opacity=0.8, **polyline_kwargs).add_to(walk_layer)
             marker_label = label if len(trajectories) > 1 else traj_id
-            folium.Marker(coords[0], tooltip=f"{marker_label} Start").add_to(m_single)
-            folium.Marker(coords[-1], tooltip=f"{marker_label} End").add_to(m_single)
-        if terrain_overlay_map or ud_overlay_map:
+            folium.Marker(coords[0], tooltip=f"{marker_label} Start").add_to(walk_layer)
+            folium.Marker(coords[-1], tooltip=f"{marker_label} End").add_to(walk_layer)
+            walk_layer.add_to(m_single)
+            has_single_walk_layers = True
+        if terrain_overlay_map or ud_overlay_map or has_single_walk_layers:
             folium.LayerControl().add_to(m_single)
 
         m_single.save(str(save_path / f"{base_id}.html"))
 
         # add to combined map
-        folium.PolyLine(primary_coords, color=color, weight=3, opacity=0.8).add_to(m_all)
+        combined_walk_layer = folium.FeatureGroup(
+            name=f"{base_id} walk",
+            overlay=True,
+            control=True,
+            show=True,
+        )
+        folium.PolyLine(primary_coords, color=color, weight=3, opacity=0.8).add_to(combined_walk_layer)
+        combined_walk_layer.add_to(m_all)
+        has_combined_walk_layers = True
 
     out_file = save_path / "all_trajectories.html"
+    if has_combined_walk_layers:
+        folium.LayerControl().add_to(m_all)
     m_all.save(str(out_file))
     print(f"Trajectories saved to {out_file}")
 
@@ -819,6 +859,9 @@ def save_trajectory_collection_timed(traj_coll, save_path="walks/"):
     ).add_to(m)
 
     output = save_path
+    parent_dir = os.path.dirname(output)
+    if not os.path.exists(parent_dir):
+        os.makedirs(parent_dir)
     m.save(str(output))
     print(f"Trajectories saved to {output}")
     return output

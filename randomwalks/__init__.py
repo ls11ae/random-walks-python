@@ -10,7 +10,7 @@ from randomwalks.bindings.data_structures.Terrain import (
     KernelsMap3DHandle,
     MesaLandcover,
     TerrainMapHandle,
-    WaterMode,
+    BarrierMode,
 )
 from randomwalks.bindings.data_structures.types import ComputationMode, Reachability
 from randomwalks.bindings.plotter import (
@@ -61,7 +61,7 @@ __all__ = [
     "TensorHandle",
     "TerrainMapHandle",
     "TimeStepPolicy",
-    "WaterMode",
+    "BarrierMode",
     "chebyshev",
     "euclidean",
     "manhattan",

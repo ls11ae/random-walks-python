@@ -1,5 +1,6 @@
 import ctypes
 import os
+from encodings import utf_8
 
 from randomwalks.bindings.data_structures.types import *
 from randomwalks.wrapper import dll
@@ -62,7 +63,7 @@ class MovementPolicyCfg(str, enum.Enum):
     AUTO_SPEED = "AUTO_SPEED"
 
 
-class WaterMode(enum.IntEnum):
+class BarrierMode(enum.IntEnum):
     FORBID = 0
     AVOID = 1
     ALLOW = 2
@@ -107,6 +108,14 @@ class TerrainMapHandle:
     dll.tensor_map_terrain.restype = KernelsMap3DPtr
     tensor_map_ptr = dll.tensor_map_terrain
 
+    dll.serialize_terrain.argtypes = [ctypes.c_char_p, TerrainMapPtr]
+    dll.serialize_terrain.restype = ctypes.c_uint64
+    serialize_ptr = dll.serialize_terrain
+
+    dll.deserialize_terrain.argtypes = [ctypes.c_char_p]
+    dll.deserialize_terrain.restype = TerrainMapPtr
+    deserialize_ptr = dll.deserialize_terrain
+
     dll.tensor_map_terrain_serialize.argtypes = [
         TerrainMapPtr,
         KernelParametersMappingPtr,
@@ -148,6 +157,10 @@ class TerrainMapHandle:
         c_file = file.encode("ascii")
         return cls(ptr=TerrainMapHandle.from_file_ptr(c_file, _c_delim(delim)))
 
+    def to_file(self, file):
+        c_file = file.encode("ascii")
+        TerrainMapHandle.serialize_ptr(c_file, self.ptr)
+
     @classmethod
     def single_value(cls, land_type, width, height):
         ptr = cls.single_value_ptr(land_type, width, height)
@@ -188,7 +201,7 @@ class TerrainMapHandle:
 
         return set(int(value) for value in np.unique(self.to_numpy()))
 
-    def tensor_map(self, mapping, reachability=Reachability.SOFT):
+    def tensor_map(self, mapping, reachability=Reachability.RELAXED):
         ptr = self.tensor_map_ptr(
             self._ptr,
             _mapping_ptr(mapping),
@@ -196,7 +209,7 @@ class TerrainMapHandle:
         )
         return KernelsMap3DHandle.from_ptr(ptr)
 
-    def serialize_tensor_map(self, mapping, output_path, reachability=Reachability.SOFT):
+    def serialize_tensor_map(self, mapping, output_path, reachability=Reachability.RELAXED):
         self.tensor_map_serialize_ptr(
             self._ptr,
             _mapping_ptr(mapping),

@@ -144,7 +144,6 @@ class Tensor4DHandle:
         return acc
 
     def free(self):
-        print("freeing 4D tensor")
         if self._owned and self._ptr:
             self.free_4d(self._ptr, self._T)
         self._ptr = None

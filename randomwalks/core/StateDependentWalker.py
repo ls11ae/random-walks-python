@@ -2,31 +2,38 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-import numpy as np
-import pandas as pd
 import geopandas as gpd
 import movingpandas as mpd
+import numpy as np
+import pandas as pd
 from environmentcma.crs import grid_shape_from_bbox, utm_to_grid, grid_to_geo_walk, padded_utm_bbox
 from segmentationcma.core import bbox_of_segment
 from shapely import Point
 
+from randomwalks import plot_terrain_walk
 from randomwalks.bindings.data_structures.KernelContext import KernelContextHandle
 from randomwalks.bindings.data_structures.KernelMapping import KPM_KIND_KERNELS, KernelMapping
 from randomwalks.bindings.data_structures.Matrix import MatrixHandle
-from randomwalks.bindings.data_structures.Terrain import Animal, MesaLandcover, TerrainMapHandle, WaterMode
+from randomwalks.bindings.data_structures.Terrain import Animal, MesaLandcover, TerrainMapHandle, BarrierMode
 from randomwalks.bindings.data_structures.types import Reachability
 from randomwalks.bindings.mixed_walk import MixedWalkBinding
 from randomwalks.core.MixedWalker import MixedWalker
-from randomwalks.core.MovementPolicy import FixedStepsPolicy
 from randomwalks.core.WalkerHelper import WalkerHelper
 
 
 class StateDependentWalker(MixedWalker):
-    def __init__(self, data, animal_type, resolution, out_directory, movement_policy, n_hmm_states=3,
+    def __init__(self, data, animal_type, resolution, out_directory, movement_policy, barriers: list[int] | None = None,
                  time_col="timestamp", lon_col="location-long", lat_col="location-lat",
-                 id_col="individual-local-identifier", crs="EPSG:4326"):
+                 id_col="individual_local_identifier", crs="EPSG:4326"):
+        self.state_kernels = None
         self.animal = _coerce_animal(animal_type)
-        self.n_hmm_states = n_hmm_states
+        self.n_hmm_states = 0
+        self.dt_tolerance = 1
+        self.rnge = 0
+        self.barrier_mode = BarrierMode.AVOID
+        self.barriers = barriers
+
+        self.is_brownian = True
         is_marine = self.animal in (Animal.MARINE, Animal.AIRBORNE)
         super().__init__(
             data,
@@ -42,17 +49,20 @@ class StateDependentWalker(MixedWalker):
         )
         self.original_data = self.data
 
-    def get_kernels(self, dt_tolerance, rnge, out_dir=None, is_brownian=False):
+    def get_kernels(self, n_hmm_states, dt_tolerance, rnge, is_brownian=False):
         super()._process_movebank_data()
-
+        self.n_hmm_states = n_hmm_states
+        self.dt_tolerance = dt_tolerance
+        self.rnge = rnge
+        self.is_brownian = is_brownian
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
 
         cor_zs, brw_zs = self.animal_proc.get_hmm_kernels(
-            dt_tolerance=dt_tolerance,
-            rnge=rnge,
-            out_dir=out_dir,
             num_states=self.n_hmm_states,
+            dt_tolerance=self.dt_tolerance,
+            rnge=self.rnge,
+            out_dir=self.out_directory
         )
         selected_kernels = brw_zs if is_brownian and self.animal != Animal.AIRBORNE else cor_zs
         state_kernels = {}
@@ -64,39 +74,39 @@ class StateDependentWalker(MixedWalker):
 
         if not state_kernels:
             raise ValueError("No usable state kernels were generated.")
+        self.state_kernels = state_kernels
         return state_kernels
 
-    def get_steps(self):
+    def __get_steps(self):
         return self.animal_proc.create_movement_data_dict(has_states=True)
 
-    def generate_walks(self, mapping=None, serialization_dir=None, amount=1,
-                       dt_tolerance=0.5,
-                       rnge=200,
-                       max_cell_size=10,
-                       water_mode: WaterMode = WaterMode.AVOID,
-                       is_brownian=False):
-        self._randomwalks_core(out_dir=serialization_dir, dt_tolerance=dt_tolerance, rnge=rnge,
-                               max_cell_size=max_cell_size,
-                               water_mode=water_mode, is_brownian=is_brownian)
+    def generate_walks(self, mapping=None, amount=1,
+                       max_cell_size=10, barrier_mode: BarrierMode = BarrierMode.AVOID):
+        self.barrier_mode = barrier_mode
+        return self._randomwalks_core(mapping=None, serialization_dir=self.serialization_dir, amount_of_walks=amount,
+                                      ud=False, save_plots=False, max_cell_size=max_cell_size)
 
     def _randomwalks_core(
             self,
-            out_dir=None,
-            dt_tolerance=0.5,
-            rnge=200,
+            mapping=None,
+            serialization_dir=None,
+            amount_of_walks=1,
+            ud=False,
+            movement_policy=None,
+            save_plots=False,
             max_cell_size=10,
-            water_mode: WaterMode = WaterMode.AVOID,
-            is_brownian=False,
     ):
-        py_kernels = self.get_kernels(dt_tolerance, rnge, out_dir, is_brownian)
+        py_kernels = self.state_kernels
         t_col = self.original_data.t
         id_col = self.original_data.get_traj_id_col()
         movement_policy = self.movement_policy
 
-        steps_dict = self.get_steps()
+        steps_dict = self.__get_steps()
         per_animal_gdfs = []
 
+        animal_index = 0
         for animal_id, trajectory in steps_dict.items():
+            animal_index += 1
             steps = trajectory.df.copy()
             segments = _segments_for_steps(steps, max_cell_size, self.resolution)
             animal_rows = []
@@ -104,7 +114,7 @@ class StateDependentWalker(MixedWalker):
             for segment in segments:
                 seg_start, seg_end = segment
                 min_lon, min_lat, max_lon, max_lat = bbox_of_segment(steps, segment)
-                utm_bbox, epsg_code, fwd, inv = padded_utm_bbox(
+                utm_bbox, zone, hemi, epsg, fwd, inv = padded_utm_bbox(
                     min_lon,
                     min_lat,
                     max_lon,
@@ -134,6 +144,8 @@ class StateDependentWalker(MixedWalker):
 
                 try:
                     for st_idx in range(seg_start, seg_end):
+                        print(
+                            f"{animal_id} [{animal_index}|{len(steps_dict)}]: Processing step {st_idx}/{seg_end} ")
                         en_idx = st_idx + 1
                         start_lon = steps["geo_x"].iloc[st_idx]
                         start_lat = steps["geo_y"].iloc[st_idx]
@@ -160,16 +172,19 @@ class StateDependentWalker(MixedWalker):
 
                         T, S = movement_policy.resolve((start_x, start_y), (end_x, end_y), start_time, end_time)
                         T = int(np.ceil(T * 1.5))
-                        directions = 1 if is_brownian else 8
+                        directions = 1 if self.is_brownian else 8
                         base_kernel = py_kernels.get(state, next(iter(py_kernels.values())))
-                        grid_kernel = _kernel_for_grid(base_kernel, S, cell_size, rnge, self.animal)
+                        grid_kernel = _kernel_for_grid(base_kernel, S, cell_size, self.rnge, self.animal)
                         mapping = _kernel_mapping_for_state(
                             terrain,
                             grid_kernel,
                             directions,
-                            forbid_water=water_mode == WaterMode.FORBID,
+                            forbidden_terrains=self.barriers,
                         )
-                        context = KernelContextHandle.pool(terrain, mapping, Reachability.SOFT)
+
+                        context = KernelContextHandle.pool(terrain, mapping, Reachability.RELAXED)
+                        print(f"T = {T}, S = {S}\n")
+                        print(f" start {[start_x, start_y]}, end: {[end_x, end_y]}")
 
                         try:
                             segment_points = MixedWalkBinding.single_state_walk(
@@ -186,7 +201,7 @@ class StateDependentWalker(MixedWalker):
 
                         if segment_points is None:
                             segment_points = [(start_x, start_y), (end_x, end_y)]
-
+                        # plot_terrain_walk(terrain=terrain, walk=segment_points)
                         geo_walk = grid_to_geo_walk(segment_points, utm_bbox, nx, ny, inv)
                         times = pd.date_range(start=start_time, end=end_time, periods=len(geo_walk))
                         for (lon, lat), t in zip(geo_walk, times):
@@ -264,7 +279,7 @@ def _kernel_for_grid(base_kernel, step_size, cell_size, rnge, animal):
     return WalkerHelper.resample_kernel_to_grid(clipped, cell_size, step_size)
 
 
-def _kernel_mapping_for_state(terrain, kernel, directions, forbid_water=False):
+def _kernel_mapping_for_state(terrain, kernel, directions, forbidden_terrains: list[int] | None):
     mapping = KernelMapping(terrain, kind=KPM_KIND_KERNELS)
     matrix_handles = []
     for terrain_value in terrain.unique_values():
@@ -280,9 +295,11 @@ def _kernel_mapping_for_state(terrain, kernel, directions, forbid_water=False):
             matrix.free()
         matrix_handles.append(matrix)
 
-    if forbid_water:
-        mapping.set_barrier(MesaLandcover.PERMANENT_WATER, True)
+    if forbidden_terrains is None:
+        return mapping
 
+    for t in forbidden_terrains:
+        mapping.set_barrier(t, barrier=True)
     return mapping
 
 

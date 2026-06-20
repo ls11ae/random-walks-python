@@ -1,10 +1,7 @@
-from importlib.resources import as_file, files
-from pathlib import Path
+from importlib import resources
 
-from randomwalks.bindings.data_structures import Terrain
 from randomwalks.bindings.data_structures.types import *
 from randomwalks.wrapper import dll
-from importlib import resources
 
 KPM_KIND_PARAMETERS = int(KernelMapKind.PARAMETERS)
 KPM_KIND_KERNELS = int(KernelMapKind.KERNELS)
@@ -34,6 +31,14 @@ class KernelMapping:
     dll.set_terrain_barrier.argtypes = [KernelParametersMappingPtr, c_int, c_bool]
     dll.set_terrain_barrier.restype = c_bool
     set_barrier_ptr = dll.set_terrain_barrier
+
+    dll.serialize_kernel_mappings.argtypes = [c_char_p, KernelParametersMappingPtr]
+    dll.serialize_kernel_mappings.restype = c_uint64
+    serialize_ptr = dll.serialize_kernel_mappings
+
+    dll.deserialize_kernel_mappings.argtypes = [c_char_p]
+    dll.deserialize_kernel_mappings.restype = KernelParametersMappingPtr
+    deserialize_ptr = dll.deserialize_kernel_mappings
 
     dll.set_terrain_unmapped.argtypes = [KernelParametersMappingPtr, c_int, c_bool]
     dll.set_terrain_unmapped.restype = c_bool
@@ -96,6 +101,9 @@ class KernelMapping:
     @classmethod
     def mesa_default(cls, resource=MESA_DEFAULT_MAPPING_RESOURCE):
         return cls.from_ptr(cls.load_csv_ptr(resource.__str__().encode("utf-8")))
+
+    def to_file(self, filename):
+        return bool(self.serialize_ptr(filename.encode("utf-8"), _mapping_ptr(self)))
 
     @classmethod
     def uniform(cls, terrain, *, is_brownian, step_size, directions,

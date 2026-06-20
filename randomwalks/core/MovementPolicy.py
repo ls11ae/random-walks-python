@@ -22,13 +22,13 @@ class MovementPolicy(ABC):
 
     @abstractmethod
     def resolve(
-        self,
-        start_point,
-        end_point,
-        start_time,
-        end_time,
-        reference_speed: Optional[float] = None,
-        movement_diffusivity: Optional[float] = 1.5,
+            self,
+            start_point,
+            end_point,
+            start_time,
+            end_time,
+            reference_speed: Optional[float] = None,
+            movement_diffusivity: Optional[float] = 1.5,
     ) -> Tuple[int, int]:
         """Return ``(T, S)`` for a segment."""
         pass
@@ -36,13 +36,13 @@ class MovementPolicy(ABC):
 
 class TimeStepPolicy(MovementPolicy):
     def resolve(
-        self,
-        start_point,
-        end_point,
-        start_time,
-        end_time,
-        reference_speed: Optional[float] = None,
-        movement_diffusivity: Optional[float] = 1.5,
+            self,
+            start_point,
+            end_point,
+            start_time,
+            end_time,
+            reference_speed: Optional[float] = None,
+            movement_diffusivity: Optional[float] = 1.5,
     ) -> Tuple[int, int]:
         import pandas as pd
 
@@ -70,7 +70,7 @@ class TimeStepPolicy(MovementPolicy):
 
         max_s = 30
         max_t = 2000
-        min_s = 2
+        min_s = 5
         min_t = 3
 
         T = max(min_t, int(np.ceil(dt_seconds / self.timestep_s)))
@@ -100,13 +100,13 @@ class FixedStepsPolicy(MovementPolicy):
         super().__init__(time_steps)
 
     def resolve(
-        self,
-        start_point,
-        end_point,
-        start_time,
-        end_time,
-        reference_speed: Optional[float] = None,
-        movement_diffusivity: Optional[float] = 1.5,
+            self,
+            start_point,
+            end_point,
+            start_time,
+            end_time,
+            reference_speed: Optional[float] = None,
+            movement_diffusivity: Optional[float] = 1.5,
     ) -> Tuple[int, int]:
         import pandas as pd
 
@@ -142,13 +142,13 @@ class SpeedBasedPolicy(MovementPolicy):
         self.grid_cell_m = grid_cell_m
 
     def resolve(
-        self,
-        start_point,
-        end_point,
-        start_time=None,
-        end_time=None,
-        reference_speed: Optional[float] = None,
-        movement_diffusivity: Optional[float] = 1.5,
+            self,
+            start_point,
+            end_point,
+            start_time=None,
+            end_time=None,
+            reference_speed: Optional[float] = None,
+            movement_diffusivity: Optional[float] = 1.5,
     ) -> Tuple[int, int]:
         dist_m = euclidean(start_point, end_point)
         step_length_m = self.base_speed * self.timestep_s

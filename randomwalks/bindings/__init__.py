@@ -10,7 +10,7 @@ from randomwalks.bindings.data_structures.Terrain import (
     KernelsMap3DHandle,
     MesaLandcover,
     TerrainMapHandle,
-    WaterMode,
+    BarrierMode,
 )
 from randomwalks.bindings.data_structures.types import ComputationMode, Reachability
 
@@ -30,5 +30,5 @@ __all__ = [
     "Tensor4DHandle",
     "TensorHandle",
     "TerrainMapHandle",
-    "WaterMode",
+    "BarrierMode",
 ]

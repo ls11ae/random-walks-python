@@ -107,9 +107,9 @@ Vector2D = DirOffsets
 
 class TerrainMap(Structure):
     _fields_ = [
-        ("data", POINTER(POINTER(c_int))),
         ("width", c_ssize_t),
         ("height", c_ssize_t),
+        ("data", POINTER(POINTER(c_int))),
     ]
 
 
@@ -352,8 +352,8 @@ class KPM_Data(Union):
 
 class KernelParametersMapping(Structure):
     _fields_ = [
-        ("terrain_values", POINTER(c_int)),
         ("terrain_count", c_size_t),
+        ("terrain_values", POINTER(c_int)),
         ("set", POINTER(c_bool)),
         ("barrier", POINTER(c_bool)),
         ("unmapped", POINTER(c_bool)),
@@ -453,8 +453,8 @@ Point2DArrayGridPtr = POINTER(Point2DArrayGrid)
 
 class TimedLocationArray(Structure):
     _fields_ = [
-        ("data", POINTER(TimedLocation)),
         ("length", c_size_t),
+        ("data", POINTER(TimedLocation)),
     ]
 
 
@@ -474,7 +474,7 @@ KernelMapMetaPtr = POINTER(KernelMapMeta)
 
 
 class Reachability(enum.IntEnum):
-    SOFT = 0
+    RELAXED = 0
     HARD = 1
     FULL = 2
 

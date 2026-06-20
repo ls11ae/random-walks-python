@@ -16,6 +16,7 @@ class Point2DHandle:
     free_ptr = dll.point_2d_free
 
     def __init__(self, x=None, y=None, *, ptr=None):
+        self._ptr = None
         if ptr is None:
             if x is None or y is None:
                 raise ValueError("x and y are required when ptr is not provided")
@@ -66,6 +67,7 @@ class Point2DArrayHandle:
     free_ptr = dll.point2d_array_free
 
     def __init__(self, points: List[Tuple[int, int]] = None, *, length=None, ptr=None):
+        self._ptr = None
         if ptr is None:
             if points is None:
                 if length is None:
@@ -111,7 +113,8 @@ class Point2DArrayHandle:
         return Point2DArrayHandle.__get_walk_points(self._ptr)
 
     def free(self):
-        self.free_ptr(self._ptr)
+        if self._ptr:
+            self.free_ptr(self._ptr)
         self._ptr = None
 
     def __bool__(self):

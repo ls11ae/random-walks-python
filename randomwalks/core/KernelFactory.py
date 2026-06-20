@@ -5,9 +5,10 @@ from hmmcma.preprocessing import ColumnConfig
 from kernelcma import Kernel2D, StateKernelFactory
 
 
-class KernelFactory:
+class KernelsFactory:
     def __init__(self, gdf: gpd.GeoDataFrame,
-                 id_cols='individual-local-identifier',
+                 num_states,
+                 id_cols='individual_local_identifier',
                  time_col='timestamp',
                  geom_col='geometry',
                  provided_dir_col='direction',  # degrees
@@ -15,7 +16,7 @@ class KernelFactory:
                  # additional data from the workflow
                  state_col='state',
                  scale=True,
-                 num_states=3):
+                 ):
         self.columns = ColumnConfig(id_cols=id_cols,
                                     time_col=time_col,
                                     geom_col=geom_col,

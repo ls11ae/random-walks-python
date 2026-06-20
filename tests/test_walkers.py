@@ -7,7 +7,13 @@ import pandas as pd
 import pytest
 from movingpandas import TrajectoryCollection
 
-from randomwalks.bindings.walk_visualization import save_trajectory_coll_leaflet, LeafletTiles
+from randomwalks.bindings.data_structures import KernelMapping
+from randomwalks.bindings.walk_visualization import (
+    LeafletGridOverlay,
+    LeafletTiles,
+    save_trajectory_coll_leaflet,
+    walk_to_osm,
+)
 from randomwalks.core import MovementPolicy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +28,7 @@ from randomwalks import (
     TerrainMapHandle,
     plot_terrain_walk, Reachability, TimeStepPolicy,
 )
+from randomwalks.core.MixedWalker import _normalize_walk_segment
 
 
 def _as_point_set(walk):
@@ -68,6 +75,15 @@ def test_mixed_walker_utilization_distribution_is_valid():
         terrain.free()
 
 
+def test_mixed_walker_failed_backtrace_falls_back_to_endpoints():
+    start = (2, 2)
+    end = (6, 6)
+
+    assert _normalize_walk_segment(None, start, end) == [start, end]
+    assert _normalize_walk_segment(np.array(end), start, end) == [start, end]
+    assert _normalize_walk_segment(np.array([end]), start, end) == [start, end]
+
+
 def test_plot_terrain_walk_legend_only_contains_present_landcovers():
     matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
@@ -85,15 +101,58 @@ def test_plot_terrain_walk_legend_only_contains_present_landcovers():
     assert "Permanent water" not in labels
 
 
+def test_plot_terrain_walk_can_save_without_showing(tmp_path):
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    out_file = tmp_path / "walk_plot.png"
+    ax = plot_terrain_walk(
+        terrain=np.full((5, 5), MesaLandcover.GRASSLAND),
+        walk=[[(0, 0), (2, 2)], [(0, 4), (4, 0)]],
+        steps=[(0, 0), (4, 4)],
+        ud=np.ones((5, 5)),
+        show=False,
+        save_path=out_file,
+    )
+
+    assert ax is not None
+    assert out_file.exists()
+    assert out_file.stat().st_size > 0
+
+
+def test_walk_to_osm_makes_walk_checkable_layer(tmp_path):
+    out_file = walk_to_osm(
+        [(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)],
+        animal_id="animal",
+        walk_path=str(tmp_path),
+        utilization_distribution_overlays={
+            "animal": LeafletGridOverlay(
+                grid=np.ones((3, 3)),
+                bounds=(0.0, 0.0, 1.0, 1.0),
+                name="animal UD",
+            )
+        },
+    )
+    html = Path(out_file).read_text()
+
+    assert "animal walk" in html
+    assert "animal UD" in html
+    assert "layer_control" in html
+
+
 def test_movebank_walks():
-    data = pd.read_csv(ROOT / "tests" / "data" / "The Leap of the Cat.csv")
-    movement_policy = TimeStepPolicy(timestep_s=3600 * 6)
+    data = pd.read_csv(ROOT / "tests" / "data" / "boar_study_austria.csv")
+    movement_policy = TimeStepPolicy(timestep_s=3600 * 4)
+    mapping = KernelMapping.mesa_default()
+    mapping.set_barrier(MesaLandcover.BUILT_UP)
+    mapping.set_barrier(MesaLandcover.PERMANENT_WATER)
+    print(f"{mapping.weight(MesaLandcover.GRASSLAND, MesaLandcover.CROPLAND)}")
     with MixedWalker(data=data,
                      resolution=200,
-                     reachability=Reachability.HARD,
+                     reachability=Reachability.RELAXED,
                      out_directory=ROOT / "tests" / "data" / "movebank_output",
                      movement_policy=movement_policy) as walker:
-        traj_col = walker.generate_utilization_distribution(sample_walks=2)
+        traj_col = walker.generate_utilization_distribution(sample_walks=3, save_plots=True)
         pickle_path = ROOT / "tests" / "data" / "movebank_output" / "trajectories.pickle"
         pickle.dump(traj_col, open(pickle_path, "wb"))
         save_trajectory_coll_leaflet(traj_col, save_path=ROOT / "tests" / "data" / "movebank_output")

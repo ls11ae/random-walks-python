@@ -1,4 +1,5 @@
 import numpy as np
+from pathlib import Path
 
 from randomwalks.bindings.data_structures.Terrain import (
     MESA_LANDCOVER_COLORS,
@@ -53,6 +54,8 @@ def plot_terrain_walk(
     title=None,
     show_legend=True,
     show=True,
+    save_path=None,
+    dpi=150,
     ax=None,
 ):
     import matplotlib.colors as mcolors
@@ -66,8 +69,11 @@ def plot_terrain_walk(
     elif width is None or height is None:
         raise ValueError("Either terrain or width/height is required")
 
+    created_figure = ax is None
     if ax is None:
-        _, ax = plt.subplots(figsize=(10, 10))
+        fig, ax = plt.subplots(figsize=(10, 10))
+    else:
+        fig = ax.figure
 
     legend_handles = []
     if terrain_array is not None:
@@ -105,21 +111,19 @@ def plot_terrain_walk(
             zorder=5,
         )
 
-    if walk is not None:
-        walk = np.asarray(walk, dtype=float)
-        if walk.ndim == 1:
-            walk = walk.reshape(1, 2)
-        if walk.size:
-            ax.plot(walk[:, 0], walk[:, 1], color="#B23A2E", linewidth=2.0, zorder=10)
-            ax.scatter(walk[0, 0], walk[0, 1], color="blue", edgecolor="black", s=50, zorder=11)
-            ax.scatter(walk[-1, 0], walk[-1, 1], color="black", edgecolor="black", s=50, zorder=11)
-            legend_handles.extend([
-                Line2D([0], [0], color="#B23A2E", linewidth=2, label="Path"),
-                Line2D([0], [0], marker="o", color="w", markerfacecolor="blue",
-                       markeredgecolor="black", markersize=8, label="Start"),
-                Line2D([0], [0], marker="o", color="w", markerfacecolor="black",
-                       markeredgecolor="black", markersize=8, label="End"),
-            ])
+    walk_arrays = _walk_arrays(walk)
+    if walk_arrays:
+        for walk_array in walk_arrays:
+            ax.plot(walk_array[:, 0], walk_array[:, 1], color="#B23A2E", linewidth=2.0, alpha=0.78, zorder=10)
+            ax.scatter(walk_array[0, 0], walk_array[0, 1], color="blue", edgecolor="black", s=50, zorder=11)
+            ax.scatter(walk_array[-1, 0], walk_array[-1, 1], color="black", edgecolor="black", s=50, zorder=11)
+        legend_handles.extend([
+            Line2D([0], [0], color="#B23A2E", linewidth=2, label="Path"),
+            Line2D([0], [0], marker="o", color="w", markerfacecolor="blue",
+                   markeredgecolor="black", markersize=8, label="Start"),
+            Line2D([0], [0], marker="o", color="w", markerfacecolor="black",
+                   markeredgecolor="black", markersize=8, label="End"),
+        ])
 
     if steps is not None:
         steps = np.asarray(steps, dtype=float)
@@ -162,9 +166,17 @@ def plot_terrain_walk(
                 labels_seen.add(label)
         ax.legend(handles=unique_handles, loc="upper right", fontsize=9)
 
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.tight_layout()
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+
     if show:
-        plt.tight_layout()
+        fig.tight_layout()
         plt.show()
+    elif save_path is not None and created_figure:
+        plt.close(fig)
     return ax
 
 
@@ -188,6 +200,46 @@ def _terrain_array(terrain):
     if hasattr(terrain, "to_numpy"):
         return terrain.to_numpy()
     return np.asarray(terrain, dtype=int)
+
+
+def _walk_arrays(walk):
+    if walk is None:
+        return []
+
+    try:
+        array = np.asarray(walk, dtype=float)
+    except (TypeError, ValueError):
+        arrays = []
+        for item in walk:
+            item_array = _single_walk_array(item)
+            if item_array is not None:
+                arrays.append(item_array)
+        return arrays
+
+    if array.dtype == object:
+        arrays = []
+        for item in walk:
+            item_array = _single_walk_array(item)
+            if item_array is not None:
+                arrays.append(item_array)
+        return arrays
+
+    if array.ndim == 3:
+        return [item for item in (_single_walk_array(path) for path in array) if item is not None]
+
+    single = _single_walk_array(array)
+    return [] if single is None else [single]
+
+
+def _single_walk_array(walk):
+    array = np.asarray(walk, dtype=float)
+    if array.ndim == 1:
+        if array.size != 2:
+            return None
+        array = array.reshape(1, 2)
+    if array.ndim != 2 or array.shape[1] != 2 or array.size == 0:
+        return None
+    return array
 
 
 def _terrain_cmap_and_legend(terrain_array, mcolors, Patch):

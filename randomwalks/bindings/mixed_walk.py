@@ -1,5 +1,3 @@
-import numpy as np
-
 from randomwalks import KernelContextHandle
 from randomwalks.bindings.data_structures.Point2D import Point2DArrayHandle
 from randomwalks.bindings.data_structures.Tensor import Tensor4DHandle
@@ -66,13 +64,17 @@ class MixedWalkBinding:
         T = dp_matrix.T if hasattr(dp_matrix, "T") else None
         if T is None:
             raise ValueError("Tensor4DHandle with a T value is required")
+        walk_handle = None
         try:
             walk_handle = Point2DArrayHandle.from_ptr(cls.m_walk_backtrace(dp_ptr, T, kernel_context.ptr, end_x, end_y))
+            return walk_handle.to_numpy()
         except Exception as e:
             print(f"Error in backtrace: {e}")
             print(f"Backtrace failed for end_x={end_x}, end_y={end_y}")
-            return np.array((end_x, end_y), dtype=np.int64)
-        return walk_handle.to_numpy()
+            return None
+        finally:
+            if walk_handle is not None:
+                walk_handle.free()
 
     @classmethod
     def utilization_distribution(cls, dp_matrix: Tensor4DHandle, kernel_context: KernelContextHandle, end_x, end_y):

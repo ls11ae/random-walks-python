@@ -22,9 +22,11 @@ from environmentcma import (
 from kernelcma import StateKernelFactory
 from pyproj import CRS
 
+from randomwalks import KernelFactory
 from randomwalks.bindings.data_structures.Terrain import TerrainMapHandle
 from randomwalks.bindings.movebank_parser import df_add_properties2
 from randomwalks.bindings.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
+from randomwalks.core.KernelFactory import KernelsFactory
 from randomwalks.core.WalkerHelper import WalkerHelper
 
 
@@ -565,7 +567,7 @@ class AnimalMovementProcessor:
         data_gdf_utm.reset_index()
         return data_gdf_utm
 
-    def get_hmm_kernels(self, dt_tolerance, rnge, out_dir=None, num_states=3):
+    def get_hmm_kernels(self, num_states, dt_tolerance, rnge, out_dir=None):
         """Computes HMM kernels from trajectory data"""
         self.traj.add_speed(overwrite=True)
         self.traj.add_direction(overwrite=True)
@@ -577,7 +579,7 @@ class AnimalMovementProcessor:
         data_gdf["angular_diffusivity"] = np.abs(np.sin(np.deg2rad(data_gdf["angular_difference"])))
         data_gdf_utm = self.add_features(data_gdf)
         # initialize HMM
-        hmm_thingy = StateKernelFactory(data_gdf_utm, id_cols=self.id_col, num_states=num_states)
+        hmm_thingy = KernelsFactory(data_gdf_utm, num_states=num_states)
         # apply HMM to retrieve trajectories annotated with hidden states
         gdf = hmm_thingy.apply_hmm()
         # compute kernels from states
