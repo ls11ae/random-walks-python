@@ -1,3 +1,4 @@
 [submodule "random-walks"]
 	path = random-walks
-	url = git@gitlab.tu-dortmund.de:ls11ae/research/random-walks.git
+	url = git@github.com:ls11ae/random-walks.git
+	branch = paper-version

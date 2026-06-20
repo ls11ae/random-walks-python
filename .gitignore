@@ -11,7 +11,6 @@ librandom_walk.so
 .vscode/tasks.json
 .vscode/*
 
-random-walks
 build/.ninja_deps
 build/.skbuild-info.json
 build/cmake_install.cmake
