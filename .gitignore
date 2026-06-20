@@ -23,6 +23,9 @@ csv_out*
 .github
 *.bin
 
+tests/data
+tests/moveapps
+
 # Keep package source/resource moves visible despite broad local ignores.
 !randomwalks/
 !randomwalks/bindings/
