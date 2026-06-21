@@ -5,18 +5,15 @@ from randomwalks import *
 from randomwalks.bindings.walk_visualization import save_trajectory_collection_timed, save_trajectory_coll_leaflet
 
 
-def main():
-    print("Hello World!")
+def print_output():
+    pickle_path = "/home/omar/PycharmProjects/RW-Python-gitlab/tests/moveapps/walks/all_walks.pickle"
+    traj_coll = pickle.load(open(pickle_path, "rb"))
+    print(traj_coll.to_point_gdf().head(20))
+    print(traj_coll.to_point_gdf().columns)
+    print(traj_coll.to_point_gdf().dtypes)
 
 
 if __name__ == "__main__":
-    """pickle_path = "/home/omar/PycharmProjects/RW-Python-gitlab/tests/moveapps/walks/all_walks.pickle"
-    traj_coll = pickle.load(open(pickle_path, "rb"))
-    print(traj_coll.to_point_gdf().head(20))
-
-    save_trajectory_coll_leaflet(traj_coll,
-                                 save_path="/home/omar/PycharmProjects/RW-Python-gitlab/tests/moveapps/walks/")"""
-
     working_directory = os.getcwd() + "/tests/moveapps/"
     with open(working_directory + "turtles.pickle", "rb") as f:
         traj_coll = pickle.load(f)

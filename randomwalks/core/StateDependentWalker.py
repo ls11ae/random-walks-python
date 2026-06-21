@@ -192,10 +192,7 @@ class StateDependentWalker(MixedWalker):
                             directions,
                             forbidden_terrains=self.barriers,
                         )
-
                         context = KernelContextHandle.pool(terrain, mapping, Reachability.RELAXED)
-                        print(f"T = {T}, S = {S}\n")
-                        print(f" start {[start_x, start_y]}, end: {[end_x, end_y]}")
 
                         try:
                             segment_points = MixedWalkBinding.single_state_walk(
