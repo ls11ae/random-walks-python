@@ -19,6 +19,8 @@ from randomwalks.bindings.data_structures.types import Reachability
 from randomwalks.bindings.mixed_walk import MixedWalkBinding
 from randomwalks.core.MixedWalker import MixedWalker
 from randomwalks.core.WalkerHelper import WalkerHelper
+from randomwalks.move_apps_patch import apply_moveapps_id_dtype_patch, debug_patch_state, force_tc_id_object_inplace, \
+    merge_traj_collections
 
 
 class StateDependentWalker(MixedWalker):
@@ -35,6 +37,16 @@ class StateDependentWalker(MixedWalker):
 
         self.is_brownian = True
         is_marine = self.animal in (Animal.MARINE, Animal.AIRBORNE)
+
+        apply_moveapps_id_dtype_patch()
+        debug_patch_state()
+        self.original_data = None
+        if isinstance(data, mpd.TrajectoryCollection):
+            force_tc_id_object_inplace(data)
+            import copy
+            data_copy = copy.deepcopy(data)
+            self.original_data = data_copy
+
         super().__init__(
             data,
             resolution=resolution,
@@ -47,7 +59,6 @@ class StateDependentWalker(MixedWalker):
             movement_policy=movement_policy,
             is_marine=is_marine,
         )
-        self.original_data = self.data
 
     def get_kernels(self, n_hmm_states, dt_tolerance, rnge, is_brownian=False, plot_dir=None):
         super()._process_movebank_data()
@@ -226,7 +237,7 @@ class StateDependentWalker(MixedWalker):
         combined_gdf = gpd.GeoDataFrame(pd.concat(per_animal_gdfs, ignore_index=True), geometry="geometry",
                                         crs="EPSG:4326")
         combined_gdf[t_col] = pd.to_datetime(combined_gdf[t_col])
-        return mpd.TrajectoryCollection(combined_gdf, traj_id_col=id_col, t=t_col)
+        return merge_traj_collections(self.original_data, combined_gdf)
 
     def generate_state_timeline(self):
         pass

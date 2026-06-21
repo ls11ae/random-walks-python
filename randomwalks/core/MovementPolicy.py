@@ -70,7 +70,7 @@ class TimeStepPolicy(MovementPolicy):
 
         max_s = 30
         max_t = 2000
-        min_s = 5
+        min_s = 3
         min_t = 3
 
         T = max(min_t, int(np.ceil(dt_seconds / self.timestep_s)))
