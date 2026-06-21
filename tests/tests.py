@@ -32,7 +32,8 @@ if __name__ == "__main__":
         walker.get_kernels(n_hmm_states=2,
                            dt_tolerance=4,
                            rnge=100,
-                           is_brownian=True)
+                           is_brownian=True,
+                           plot_dir=working_directory + "/kernels.png")
         result = walker.generate_walks()
         pickle.dump(result, open(working_directory + "walks/all_walks.pickle", "wb"))
         save_trajectory_collection_timed(result, working_directory + "walks/all_walks.html")
