@@ -49,7 +49,7 @@ class StateDependentWalker(MixedWalker):
         )
         self.original_data = self.data
 
-    def get_kernels(self, n_hmm_states, dt_tolerance, rnge, is_brownian=False):
+    def get_kernels(self, n_hmm_states, dt_tolerance, rnge, is_brownian=False, plot_dir=None):
         super()._process_movebank_data()
         self.n_hmm_states = n_hmm_states
         self.dt_tolerance = dt_tolerance
@@ -62,7 +62,7 @@ class StateDependentWalker(MixedWalker):
             num_states=self.n_hmm_states,
             dt_tolerance=self.dt_tolerance,
             rnge=self.rnge,
-            out_dir=self.out_directory
+            out_dir=plot_dir or self.out_directory
         )
         selected_kernels = brw_zs if is_brownian and self.animal != Animal.AIRBORNE else cor_zs
         state_kernels = {}
