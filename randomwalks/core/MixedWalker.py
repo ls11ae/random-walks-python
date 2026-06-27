@@ -68,11 +68,7 @@ class MixedWalker:
         self.utilization_distribution_paths = {}
         self.plot_paths = {}
 
-    @classmethod
-    def from_movebank_data(cls, data, **kwargs):
-        return cls(data, **kwargs)
-
-    def _process_movebank_data(self):
+    def _process_movebank_data(self, create_landcover=True):
         from randomwalks.core.AnimalMovement import AnimalMovementProcessor
 
         self.animal_proc = AnimalMovementProcessor(
@@ -84,12 +80,15 @@ class MixedWalker:
             target_crs=self.crs,
             movement_policy=self.movement_policy,
             reference_speed=self.reference_speed,
+            coerce_data=False,
         )
-        self.animal_proc.create_landcover_data_txt(
-            resolution=self.resolution,
-            is_marine=self.is_marine,
-            out_directory=self.out_directory,
-        )
+        if create_landcover:
+            self.animal_proc.create_landcover_data_txt(
+                resolution=self.resolution,
+                is_marine=self.is_marine,
+                out_directory=self.out_directory,
+            )
+        self.data = self.animal_proc.traj
         return self.animal_proc
 
     @staticmethod
@@ -140,22 +139,21 @@ class MixedWalker:
         amount_of_walks = _validate_walk_amount(amount_of_walks, allow_zero=ud, name="amount_of_walks")
         movement_policy = movement_policy or self.movement_policy
         self._process_movebank_data()
-        steps_dict = self.animal_proc.create_movement_data_dict()
+        steps_dict = {traj.id: traj.df for traj in self.animal_proc.traj.trajectories}
         per_animal_gdfs = []
         context_mode = ComputationMode.SERIALIZATION if serialization_dir is not None else self.context_mode
         self.utilization_distributions = {}
         self.utilization_distribution_paths = {}
         self.plot_paths = {}
 
-        for animal_id, trajectory in steps_dict.items():
+        for animal_id, steps in steps_dict.items():
             print(f"Generating walks for {animal_id}")
             terrain_map = TerrainMapHandle.from_file(self._terrain_path(animal_id), delim=" ")
             mapping = mapping or KernelMapping.mesa_default()
             context = self._context_for_mapping(terrain_map, mapping, context_mode, serialization_dir)
 
             try:
-                steps = trajectory.df
-                steps_df = steps_dict[animal_id].df
+                steps_df = steps
                 idx = steps_df.index
                 full_paths = [[] for _ in range(amount_of_walks)]
                 segment_boundaries = [[0] for _ in range(amount_of_walks)]
@@ -163,7 +161,7 @@ class MixedWalker:
 
                 for i in range(len(idx) - 1):
                     print(
-                        f"[{i + 1}/{len(idx)}] Generating walk for {animal_id} at {steps['time'].iloc[i]} - {steps['time'].iloc[i + 1]}:")
+                        f"[{i + 1}/{len(idx)}] Generating walk for {animal_id} at {idx[i]} - {idx[i + 1]}:")
                     start_x, start_y = int(steps["grid_x"].iloc[i]), int(steps["grid_y"].iloc[i])
                     end_x, end_y = int(steps["grid_x"].iloc[i + 1]), int(steps["grid_y"].iloc[i + 1])
                     sampled_segments = []
@@ -174,8 +172,8 @@ class MixedWalker:
                         T = self._resolve_segment_T(
                             (start_x, start_y),
                             (end_x, end_y),
-                            steps["time"].iloc[i],
-                            steps["time"].iloc[i + 1],
+                            idx[i],
+                            idx[i + 1],
                             movement_policy,
                         )
                         print(f"T: {T}")

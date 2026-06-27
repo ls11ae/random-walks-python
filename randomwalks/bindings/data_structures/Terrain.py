@@ -137,6 +137,10 @@ class TerrainMapHandle:
     dll.load_meta_info.restype = KernelMapMeta
     load_meta_info_ptr = dll.load_meta_info
 
+    dll.landmarks_count.argtypes = [TerrainMapPtr]
+    dll.landmarks_count.restype = ctypes.c_int
+    landmarks_count_ptr = dll.landmarks_count
+
     def __init__(self, width=None, height=None, *, ptr=None):
         if ptr is None:
             if width is None or height is None:
@@ -160,6 +164,9 @@ class TerrainMapHandle:
     def to_file(self, file):
         c_file = file.encode("ascii")
         TerrainMapHandle.serialize_ptr(c_file, self.ptr)
+
+    def landmarks_count(self):
+        return self.landmarks_count_ptr(self._ptr)
 
     @classmethod
     def single_value(cls, land_type, width, height):

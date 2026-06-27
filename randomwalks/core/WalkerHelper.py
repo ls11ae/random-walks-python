@@ -37,14 +37,14 @@ class WalkerHelper:
 
     @staticmethod
     def create_timed_df(
-        steps_df,
-        geodetic_path_df,
-        animal_id,
-        idx,
-        segment_boundaries,
-        *,
-        traj_id_col="traj_id",
-        time_col="time",
+            steps_df,
+            geodetic_path_df,
+            animal_id,
+            idx,
+            segment_boundaries,
+            *,
+            traj_id_col="traj_id",
+            time_col="time",
     ):
         rows = []
         if len(idx) < 2:
@@ -63,8 +63,8 @@ class WalkerHelper:
                 continue
 
             times = pd.date_range(
-                start=steps_df[time_col].iloc[i],
-                end=steps_df[time_col].iloc[i + 1],
+                start=idx[i],
+                end=idx[i + 1],
                 periods=len(segment_df),
             )
             segment_df[traj_id_col] = animal_id
@@ -84,7 +84,7 @@ class WalkerHelper:
         return int(np.round(normalized / (2 * np.pi) * directions)) % directions
 
     @staticmethod
-    def resample_kernel_to_grid(kernel, cell_size, step_size):
+    def resample_kernel_to_grid(kernel, step_size):
         from skimage.transform import resize
 
         target = 2 * int(step_size) + 1

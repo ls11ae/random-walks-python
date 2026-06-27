@@ -21,6 +21,12 @@ from randomwalks.bindings.plotter import (
 )
 from randomwalks.core.BrownianWalker import BrownianWalker
 from randomwalks.core.CorrelatedWalker import CorrelatedWalker
+from randomwalks.core.KernelFactory import (
+    StateAnnotationMethod,
+    annotate_states,
+    feature_enum,
+    state_kernels,
+)
 from randomwalks.core.MixedWalker import MixedWalker
 from randomwalks.core.MixedTimeWalker import MixedTimeWalker
 from randomwalks.core.MovementPolicy import (
@@ -57,6 +63,10 @@ __all__ = [
     "SerializedWalk",
     "SpeedBasedPolicy",
     "StateDependentWalker",
+    "StateAnnotationMethod",
+    "annotate_states",
+    "feature_enum",
+    "state_kernels",
     "Tensor4DHandle",
     "TensorHandle",
     "TerrainMapHandle",

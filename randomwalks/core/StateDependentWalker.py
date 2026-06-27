@@ -17,6 +17,7 @@ from randomwalks.bindings.data_structures.Matrix import MatrixHandle
 from randomwalks.bindings.data_structures.Terrain import Animal, MesaLandcover, TerrainMapHandle, BarrierMode
 from randomwalks.bindings.data_structures.types import Reachability
 from randomwalks.bindings.mixed_walk import MixedWalkBinding
+from randomwalks.core.KernelFactory import StateAnnotationMethod
 from randomwalks.core.MixedWalker import MixedWalker
 from randomwalks.core.WalkerHelper import WalkerHelper
 from randomwalks.move_apps_patch import apply_moveapps_id_dtype_patch, debug_patch_state, force_tc_id_object_inplace, \
@@ -32,6 +33,8 @@ class StateDependentWalker(MixedWalker):
         self.n_hmm_states = 0
         self.dt_tolerance = 1
         self.rnge = 0
+        self.kernel_state_col = "state"
+        self.annotation_result = None
         self.barrier_mode = BarrierMode.AVOID
         self.barriers = barriers
 
@@ -60,17 +63,37 @@ class StateDependentWalker(MixedWalker):
             is_marine=is_marine,
         )
 
-    def get_kernels(self, n_hmm_states, dt_tolerance, rnge, is_brownian=False, plot_dir=None):
-        super()._process_movebank_data()
-        self.n_hmm_states = n_hmm_states
+    def annotate_behavior(
+            self,
+            method: StateAnnotationMethod | str = StateAnnotationMethod.HMM,
+            features=None,
+            num_states=3,
+            penalty=10.0,
+            plot_path=None,
+    ):
+        super()._process_movebank_data(create_landcover=False)
+        self.n_hmm_states = num_states
+        if self.original_data is None:
+            self.original_data = self.animal_proc.traj_coll
+        self.annotation_result = self.animal_proc.annotate_behavior(
+            method=method,
+            features=features,
+            num_states=num_states,
+            penalty=penalty,
+            plot_path=plot_path,
+        )
+        return self.annotation_result
+
+    def get_kernels(self, dt_tolerance, rnge, state_col="state", is_brownian=False, plot_dir=None):
+        if self.animal_proc is None or self.animal_proc.annotation_result is None:
+            raise ValueError("Call annotate_behavior() before get_kernels().")
         self.dt_tolerance = dt_tolerance
         self.rnge = rnge
         self.is_brownian = is_brownian
-        if self.original_data is None:
-            self.original_data = self.animal_proc.traj_coll
+        self.kernel_state_col = state_col
 
-        cor_zs, brw_zs = self.animal_proc.get_hmm_kernels(
-            num_states=self.n_hmm_states,
+        cor_zs, brw_zs = self.animal_proc.generate_state_kernels(
+            state_col=state_col,
             dt_tolerance=self.dt_tolerance,
             rnge=self.rnge,
             out_dir=plot_dir or self.out_directory
@@ -89,11 +112,17 @@ class StateDependentWalker(MixedWalker):
         return state_kernels
 
     def __get_steps(self):
-        return self.animal_proc.create_movement_data_dict(has_states=True)
+        return {traj.id: traj.df for traj in self.animal_proc.traj.trajectories}
 
     def generate_walks(self, mapping=None, amount=1,
                        max_cell_size=10, barrier_mode: BarrierMode = BarrierMode.AVOID):
         self.barrier_mode = barrier_mode
+        if not self.animal_proc.terrain_paths:
+            self.animal_proc.create_landcover_data_txt(
+                resolution=self.resolution,
+                is_marine=self.is_marine,
+                out_directory=self.out_directory,
+            )
         return self._randomwalks_core(mapping=None, serialization_dir=self.serialization_dir, amount_of_walks=amount,
                                       ud=False, save_plots=False, max_cell_size=max_cell_size)
 
@@ -116,9 +145,8 @@ class StateDependentWalker(MixedWalker):
         per_animal_gdfs = []
 
         animal_index = 0
-        for animal_id, trajectory in steps_dict.items():
+        for animal_id, steps in steps_dict.items():
             animal_index += 1
-            steps = trajectory.df.copy()
             segments = _segments_for_steps(steps, max_cell_size, self.resolution)
             animal_rows = []
 
@@ -158,12 +186,12 @@ class StateDependentWalker(MixedWalker):
                         print(
                             f"{animal_id} [{animal_index}|{len(steps_dict)}]: Processing step {st_idx}/{seg_end} ")
                         en_idx = st_idx + 1
-                        start_lon = steps["geo_x"].iloc[st_idx]
-                        start_lat = steps["geo_y"].iloc[st_idx]
-                        end_lon = steps["geo_x"].iloc[en_idx]
-                        end_lat = steps["geo_y"].iloc[en_idx]
-                        start_time, end_time = steps["time"].iloc[st_idx], steps["time"].iloc[en_idx]
-                        state = steps["state"].iloc[st_idx]
+                        start_lon = steps.geometry.iloc[st_idx].x
+                        start_lat = steps.geometry.iloc[st_idx].y
+                        end_lon = steps.geometry.iloc[en_idx].x
+                        end_lat = steps.geometry.iloc[en_idx].y
+                        start_time, end_time = steps.index[st_idx], steps.index[en_idx]
+                        state = steps[self.kernel_state_col].iloc[st_idx]
 
                         st_utm_x, st_utm_y = fwd.transform(start_lon, start_lat)
                         en_utm_x, en_utm_y = fwd.transform(end_lon, end_lat)
@@ -280,11 +308,11 @@ def _clip_kernel(kernel, radius):
 
 def _kernel_for_grid(base_kernel, step_size, cell_size, rnge, animal):
     if animal in (Animal.AIRBORNE, Animal.MARINE):
-        return WalkerHelper.resample_kernel_to_grid(base_kernel, cell_size, step_size)
+        return WalkerHelper.resample_kernel_to_grid(base_kernel, step_size)
 
     kernel_radius = min(rnge, int(step_size * cell_size))
     clipped = _normalize_kernel(_clip_kernel(base_kernel, kernel_radius))
-    return WalkerHelper.resample_kernel_to_grid(clipped, cell_size, step_size)
+    return WalkerHelper.resample_kernel_to_grid(clipped, step_size)
 
 
 def _kernel_mapping_for_state(terrain, kernel, directions, forbidden_terrains: list[int] | None):

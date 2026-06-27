@@ -1,5 +1,4 @@
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -8,43 +7,24 @@ import movingpandas as mpd
 import numpy as np
 import pandas as pd
 from environmentcma import (
+    bbox_utm,
     clamp_lonlat_bbox,
+    create_landcover_data_txt as env_create_landcover_data_txt,
     create_weather_csvs,
-    fetch_landcover_data,
-    fetch_ocean_cover_tif,
     grid_shape_from_bbox,
     grid_to_geo,
-    landcover_to_discrete_txt,
-    marine_cover_path,
     padded_bbox,
-    utm_to_grid,
 )
-from kernelcma import StateKernelFactory
-from pyproj import CRS
 
-from randomwalks import KernelFactory
 from randomwalks.bindings.data_structures.Terrain import TerrainMapHandle
 from randomwalks.bindings.movebank_parser import df_add_properties2
 from randomwalks.bindings.walks_serialization import serialize_env_grid, serialize_kernel_paths_json
-from randomwalks.core.KernelFactory import KernelsFactory
+from randomwalks.core.KernelFactory import (
+    StateAnnotationMethod,
+    annotate_states,
+    state_kernels,
+)
 from randomwalks.core.WalkerHelper import WalkerHelper
-
-
-@dataclass
-class MovementTrajectory:
-    traj_id: str
-    df: pd.DataFrame
-
-    # df columns: ["grid_x", "grid_y", "geo_x", "geo_y", "time"]
-
-    def grid_steps(self) -> list[tuple[int, int]]:
-        return list(zip(self.df.grid_x, self.df.grid_y))
-
-    def geo_path(self) -> list[tuple[float, float]]:
-        return list(zip(self.df.geo_x, self.df.geo_y))
-
-    def __len__(self):
-        return len(self.df)
 
 
 def coerce_trajectory_collection(
@@ -138,6 +118,7 @@ class AnimalMovementProcessor:
             env_samples=5,
             movement_policy=None,
             reference_speed=None,
+            coerce_data=True,
     ):
         self.reference_speed = reference_speed
         self.terrain_paths = {}
@@ -145,14 +126,19 @@ class AnimalMovementProcessor:
         self.resolution = None
         self.env_samples = env_samples
         self.movement_policy = movement_policy
-        self.traj = coerce_trajectory_collection(
-            data,
-            time_col=time_col,
-            lon_col=lon_col,
-            lat_col=lat_col,
-            id_col=id_col,
-            target_crs=target_crs,
-        )
+        if coerce_data:
+            self.traj = coerce_trajectory_collection(
+                data,
+                time_col=time_col,
+                lon_col=lon_col,
+                lat_col=lat_col,
+                id_col=id_col,
+                target_crs=target_crs,
+            )
+        else:
+            if not isinstance(data, mpd.TrajectoryCollection):
+                raise ValueError("coerce_data=False requires a TrajectoryCollection")
+            self.traj = data
 
         self.time_col = self.traj.t
         self.id_col = self.traj.get_traj_id_col()
@@ -166,6 +152,7 @@ class AnimalMovementProcessor:
             str(traj.id): traj.get_end_time()
             for traj in self.traj.trajectories
         }
+        self.annotation_result = None
 
     @property
     def traj_coll(self):
@@ -175,145 +162,28 @@ class AnimalMovementProcessor:
     def terrain_path(self):
         return self.terrain_paths
 
-    def traj_utm(self, traj_id):
-        # we dont save utm bboxes anymore, we compute them on the fly
-        traj = self.traj.get_trajectory(traj_id)
-        lon, lat = traj.df.geometry.iloc[0].x, traj.df.geometry.iloc[0].y
-
-        zone = int((lon + 180) // 6) + 1
-        epsg = 32600 + zone if lat >= 0 else 32700 + zone
-        utm_crs = CRS.from_epsg(epsg)
-
-        return traj.to_crs(utm_crs)
-
     def bbox_geo(self, traj_id):
         # we dont save utm geo bboxes anymore, we compute them on the fly
         min_lon, min_lat, max_lon, max_lat = self.traj.get_trajectory(traj_id).df.total_bounds
         return clamp_lonlat_bbox(padded_bbox(min_lon, min_lat, max_lon, max_lat, padding=0.1))
 
     def bbox_utm(self, traj_id):
-        utm_traj = self.traj_utm(traj_id)
-        min_x, min_y, max_x, max_y = utm_traj.df.total_bounds
-        return padded_bbox(min_x, min_y, max_x, max_y, padding=0.1), utm_traj.crs.to_epsg()
+        return bbox_utm(self.traj.get_trajectory(traj_id))
 
     def create_landcover_data_txt(self, is_marine: bool = False, resolution: int = 200,
                                   out_directory: str | None = None) -> dict[Any, str]:
-        """
-        Generate per-animal landcover data (TIFF + TXT), named with animal_id and bbox.
-        
-        Parameters
-        ----------
-        resolution : int, optional
-            Grid resolution identifier for file(default: 200)
-        out_directory : str, optional
-            Output directory path
-            
-        is_marine : bool, optional
-            If True, generate ocean/land cover from shapefile instead of ESA WorldCover.
-            Requires shapefile_path to be provided. (default: False)
-
-        Returns:
-            dict[str, str]: { animal_id: txt_path }
-        """
         self.resolution = resolution
-        if out_directory is None:
-            out_directory = "landcover"
-
-        out_directory = Path(out_directory, "landcover")
-        out_directory.mkdir(exist_ok=True, parents=True)
-
-        shapefile_path = marine_cover_path()
-
-        results = {}
-        for traj in self.traj.trajectories:
-            traj_id = traj.id
-            # PADDED GEO BBOX (lon/lat)
-            min_lon, min_lat, max_lon, max_lat = self.bbox_geo(traj_id)
-            # PADDED UTM BBOX (x/y)
-            utm_bbox, _ = self.bbox_utm(traj_id)
-            # REGULAR GRID SHAPE (x/y)
-            nx, ny = grid_shape_from_bbox(utm_bbox, resolution)
-
-            # Output paths
-            base_name = (
-                f"landcover_{traj_id}_"
-                f"{min_lon:.2f}_{min_lat:.2f}_{max_lon:.2f}_{max_lat:.2f}"
-            )
-            tif_path = out_directory / f"{base_name}.tif"
-            txt_path = out_directory / f"{base_name}_{resolution}.txt"
-            self.terrain_TIFFs[str(traj_id)] = tif_path
-            # only fetch TIFF if it doesn't exist yet
-            if not tif_path.exists():
-                if is_marine:
-                    fetch_ocean_cover_tif(
-                        str(shapefile_path),
-                        (min_lon, min_lat, max_lon, max_lat),
-                        str(tif_path),
-                    )
-                else:
-                    fetch_landcover_data(
-                        (min_lon, min_lat, max_lon, max_lat),
-                        str(tif_path),
-                    )
-
-            landcover_to_discrete_txt(
-                str(tif_path),
-                res_x=nx, res_y=ny,
-                min_lon=min_lon, max_lat=max_lat, max_lon=max_lon, min_lat=min_lat,
-                output=str(txt_path),
-            )
-            if is_marine:
-                with open(txt_path, 'r') as file:
-                    data = file.read()
-                OCEAN_VALUE = 0
-                LAND_VALUE = 1
-                OCEAN_VALUE_MAPPED = 80
-                LAND_VALUE_MAPPED = 10
-                # Use temporary placeholder to avoid conflicts
-                data = data.replace(str(OCEAN_VALUE), str(OCEAN_VALUE_MAPPED))
-                data = data.replace(str(LAND_VALUE), str(LAND_VALUE_MAPPED))
-                data = data.replace("255", str(OCEAN_VALUE_MAPPED))
-
-                with open(txt_path, 'w') as file:
-                    file.write(data)
-
-            results[traj_id] = str(txt_path)
-
-        self.terrain_paths = results
-        return results
-
-    def create_movement_data(self, traj_id, has_states):
-        traj_utm = self.traj_utm(traj_id)
-        utm_bbox, _ = self.bbox_utm(traj_id)
-
-        nx, ny = grid_shape_from_bbox(utm_bbox, self.resolution)
-        df = traj_utm.df.copy()
-
-        gx, gy = utm_to_grid(
-            nx, ny, utm_bbox,
-            df.geometry.x.values,
-            df.geometry.y.values
+        self.terrain_paths = env_create_landcover_data_txt(
+            traj=self.traj,
+            is_marine=is_marine,
+            resolution=resolution,
+            out_directory=out_directory,
         )
-
-        df["grid_x"] = gx
-        df["grid_y"] = gy
-        traj = self.traj.get_trajectory(traj_id)
-        df["geo_x"] = traj.df.geometry.x
-        df["geo_y"] = traj.df.geometry.y
-        utm_traj = self.traj_utm(traj_id)
-        df["utm_x"] = utm_traj.df.geometry.x
-        df["utm_y"] = utm_traj.df.geometry.y
-        df["time"] = df.index
-        if has_states:
-            df["state"] = self.traj.get_trajectory(traj_id).df["state"]
-
-        return MovementTrajectory(traj_id=traj_id, df=df)
-
-    def create_movement_data_dict(self, has_states=False) -> dict[Any, MovementTrajectory]:
-        return {
-            traj.id: self.create_movement_data(traj.id, has_states)
-            for traj in self.traj.trajectories
+        self.terrain_TIFFs = {
+            str(traj_id): _txt_to_tif_path(path, resolution)
+            for traj_id, path in self.terrain_paths.items()
         }
+        return self.terrain_paths
 
     def grid_to_geo_path(self, path, traj_id):
         utm_bounds, epsg = self.bbox_utm(traj_id)
@@ -458,7 +328,7 @@ class AnimalMovementProcessor:
 
         # for each animal trajectory
         for traj in self.traj.trajectories:
-            trajectories = self.create_movement_data(traj.id, has_states=False)
+            trajectory_df = traj.df
             times = traj.df.index
             points = traj.df.geometry  # (lon, lat)
             intervals = [(times[i], times[i + 1]) for i in range(len(times) - 1)]
@@ -493,11 +363,11 @@ class AnimalMovementProcessor:
                 start_x, start_y = point_pairs[index][0].x, point_pairs[index][0].y
                 end_x, end_y = point_pairs[index][1].x, point_pairs[index][1].y
 
-                sx = trajectories.df.iloc[index]["grid_x"]
-                sy = trajectories.df.iloc[index]["grid_y"]
+                sx = trajectory_df.iloc[index]["grid_x"]
+                sy = trajectory_df.iloc[index]["grid_y"]
 
-                ex = trajectories.df.iloc[index + 1]["grid_x"]
-                ey = trajectories.df.iloc[index + 1]["grid_y"]
+                ex = trajectory_df.iloc[index + 1]["grid_x"]
+                ey = trajectory_df.iloc[index + 1]["grid_y"]
 
                 print(f"[KERNEL PARAMETERS] Processing interval {index}\n")
                 print(f"[KERNEL PARAMETERS] Start point {sx}, {sy}, End point {ex}, {ey}\n")
@@ -540,56 +410,36 @@ class AnimalMovementProcessor:
         serialize_kernel_paths_json(binary_paths, out_directory)
         return binary_paths
 
-    def add_features(self, data_gdf):
-        # local mean utm zone
-        mean_lon = data_gdf.geometry.x.mean()
-        mean_lat = data_gdf.geometry.y.mean()
-        zone = int((mean_lon + 180) // 6) + 1
-        epsg = 32600 + zone if mean_lat >= 0 else 32700 + zone
-        TARGET_CRS = f"EPSG:{epsg}"
-        # UTM per individual animal
-        utm_gdfs = []
-        for traj_id, sub in data_gdf.groupby(self.id_col):
-            sub = sub.copy()
-            if self.time_col not in sub.columns:
-                sub = sub.reset_index()
-            sub = gpd.GeoDataFrame(sub, geometry="geometry", crs=data_gdf.crs)
-            # add terrain info
-            grid_coords = self.create_movement_data(traj_id, False)
-            terrain_map = TerrainMapHandle.from_file(file=self.terrain_paths[traj_id], delim=' ')
-            sub["terrain"] = [terrain_map.at(x, y) for x, y in grid_coords.grid_steps()]
-            utm_gdfs.append(sub.to_crs(TARGET_CRS))
-
-        data_gdf_utm = gpd.GeoDataFrame(
-            pd.concat(utm_gdfs, ignore_index=True),
-            crs=TARGET_CRS
+    def annotate_behavior(
+            self,
+            method: StateAnnotationMethod | str = StateAnnotationMethod.HMM,
+            features=None,
+            num_states=3,
+            penalty=10.0,
+            plot_path=None,
+    ):
+        result = annotate_states(
+            self.traj,
+            method=method,
+            features=features,
+            num_states=num_states,
+            penalty=penalty,
+            plot_path=plot_path,
         )
-        data_gdf_utm.reset_index()
-        return data_gdf_utm
 
-    def get_hmm_kernels(self, num_states, dt_tolerance, rnge, out_dir=None):
-        """Computes HMM kernels from trajectory data"""
-        self.traj.add_speed(overwrite=True)
-        self.traj.add_direction(overwrite=True)
-        self.traj.add_angular_difference(overwrite=True)
-        self.traj.add_distance(overwrite=True)
+        self.annotation_result = result
+        self.traj = result.trajectory_collection
+        return result
 
-        data_gdf = self.traj.to_point_gdf()
-        data_gdf = data_gdf.copy()
-        data_gdf["angular_diffusivity"] = np.abs(np.sin(np.deg2rad(data_gdf["angular_difference"])))
-        data_gdf_utm = self.add_features(data_gdf)
-        # initialize HMM
-        hmm_thingy = KernelsFactory(data_gdf_utm, num_states=num_states)
-        # apply HMM to retrieve trajectories annotated with hidden states
-        gdf = hmm_thingy.apply_hmm()
-        # compute kernels from states
-        [crwZ, brwZ] = hmm_thingy.get_state_kernels(dt_tolerance, rnge, 2 * rnge + 1, out_dir)
-        original_gdf = self.traj.to_point_gdf()
-        original_gdf["state"] = gdf["state"]
-        self.traj = mpd.TrajectoryCollection(
-            original_gdf,
-            traj_id_col=self.id_col,
-            t=self.time_col,
-            crs=self.crs
-        )
-        return crwZ, brwZ
+    def generate_state_kernels(self, *, state_col="state", dt_tolerance=1.2, rnge=1000, out_dir=None):
+        if self.annotation_result is None:
+            raise ValueError("Call annotate_behavior() before generate_state_kernels().")
+        return state_kernels(self.traj, state_col=state_col, dt_tolerance=dt_tolerance, rnge=rnge, out=out_dir)
+
+
+def _txt_to_tif_path(txt_path, resolution):
+    path = Path(txt_path)
+    suffix = f"_{resolution}.txt"
+    if path.name.endswith(suffix):
+        return path.with_name(path.name[:-len(suffix)] + ".tif")
+    return path.with_suffix(".tif")
