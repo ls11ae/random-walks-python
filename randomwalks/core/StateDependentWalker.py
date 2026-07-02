@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
+import os
 
 import geopandas as gpd
 import movingpandas as mpd
@@ -38,7 +39,7 @@ class StateDependentWalker(MixedWalker):
         self.barrier_mode = BarrierMode.AVOID
         self.barriers = barriers
 
-        self.is_brownian = True
+        self.is_brownian = False
         is_marine = self.animal in (Animal.MARINE, Animal.AIRBORNE)
 
         apply_moveapps_id_dtype_patch()
@@ -71,7 +72,8 @@ class StateDependentWalker(MixedWalker):
             penalty=10.0,
             plot_path=None,
     ):
-        super()._process_movebank_data(create_landcover=False)
+        super()._process_movebank_data(create_landcover=True)
+
         self.n_hmm_states = num_states
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
@@ -84,7 +86,22 @@ class StateDependentWalker(MixedWalker):
         )
         return self.annotation_result
 
-    def get_kernels(self, dt_tolerance, rnge, state_col="state", is_brownian=False, plot_dir=None):
+    def get_kernels(
+            self,
+            dt_tolerance,
+            rnge,
+            state_col="state",
+            is_brownian=False,
+            plot_dir=None,
+            density_config=None,
+            density_preset=None,
+            density_method=None,
+            density_model=None,
+            n_components=None,
+            covariance_type=None,
+            reg_covar=None,
+            reg_covariance=None,
+    ):
         if self.animal_proc is None or self.animal_proc.annotation_result is None:
             raise ValueError("Call annotate_behavior() before get_kernels().")
         self.dt_tolerance = dt_tolerance
@@ -92,11 +109,22 @@ class StateDependentWalker(MixedWalker):
         self.is_brownian = is_brownian
         self.kernel_state_col = state_col
 
+        if plot_dir:
+            os.makedirs(os.path.dirname(plot_dir), exist_ok=True)
+
         cor_zs, brw_zs = self.animal_proc.generate_state_kernels(
             state_col=state_col,
             dt_tolerance=self.dt_tolerance,
             rnge=self.rnge,
-            out_dir=plot_dir or self.out_directory
+            out_dir=plot_dir or self.out_directory,
+            density_config=density_config,
+            density_preset=density_preset,
+            density_method=density_method,
+            density_model=density_model,
+            n_components=n_components,
+            covariance_type=covariance_type,
+            reg_covar=reg_covar,
+            reg_covariance=reg_covariance,
         )
         selected_kernels = brw_zs if is_brownian and self.animal != Animal.AIRBORNE else cor_zs
         state_kernels = {}

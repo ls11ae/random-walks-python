@@ -431,10 +431,39 @@ class AnimalMovementProcessor:
         self.traj = result.trajectory_collection
         return result
 
-    def generate_state_kernels(self, *, state_col="state", dt_tolerance=1.2, rnge=1000, out_dir=None):
+    def generate_state_kernels(
+            self,
+            *,
+            state_col="state",
+            dt_tolerance=1.2,
+            rnge=1000,
+            out_dir=None,
+            density_config=None,
+            density_preset=None,
+            density_method=None,
+            density_model=None,
+            n_components=None,
+            covariance_type=None,
+            reg_covar=None,
+            reg_covariance=None,
+    ):
         if self.annotation_result is None:
             raise ValueError("Call annotate_behavior() before generate_state_kernels().")
-        return state_kernels(self.traj, state_col=state_col, dt_tolerance=dt_tolerance, rnge=rnge, out=out_dir)
+        return state_kernels(
+            self.traj,
+            state_col=state_col,
+            dt_tolerance=dt_tolerance,
+            rnge=rnge,
+            out=out_dir,
+            density_config=density_config,
+            density_preset=density_preset,
+            density_method=density_method,
+            density_model=density_model,
+            n_components=n_components,
+            covariance_type=covariance_type,
+            reg_covar=reg_covar,
+            reg_covariance=reg_covariance,
+        )
 
 
 def _txt_to_tif_path(txt_path, resolution):

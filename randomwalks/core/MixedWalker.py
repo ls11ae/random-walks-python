@@ -70,6 +70,7 @@ class MixedWalker:
 
     def _process_movebank_data(self, create_landcover=True):
         from randomwalks.core.AnimalMovement import AnimalMovementProcessor
+        from environmentcma import traj_utm
 
         self.animal_proc = AnimalMovementProcessor(
             data=self.data,
@@ -89,6 +90,11 @@ class MixedWalker:
                 out_directory=self.out_directory,
             )
         self.data = self.animal_proc.traj
+        for traj in self.animal_proc.traj.trajectories:
+            utm_traj = traj_utm(traj)
+            traj.df["utm_x"] = utm_traj.df.geometry.x.to_numpy()
+            traj.df["utm_y"] = utm_traj.df.geometry.y.to_numpy()
+            traj.df["utm_crs"] = utm_traj.crs.to_string()
         return self.animal_proc
 
     @staticmethod

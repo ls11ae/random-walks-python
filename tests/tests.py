@@ -16,33 +16,47 @@ def print_output():
 
 
 if __name__ == "__main__":
+    # load trajectory collection from pickle
     working_directory = os.getcwd() + "/tests/moveapps/"
     with open(
             "/home/omar/PycharmProjects/hmmcma/tests/annotated.pickle",
             "rb") as f:
         traj_coll = pickle.load(f)
-    print(traj_coll.to_point_gdf().columns)
-    movement_policy = FixedStepsPolicy(20)
+
+    print(traj_coll.to_point_gdf().head())
+
+    # set how step sizes and number of steps are resolved. Here: 30 steps between each observed point
+    movement_policy = FixedStepsPolicy(5)
+    # set landmarks that act as barriers for animals, here: Buildings, roads, water (rivers, lakes, oceans etc)
     barriers = [MesaLandcover.PERMANENT_WATER, MesaLandcover.BUILT_UP]
+    # feature set for trajectory segmentation
     features = [Feature.SPEED, Feature.ANGULAR_DIFFERENCE, Feature.PERSISTENCE_VELOCITY]
+    # initialize random walker for terrestrial animal with the movement policy, barriers and features
     with StateDependentWalker(data=traj_coll,
                               animal_type=Animal.TERRESTRIAL,
                               resolution=300,
                               out_directory=working_directory + "data",
                               movement_policy=movement_policy,
                               barriers=barriers) as walker:
+        # annotate behavioral segments with method BCPA-HMM: Use HMM to determine state per behavioral change point
         walker.annotate_behavior(
-            method=StateAnnotationMethod.HMM,
+            method=StateAnnotationMethod.BCPAHMM,
             features=features,
-            num_states=3,
-            plot_path=working_directory + "/states.png",
+            num_states=5,
+            plot_path=working_directory + "BCPAHMM/states.png",
         )
+        # Create movement kernels using Sum of Gaussians on segments
         walker.get_kernels(
-            dt_tolerance=1.2,
-            rnge=1000,
-            state_col="state",
+            dt_tolerance=1.0,
+            rnge=50,
+            state_col="terrain",
             is_brownian=True,
-            plot_dir=working_directory + "/kernels.png")
-        result = walker.generate_walks()
+            plot_dir=working_directory + "TERRAIN/kernels.png",
+            density_preset="terrain")
+        exit()
+        # interpolate random walks with these kernels and parameters (here: 2 interpolations per step)
+        result = walker.generate_walks(amount=2)
+        # save trajectory collection containing RW interpolations and segmentation info
         pickle.dump(result, open(working_directory + "walks/all_walks.pickle", "wb"))
+        # save leaflet animation of interpolated random walks
         save_trajectory_collection_timed(result, working_directory + "walks/all_walks.html")
