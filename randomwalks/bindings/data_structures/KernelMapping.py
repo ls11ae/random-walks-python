@@ -1,5 +1,6 @@
 from importlib import resources
 
+from randomwalks.bindings.data_structures.Matrix import MatrixHandle
 from randomwalks.bindings.data_structures.types import *
 from randomwalks.wrapper import dll
 
@@ -120,6 +121,25 @@ class KernelMapping:
                 max_bias_x=max_bias_x,
                 max_bias_y=max_bias_y,
             )
+        return mapping
+
+    @classmethod
+    def from_state_kernel(cls, terrain, kernel, directions, forbidden_terrains: list[int] | None = None):
+        mapping = cls(terrain, kind=KPM_KIND_KERNELS)
+        for terrain_value in terrain.unique_values():
+            matrix = MatrixHandle.from_numpy(kernel)
+            ok = mapping.set_kernel(terrain_value, matrix, directions)
+            if not ok:
+                matrix.free()
+                mapping.free()
+                raise ValueError(f"Failed to set state kernel for terrain {terrain_value}")
+            if directions == 1:
+                matrix._owned = False
+            else:
+                matrix.free()
+
+        for terrain_value in forbidden_terrains or []:
+            mapping.set_barrier(terrain_value, barrier=True)
         return mapping
 
     @property

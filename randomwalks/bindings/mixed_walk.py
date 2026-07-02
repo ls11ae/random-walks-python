@@ -1,4 +1,4 @@
-from randomwalks import KernelContextHandle
+from randomwalks.bindings.data_structures.KernelContext import KernelContextHandle
 from randomwalks.bindings.data_structures.Point2D import Point2DArrayHandle
 from randomwalks.bindings.data_structures.Tensor import Tensor4DHandle
 from randomwalks.bindings.data_structures.types import *

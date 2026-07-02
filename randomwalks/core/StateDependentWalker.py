@@ -11,16 +11,17 @@ from environmentcma.crs import grid_shape_from_bbox, utm_to_grid, grid_to_geo_wa
 from segmentationcma.core import bbox_of_segment
 from shapely import Point
 
-from randomwalks import plot_terrain_walk
 from randomwalks.bindings.data_structures.KernelContext import KernelContextHandle
-from randomwalks.bindings.data_structures.KernelMapping import KPM_KIND_KERNELS, KernelMapping
-from randomwalks.bindings.data_structures.Matrix import MatrixHandle
+from randomwalks.bindings.data_structures.KernelMapping import KernelMapping
 from randomwalks.bindings.data_structures.Terrain import Animal, MesaLandcover, TerrainMapHandle, BarrierMode
 from randomwalks.bindings.data_structures.types import Reachability
 from randomwalks.bindings.mixed_walk import MixedWalkBinding
 from randomwalks.core.KernelFactory import StateAnnotationMethod
 from randomwalks.core.MixedWalker import MixedWalker
 from randomwalks.core.WalkerHelper import WalkerHelper
+from randomwalks.bindings.data_structures.Kernels import kernel_array, kernel_for_grid, kernel_state_value, \
+    normalize_kernel
+from randomwalks.bindings.step_segments import segments_for_steps
 from randomwalks.move_apps_patch import apply_moveapps_id_dtype_patch, debug_patch_state, force_tc_id_object_inplace, \
     merge_traj_collections
 
@@ -129,10 +130,10 @@ class StateDependentWalker(MixedWalker):
         selected_kernels = brw_zs if is_brownian and self.animal != Animal.AIRBORNE else cor_zs
         state_kernels = {}
         for state_kernel in selected_kernels:
-            kernel = _kernel_array(state_kernel)
+            kernel = kernel_array(state_kernel)
             if kernel is None or np.sum(kernel) == 0:
                 continue
-            state_kernels[_kernel_state_value(state_kernel)] = _normalize_kernel(kernel)
+            state_kernels[kernel_state_value(state_kernel)] = normalize_kernel(kernel)
 
         if not state_kernels:
             raise ValueError("No usable state kernels were generated.")
@@ -175,7 +176,7 @@ class StateDependentWalker(MixedWalker):
         animal_index = 0
         for animal_id, steps in steps_dict.items():
             animal_index += 1
-            segments = _segments_for_steps(steps, max_cell_size, self.resolution)
+            segments = segments_for_steps(steps, max_cell_size=max_cell_size, resolution=self.resolution)
             animal_rows = []
 
             for segment in segments:
@@ -241,8 +242,15 @@ class StateDependentWalker(MixedWalker):
                         T = int(np.ceil(T * 1.5))
                         directions = 1 if self.is_brownian else 8
                         base_kernel = py_kernels.get(state, next(iter(py_kernels.values())))
-                        grid_kernel = _kernel_for_grid(base_kernel, S, cell_size, self.rnge, self.animal)
-                        mapping = _kernel_mapping_for_state(
+                        grid_kernel = kernel_for_grid(
+                            base_kernel,
+                            S,
+                            cell_size,
+                            self.rnge,
+                            resample=WalkerHelper.resample_kernel_to_grid,
+                            preserve_full_kernel=self.animal in (Animal.AIRBORNE, Animal.MARINE),
+                        )
+                        mapping = KernelMapping.from_state_kernel(
                             terrain,
                             grid_kernel,
                             directions,
@@ -304,82 +312,6 @@ def _coerce_animal(animal_type):
     if isinstance(animal_type, str):
         return Animal[animal_type.upper()]
     return Animal(animal_type)
-
-
-def _kernel_array(state_kernel):
-    return getattr(state_kernel, "Z", state_kernel)
-
-
-def _kernel_state_value(state_kernel):
-    return getattr(state_kernel, "state_value", 0)
-
-
-def _normalize_kernel(kernel):
-    kernel = np.maximum(np.asarray(kernel, dtype=np.float64), 0)
-    total = kernel.sum()
-    if total > 0:
-        kernel = kernel / total
-    return kernel
-
-
-def _clip_kernel(kernel, radius):
-    kernel = np.asarray(kernel, dtype=np.float64)
-    radius = max(1, int(radius))
-    center_y = kernel.shape[0] // 2
-    center_x = kernel.shape[1] // 2
-    y0 = max(0, center_y - radius)
-    y1 = min(kernel.shape[0], center_y + radius + 1)
-    x0 = max(0, center_x - radius)
-    x1 = min(kernel.shape[1], center_x + radius + 1)
-    return kernel[y0:y1, x0:x1]
-
-
-def _kernel_for_grid(base_kernel, step_size, cell_size, rnge, animal):
-    if animal in (Animal.AIRBORNE, Animal.MARINE):
-        return WalkerHelper.resample_kernel_to_grid(base_kernel, step_size)
-
-    kernel_radius = min(rnge, int(step_size * cell_size))
-    clipped = _normalize_kernel(_clip_kernel(base_kernel, kernel_radius))
-    return WalkerHelper.resample_kernel_to_grid(clipped, step_size)
-
-
-def _kernel_mapping_for_state(terrain, kernel, directions, forbidden_terrains: list[int] | None):
-    mapping = KernelMapping(terrain, kind=KPM_KIND_KERNELS)
-    matrix_handles = []
-    for terrain_value in terrain.unique_values():
-        matrix = MatrixHandle.from_numpy(kernel)
-        ok = mapping.set_kernel(terrain_value, matrix, directions)
-        if not ok:
-            matrix.free()
-            mapping.free()
-            raise ValueError(f"Failed to set state kernel for terrain {terrain_value}")
-        if directions == 1:
-            matrix._owned = False
-        else:
-            matrix.free()
-        matrix_handles.append(matrix)
-
-    if forbidden_terrains is None:
-        return mapping
-
-    for t in forbidden_terrains:
-        mapping.set_barrier(t, barrier=True)
-    return mapping
-
-
-def _segments_for_steps(steps, max_cell_size: int, resolution):
-    try:
-        from segmentationcma import UTMDistanceCriterion, annotate_segments_dataframe, make_overlapping, \
-            segment_dataframe
-    except ImportError:
-        steps["segment_id"] = 0
-        return [(0, len(steps) - 1)]
-
-    criterion = UTMDistanceCriterion.from_cell_grid(max_cell_size, resolution)
-    base_segments = segment_dataframe(steps, criterion, merge_single_point_segments=True)
-    annotated = annotate_segments_dataframe(steps, segments=base_segments, segment_col="segment_id")
-    steps["segment_id"] = annotated["segment_id"]
-    return make_overlapping(base_segments)
 
 
 __all__ = ["StateDependentWalker"]
