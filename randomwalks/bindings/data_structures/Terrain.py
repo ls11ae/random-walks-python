@@ -57,6 +57,312 @@ MESA_LANDCOVER_COLORS = {
 }
 
 
+def terrain_neighborhood_matrix(
+        tiff_path,
+        x,
+        y,
+        radius_m=80,
+        *,
+        coordinate_space="world",
+        band=1,
+        pixel_size_m=None,
+        fill_value=None,
+        as_labels=False,
+):
+    """
+    Read a square terrain neighborhood from a GeoTIFF.
+
+    Parameters
+    ----------
+    tiff_path
+        Path to the landcover GeoTIFF.
+    x, y
+        Point at the center of the neighborhood. Interpreted as raster CRS
+        coordinates by default, or as pixel column/row when
+        coordinate_space="pixel".
+    radius_m
+        Neighborhood radius in meters. The returned matrix covers this radius
+        in each cardinal direction, so radius_m=80 returns the point plus its
+        80 m square neighborhood.
+    coordinate_space
+        "world" for GeoTIFF CRS coordinates, or "pixel" for column/row indices.
+    band
+        Raster band to read.
+    pixel_size_m
+        Meter size of one pixel. Overrides the GeoTIFF transform-derived pixel
+        size.
+    fill_value
+        Value used outside raster bounds. Defaults to raster nodata, or 0 when
+        nodata is absent.
+    as_labels
+        Return known MESA terrain names instead of integer terrain codes.
+    """
+    import numpy as np
+    import rasterio
+
+    if radius_m < 0:
+        raise ValueError("radius_m must be non-negative")
+
+    with rasterio.open(tiff_path) as src:
+        _, _, window = _terrain_neighborhood_window(
+            src,
+            x,
+            y,
+            radius_m,
+            coordinate_space=coordinate_space,
+            pixel_size_m=pixel_size_m,
+        )
+        if fill_value is None:
+            fill_value = src.nodata if src.nodata is not None else 0
+
+        matrix = src.read(
+            band,
+            window=window,
+            boundless=True,
+            fill_value=fill_value,
+        )
+
+    if as_labels:
+        label_for = np.vectorize(
+            lambda value: MESA_LANDCOVER_LABELS.get(int(value), str(int(value)))
+        )
+        return label_for(matrix)
+
+    return matrix
+
+
+def plot_terrain_neighborhood(
+        tiff_path,
+        x,
+        y,
+        radius_m=80,
+        *,
+        trajectory_points=None,
+        coordinate_space="world",
+        band=1,
+        pixel_size_m=None,
+        fill_value=None,
+        ax=None,
+        show=True,
+):
+    """
+    Plot a GeoTIFF terrain neighborhood with the focal point and nearby trajectory points.
+
+    trajectory_points accepts an iterable of ``(x, y)``/``(col, row)`` pairs,
+    a DataFrame/GeoDataFrame, a MovingPandas Trajectory, or a
+    MovingPandas TrajectoryCollection. Points are interpreted in the same
+    coordinate_space as the focal point.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import rasterio
+
+    if radius_m < 0:
+        raise ValueError("radius_m must be non-negative")
+
+    with rasterio.open(tiff_path) as src:
+        focal_row, focal_col, window = _terrain_neighborhood_window(
+            src,
+            x,
+            y,
+            radius_m,
+            coordinate_space=coordinate_space,
+            pixel_size_m=pixel_size_m,
+        )
+        if fill_value is None:
+            fill_value = src.nodata if src.nodata is not None else 0
+        matrix = src.read(
+            band,
+            window=window,
+            boundless=True,
+            fill_value=fill_value,
+        )
+        selected_points = _trajectory_points_in_window(
+            trajectory_points,
+            src,
+            window,
+            coordinate_space,
+        )
+
+    if ax is None:
+        _, ax = plt.subplots()
+
+    ax.imshow(matrix, interpolation="nearest")
+    focal_x = focal_col - window.col_off
+    focal_y = focal_row - window.row_off
+    ax.scatter(
+        [focal_x],
+        [focal_y],
+        marker="x",
+        s=90,
+        c="red",
+        linewidths=2,
+        label="Focal point",
+    )
+
+    if selected_points:
+        points = np.asarray(selected_points, dtype=float)
+        ax.scatter(
+            points[:, 0],
+            points[:, 1],
+            marker="o",
+            s=28,
+            facecolors="none",
+            edgecolors="black",
+            linewidths=1.2,
+            label="Trajectory points in window",
+        )
+
+    ax.set_title(f"Terrain neighborhood, r={radius_m} m")
+    ax.set_xlabel("Neighborhood column")
+    ax.set_ylabel("Neighborhood row")
+    ax.set_xlim(-0.5, matrix.shape[1] - 0.5)
+    ax.set_ylim(matrix.shape[0] - 0.5, -0.5)
+    ax.legend(loc="best")
+    ax.terrain_neighborhood_points = selected_points
+
+    if show:
+        plt.show()
+
+    return ax
+
+
+def _terrain_neighborhood_window(src, x, y, radius_m, *, coordinate_space, pixel_size_m=None):
+    import math
+
+    from rasterio.windows import Window
+
+    if coordinate_space == "world":
+        row, col = src.index(x, y)
+    elif coordinate_space == "pixel":
+        col = int(round(x))
+        row = int(round(y))
+    else:
+        raise ValueError('coordinate_space must be "world" or "pixel"')
+
+    pixel_width_m, pixel_height_m = _terrain_pixel_size_m(src, row, col, pixel_size_m)
+    radius_cols = int(math.ceil(radius_m / pixel_width_m))
+    radius_rows = int(math.ceil(radius_m / pixel_height_m))
+    return row, col, Window(
+        col_off=col - radius_cols,
+        row_off=row - radius_rows,
+        width=radius_cols * 2 + 1,
+        height=radius_rows * 2 + 1,
+    )
+
+
+def _trajectory_points_in_window(trajectory_points, src, window, coordinate_space):
+    if trajectory_points is None:
+        return []
+
+    selected = []
+    min_col = window.col_off
+    max_col = window.col_off + window.width
+    min_row = window.row_off
+    max_row = window.row_off + window.height
+
+    for point_x, point_y in _iter_trajectory_coordinates(trajectory_points, src, coordinate_space):
+        if coordinate_space == "world":
+            row, col = src.index(point_x, point_y)
+        else:
+            col = int(round(point_x))
+            row = int(round(point_y))
+
+        if min_col <= col < max_col and min_row <= row < max_row:
+            selected.append((col - window.col_off, row - window.row_off))
+
+    return selected
+
+
+def _iter_trajectory_coordinates(trajectory_points, src, coordinate_space):
+    if hasattr(trajectory_points, "to_point_gdf"):
+        trajectory_points = trajectory_points.to_point_gdf()
+    elif hasattr(trajectory_points, "df"):
+        trajectory_points = trajectory_points.df
+
+    if (
+            coordinate_space == "pixel"
+            and hasattr(trajectory_points, "columns")
+            and {"grid_x", "grid_y"}.issubset(trajectory_points.columns)
+    ):
+        for point_x, point_y in zip(trajectory_points["grid_x"], trajectory_points["grid_y"]):
+            yield point_x, point_y
+        return
+
+    if hasattr(trajectory_points, "geometry"):
+        frame = trajectory_points
+        if coordinate_space == "world" and getattr(frame, "crs", None) is not None and src.crs is not None:
+            frame = frame.to_crs(src.crs)
+        for geometry in frame.geometry:
+            if geometry is not None and not geometry.is_empty:
+                yield geometry.x, geometry.y
+        return
+
+    if hasattr(trajectory_points, "columns"):
+        frame = trajectory_points
+        if {"x", "y"}.issubset(frame.columns):
+            x_col, y_col = "x", "y"
+        elif {"longitude", "latitude"}.issubset(frame.columns):
+            x_col, y_col = "longitude", "latitude"
+        elif {"location-long", "location-lat"}.issubset(frame.columns):
+            x_col, y_col = "location-long", "location-lat"
+        else:
+            raise ValueError("trajectory_points must contain geometry, grid_x/grid_y, x/y, or lon/lat columns")
+        for point_x, point_y in zip(frame[x_col], frame[y_col]):
+            yield point_x, point_y
+        return
+
+    for point in trajectory_points:
+        yield point[0], point[1]
+
+
+def _terrain_pixel_size_m(src, row, col, pixel_size_m=None):
+    if src.transform.b or src.transform.d:
+        raise ValueError("Rotated GeoTIFF transforms are not supported")
+
+    if pixel_size_m is not None:
+        if isinstance(pixel_size_m, (tuple, list)):
+            pixel_width_m, pixel_height_m = pixel_size_m
+        else:
+            pixel_width_m = pixel_height_m = pixel_size_m
+        return _positive_pixel_size(pixel_width_m, pixel_height_m)
+
+    if src.crs is not None and src.crs.is_projected:
+        try:
+            unit_factor = src.crs.linear_units_factor
+        except Exception:
+            unit_factor = None
+        unit_to_m = 1.0 if unit_factor is None else unit_factor[1]
+        return _positive_pixel_size(src.transform.a * unit_to_m, src.transform.e * unit_to_m)
+
+    if src.crs is not None and src.crs.is_geographic:
+        return _geographic_pixel_size_m(src, row, col)
+
+    raise ValueError(
+        "radius_m requires a GeoTIFF with CRS metadata, or pass pixel_size_m."
+    )
+
+
+def _geographic_pixel_size_m(src, row, col):
+    from pyproj import Geod
+
+    lon, lat = src.xy(row, col)
+    pixel_width_deg = abs(float(src.transform.a))
+    pixel_height_deg = abs(float(src.transform.e))
+    geod = Geod(ellps="WGS84")
+    _, _, pixel_width_m = geod.inv(lon, lat, lon + pixel_width_deg, lat)
+    _, _, pixel_height_m = geod.inv(lon, lat, lon, lat + pixel_height_deg)
+    return _positive_pixel_size(pixel_width_m, pixel_height_m)
+
+
+def _positive_pixel_size(pixel_width_m, pixel_height_m):
+    pixel_width_m = abs(float(pixel_width_m))
+    pixel_height_m = abs(float(pixel_height_m))
+    if pixel_width_m <= 0 or pixel_height_m <= 0:
+        raise ValueError("pixel size must be positive")
+    return pixel_width_m, pixel_height_m
+
+
 class MovementPolicyCfg(str, enum.Enum):
     TIME_STEP = "TIME_STEP"
     FIXED_STEPS = "FIXED_STEPS"

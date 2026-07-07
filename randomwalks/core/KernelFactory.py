@@ -1,4 +1,5 @@
 from enum import Enum
+
 import geopandas as gpd
 from kernelcma import StateKernelFactory
 
@@ -41,6 +42,7 @@ def state_kernels(
         dt_tolerance=1.2,
         rnge=1000,
         out=None,
+        mass_percentile=0.99,
         density_config=None,
         density_preset=None,
         density_method=None,
@@ -56,6 +58,7 @@ def state_kernels(
         dt_tolerance=dt_tolerance,
         rnge=rnge,
         out=out,
+        mass_percentile=mass_percentile,
         density_config=density_config,
         density_preset=density_preset,
         density_method=density_method,
@@ -73,6 +76,7 @@ def _state_kernels(
         dt_tolerance=1.2,
         rnge=1000,
         out=None,
+        mass_percentile=0.99,
         density_config=None,
         density_preset=None,
         density_method=None,
@@ -97,21 +101,23 @@ def _state_kernels(
         time_col=time_col,
         state_col=state_col,
     )
+    density_options = _density_options(
+        density_config=density_config,
+        density_preset=density_preset,
+        density_method=density_method,
+        density_model=density_model,
+        n_components=n_components,
+        covariance_type=covariance_type,
+        reg_covar=reg_covar,
+        reg_covariance=reg_covariance,
+    )
     return factory.get_state_kernels(
-        dt_tolerance,
-        rnge,
-        2 * rnge + 1,
-        out,
-        density_config=_density_options(
-            density_config=density_config,
-            density_preset=density_preset,
-            density_method=density_method,
-            density_model=density_model,
-            n_components=n_components,
-            covariance_type=covariance_type,
-            reg_covar=reg_covar,
-            reg_covariance=reg_covariance,
-        ),
+        dt_tolerance=dt_tolerance,
+        rnge=rnge,
+        reso=2 * rnge + 1,
+        out=out,
+        density_config=density_options,
+        mass_percentile=mass_percentile,
     )
 
 

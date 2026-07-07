@@ -7,10 +7,12 @@ from randomwalks.bindings.data_structures.Point2D import Point2DArrayHandle, Poi
 from randomwalks.bindings.data_structures.Tensor import Tensor4DHandle, TensorHandle
 from randomwalks.bindings.data_structures.Terrain import (
     Animal,
+    BarrierMode,
     KernelsMap3DHandle,
     MesaLandcover,
     TerrainMapHandle,
-    BarrierMode,
+    plot_terrain_neighborhood,
+    terrain_neighborhood_matrix,
 )
 from randomwalks.bindings.data_structures.types import ComputationMode, Reachability
 from randomwalks.bindings.plotter import (
@@ -72,6 +74,8 @@ __all__ = [
     "TerrainMapHandle",
     "TimeStepPolicy",
     "BarrierMode",
+    "plot_terrain_neighborhood",
+    "terrain_neighborhood_matrix",
     "chebyshev",
     "euclidean",
     "manhattan",

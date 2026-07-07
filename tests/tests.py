@@ -46,13 +46,20 @@ if __name__ == "__main__":
             plot_path=working_directory + "BCPAHMM/states.png",
         )
         # Create movement kernels using Sum of Gaussians on segments
-        walker.get_kernels(
+        kernels = walker.get_kernels(
             dt_tolerance=1.0,
-            rnge=50,
-            state_col="terrain",
+            rnge=120,
+            state_col="state",
             is_brownian=True,
-            plot_dir=working_directory + "TERRAIN/kernels.png",
-            density_preset="terrain")
+            plot_dir=working_directory + "TERRAIN/kernels2.png",
+            mass_percentile=0.95,
+            )
+        neighborhoods = walker.save_kernel_neighborhoods(
+            kernels,
+            out_dir=working_directory + "TERRAIN/neighborhoods",
+        )
+        print(f"Saved {len(neighborhoods)} kernel terrain neighborhoods")
+        print(kernels)
         exit()
         # interpolate random walks with these kernels and parameters (here: 2 interpolations per step)
         result = walker.generate_walks(amount=2)

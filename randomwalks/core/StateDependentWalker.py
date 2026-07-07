@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from enum import IntEnum
+import json
 import os
+from pathlib import Path
 
 import geopandas as gpd
 import movingpandas as mpd
@@ -14,6 +16,11 @@ from shapely import Point
 from randomwalks.bindings.data_structures.KernelContext import KernelContextHandle
 from randomwalks.bindings.data_structures.KernelMapping import KernelMapping
 from randomwalks.bindings.data_structures.Terrain import Animal, MesaLandcover, TerrainMapHandle, BarrierMode
+from randomwalks.bindings.data_structures.Terrain import (
+    _terrain_neighborhood_window,
+    _trajectory_points_in_window,
+    plot_terrain_neighborhood,
+)
 from randomwalks.bindings.data_structures.types import Reachability
 from randomwalks.bindings.mixed_walk import MixedWalkBinding
 from randomwalks.core.KernelFactory import StateAnnotationMethod
@@ -36,11 +43,13 @@ class StateDependentWalker(MixedWalker):
         self.dt_tolerance = 1
         self.rnge = 0
         self.kernel_state_col = "state"
+        self.state_kernel_metadata = {}
         self.annotation_result = None
         self.barrier_mode = BarrierMode.AVOID
         self.barriers = barriers
 
         self.is_brownian = False
+        self.kernel_neighborhood_paths = []
         is_marine = self.animal in (Animal.MARINE, Animal.AIRBORNE)
 
         apply_moveapps_id_dtype_patch()
@@ -102,6 +111,7 @@ class StateDependentWalker(MixedWalker):
             covariance_type=None,
             reg_covar=None,
             reg_covariance=None,
+            mass_percentile=0.99,
     ):
         if self.animal_proc is None or self.animal_proc.annotation_result is None:
             raise ValueError("Call annotate_behavior() before get_kernels().")
@@ -118,6 +128,7 @@ class StateDependentWalker(MixedWalker):
             dt_tolerance=self.dt_tolerance,
             rnge=self.rnge,
             out_dir=plot_dir or self.out_directory,
+            mass_percentile=mass_percentile,
             density_config=density_config,
             density_preset=density_preset,
             density_method=density_method,
@@ -129,16 +140,186 @@ class StateDependentWalker(MixedWalker):
         )
         selected_kernels = brw_zs if is_brownian and self.animal != Animal.AIRBORNE else cor_zs
         state_kernels = {}
+        state_kernel_metadata = {}
         for state_kernel in selected_kernels:
-            kernel = kernel_array(state_kernel)
+            state = kernel_state_value(state_kernel)
+            kernel, metadata = _kernel_and_metadata(state_kernel, rnge, mass_percentile)
             if kernel is None or np.sum(kernel) == 0:
                 continue
-            state_kernels[kernel_state_value(state_kernel)] = normalize_kernel(kernel)
+            state_kernels[state] = normalize_kernel(kernel)
+            state_kernel_metadata[state] = metadata
 
         if not state_kernels:
             raise ValueError("No usable state kernels were generated.")
         self.state_kernels = state_kernels
+        self.state_kernel_metadata = state_kernel_metadata
         return state_kernels
+
+    def save_kernel_neighborhoods(
+            self,
+            kernels=None,
+            *,
+            out_dir=None,
+            state_col=None,
+            min_terrain_types=2,
+            min_points=2,
+            plot=True,
+            save_matrix=True,
+            mass_percentile=0.99,
+    ):
+        """
+        Save terrain neighborhoods for trajectory steps after state kernels exist.
+
+        For each trajectory point t, this uses the kernel belonging to the
+        point's state, reads the terrain GeoTIFF in that kernel radius, and only
+        saves the neighborhood when:
+        - more than one terrain value is present in the neighborhood, and
+        - at least min_points from t-1, t, and t+1 fall inside the neighborhood.
+        """
+        kernels = kernels if kernels is not None else self.state_kernels
+        if not kernels:
+            raise ValueError("Call get_kernels() before save_kernel_neighborhoods().")
+        if self.animal_proc is None or self.animal_proc.traj is None:
+            raise ValueError("Call annotate_behavior() before save_kernel_neighborhoods().")
+        if not self.animal_proc.terrain_TIFFs:
+            raise ValueError("No terrain GeoTIFFs are available.")
+
+        state_col = state_col or self.kernel_state_col
+        out_dir = Path(out_dir or Path(self.out_directory or ".") / "kernel_neighborhoods")
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        import matplotlib.pyplot as plt
+        import rasterio
+
+        saved = []
+        for traj in self.animal_proc.traj.trajectories:
+            animal_id = str(traj.id)
+            tiff_path = self.animal_proc.terrain_TIFFs.get(animal_id)
+            if tiff_path is None:
+                tiff_path = self.animal_proc.terrain_TIFFs.get(traj.id)
+            if tiff_path is None:
+                continue
+
+            steps = traj.df
+            if state_col not in steps.columns or "geometry" not in steps:
+                continue
+
+            steps_gdf = gpd.GeoDataFrame(steps.copy(), geometry="geometry", crs=getattr(steps, "crs", None) or self.crs)
+            with rasterio.open(tiff_path) as src:
+                tiff_steps = steps_gdf.to_crs(src.crs) if src.crs is not None else steps_gdf
+                for step_index in range(len(tiff_steps)):
+                    state = steps.iloc[step_index][state_col]
+                    kernel = _kernel_for_state(kernels, state)
+                    if kernel is None:
+                        continue
+
+                    kernel_metadata = _kernel_metadata_for_state(self.state_kernel_metadata, state)
+                    radius_m = _kernel_radius_m(
+                        kernel,
+                        metadata=kernel_metadata,
+                        fallback_radius=self.rnge,
+                        mass_percentile=mass_percentile,
+                    )
+                    focal = tiff_steps.geometry.iloc[step_index]
+                    if focal is None or focal.is_empty:
+                        continue
+
+                    candidate_indices = [
+                        index
+                        for index in (step_index - 1, step_index, step_index + 1)
+                        if 0 <= index < len(tiff_steps)
+                    ]
+                    candidate_points = [
+                        (tiff_steps.geometry.iloc[index].x, tiff_steps.geometry.iloc[index].y)
+                        for index in candidate_indices
+                        if tiff_steps.geometry.iloc[index] is not None
+                        and not tiff_steps.geometry.iloc[index].is_empty
+                    ]
+
+                    _, _, window = _terrain_neighborhood_window(
+                        src,
+                        focal.x,
+                        focal.y,
+                        radius_m,
+                        coordinate_space="world",
+                    )
+                    matrix = src.read(
+                        1,
+                        window=window,
+                        boundless=True,
+                        fill_value=src.nodata if src.nodata is not None else 0,
+                    )
+                    selected_points = _trajectory_points_in_window(
+                        candidate_points,
+                        src,
+                        window,
+                        "world",
+                    )
+                    terrain_values = _terrain_values(matrix, src.nodata)
+
+                    if len(terrain_values) < min_terrain_types or len(selected_points) < min_points:
+                        continue
+
+                    stem = _safe_filename(f"{animal_id}_step_{step_index}_state_{state}_r{int(round(radius_m))}")
+                    animal_dir = out_dir / _safe_filename(animal_id)
+                    animal_dir.mkdir(parents=True, exist_ok=True)
+                    matrix_path = animal_dir / f"{stem}.npy"
+                    metadata_path = animal_dir / f"{stem}.json"
+                    plot_path = animal_dir / f"{stem}.png"
+
+                    if save_matrix:
+                        np.save(matrix_path, matrix)
+
+                    metadata = {
+                        "animal_id": animal_id,
+                        "step_index": int(step_index),
+                        "state": _json_scalar(state),
+                        "radius_m": float(radius_m),
+                        "kernel_radius_cells": _json_scalar(
+                            kernel_metadata.get("radius_cells")
+                            if kernel_metadata
+                            else None
+                        ),
+                        "kernel_retained_mass": _json_scalar(
+                            kernel_metadata.get("retained_mass")
+                            if kernel_metadata
+                            else None
+                        ),
+                        "kernel_mass_percentile": _json_scalar(
+                            kernel_metadata.get("mass_percentile")
+                            if kernel_metadata
+                            else mass_percentile
+                        ),
+                        "terrain_values": terrain_values,
+                        "point_count": len(selected_points),
+                        "candidate_step_indices": [int(index) for index in candidate_indices],
+                        "matrix_shape": [int(matrix.shape[0]), int(matrix.shape[1])],
+                        "tiff_path": str(tiff_path),
+                        "matrix_path": str(matrix_path) if save_matrix else None,
+                        "plot_path": str(plot_path) if plot else None,
+                    }
+                    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+                    if plot:
+                        ax = plot_terrain_neighborhood(
+                            tiff_path,
+                            focal.x,
+                            focal.y,
+                            radius_m=radius_m,
+                            trajectory_points=candidate_points,
+                            coordinate_space="world",
+                            show=False,
+                        )
+                        ax.set_title(
+                            f"{animal_id} step {step_index}, state={state}, r={radius_m:g}m"
+                        )
+                        ax.figure.savefig(plot_path, bbox_inches="tight", dpi=150)
+                        plt.close(ax.figure)
+
+                    saved.append(metadata)
+
+        self.kernel_neighborhood_paths = saved
+        return saved
 
     def __get_steps(self):
         return {traj.id: traj.df for traj in self.animal_proc.traj.trajectories}
@@ -312,6 +493,113 @@ def _coerce_animal(animal_type):
     if isinstance(animal_type, str):
         return Animal[animal_type.upper()]
     return Animal(animal_type)
+
+
+def _kernel_for_state(kernels, state):
+    if state in kernels:
+        return kernels[state]
+    for key, kernel in kernels.items():
+        if _state_key_equal(key, state):
+            return kernel
+    return None
+
+
+def _kernel_metadata_for_state(metadata_by_state, state):
+    if not metadata_by_state:
+        return None
+    if state in metadata_by_state:
+        return metadata_by_state[state]
+    for key, metadata in metadata_by_state.items():
+        if _state_key_equal(key, state):
+            return metadata
+    return None
+
+
+def _state_key_equal(left, right):
+    if left == right:
+        return True
+    try:
+        return int(left) == int(right)
+    except (TypeError, ValueError):
+        return str(left) == str(right)
+
+
+def _kernel_and_metadata(state_kernel, fallback_radius, mass_percentile):
+    kernel = kernel_array(state_kernel)
+    metadata = {
+        "rnge": getattr(state_kernel, "rnge", None),
+        "reso": getattr(state_kernel, "reso", None),
+        "dx": getattr(state_kernel, "dx", None),
+        "radius_cells": getattr(state_kernel, "radius_cells", None),
+        "retained_mass": getattr(state_kernel, "retained_mass", None),
+        "mass_percentile": getattr(state_kernel, "mass_percentile", None),
+    }
+    if metadata["rnge"] is not None and metadata["mass_percentile"] is not None:
+        return kernel, metadata
+
+    try:
+        from kernelcma.postprocessing import clip_density_to_mass
+
+        clipped = clip_density_to_mass(kernel, fallback_radius, mass_percentile=mass_percentile)
+        metadata = {
+            "rnge": clipped.rnge,
+            "reso": clipped.reso,
+            "dx": clipped.dx,
+            "radius_cells": clipped.radius_cells,
+            "retained_mass": clipped.retained_mass,
+            "mass_percentile": clipped.mass_percentile,
+        }
+        return clipped.Z, metadata
+    except Exception:
+        return kernel, metadata
+
+
+def _kernel_radius_m(kernel, *, metadata=None, fallback_radius=None, mass_percentile=0.99):
+    if metadata and metadata.get("rnge") is not None:
+        return float(metadata["rnge"])
+
+    if fallback_radius is not None:
+        try:
+            from kernelcma.postprocessing import clip_density_to_mass
+
+            return float(
+                clip_density_to_mass(
+                    kernel,
+                    fallback_radius,
+                    mass_percentile=mass_percentile,
+                ).rnge
+            )
+        except Exception:
+            pass
+
+    kernel = np.asarray(kernel)
+    if kernel.ndim >= 2 and min(kernel.shape[-2:]) > 1:
+        return float(min(kernel.shape[-2], kernel.shape[-1]) // 2)
+    return float(fallback_radius or 0)
+
+
+def _terrain_values(matrix, nodata):
+    values = np.unique(matrix)
+    result = []
+    for value in values:
+        if nodata is not None and value == nodata:
+            continue
+        result.append(_json_scalar(value))
+    return result
+
+
+def _json_scalar(value):
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+def _safe_filename(value):
+    safe = "".join(
+        char if char.isalnum() or char in {"-", "_", "."} else "_"
+        for char in str(value)
+    ).strip("_")
+    return safe or "value"
 
 
 __all__ = ["StateDependentWalker"]
