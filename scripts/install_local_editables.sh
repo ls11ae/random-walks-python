@@ -27,7 +27,7 @@ install_self=0
 packages=(environmentcma hmmcma segmentationcma kernelcma)
 
 echo "Fetch submodule updates" >&2
-git submodule update --init --recursive
+git submodule update --init --recursive --remote --merge
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

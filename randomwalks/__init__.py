@@ -15,6 +15,7 @@ from randomwalks.bindings.data_structures.Terrain import (
     terrain_neighborhood_matrix,
 )
 from randomwalks.bindings.data_structures.types import ComputationMode, Reachability
+from randomwalks.bindings.step_segments import terrain_pair_weights_from_neighborhoods
 from randomwalks.bindings.plotter import (
     plot_terrain_walk,
     plot_walk_from_json,
@@ -76,6 +77,7 @@ __all__ = [
     "BarrierMode",
     "plot_terrain_neighborhood",
     "terrain_neighborhood_matrix",
+    "terrain_pair_weights_from_neighborhoods",
     "chebyshev",
     "euclidean",
     "manhattan",

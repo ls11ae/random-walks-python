@@ -19,7 +19,7 @@ if __name__ == "__main__":
     # load trajectory collection from pickle
     working_directory = os.getcwd() + "/tests/moveapps/"
     with open(
-            "/home/omar/PycharmProjects/hmmcma/tests/annotated.pickle",
+            "/home/omar/PycharmProjects/RW-Python-gitlab/tests/moveapps/RW_Test__Workflow_Instance_005__move2_loc_to_MovingPandas__2026-06-23_22-38-10.pickle",
             "rb") as f:
         traj_coll = pickle.load(f)
 
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # set landmarks that act as barriers for animals, here: Buildings, roads, water (rivers, lakes, oceans etc)
     barriers = [MesaLandcover.PERMANENT_WATER, MesaLandcover.BUILT_UP]
     # feature set for trajectory segmentation
-    features = [Feature.SPEED, Feature.ANGULAR_DIFFERENCE, Feature.PERSISTENCE_VELOCITY]
+    features = [Feature.DISTANCE, Feature.ANGULAR_DIFFERENCE]
     # initialize random walker for terrestrial animal with the movement policy, barriers and features
     with StateDependentWalker(data=traj_coll,
                               animal_type=Animal.TERRESTRIAL,
@@ -40,9 +40,9 @@ if __name__ == "__main__":
                               barriers=barriers) as walker:
         # annotate behavioral segments with method BCPA-HMM: Use HMM to determine state per behavioral change point
         walker.annotate_behavior(
-            method=StateAnnotationMethod.BCPAHMM,
+            method=StateAnnotationMethod.HMM,
             features=features,
-            num_states=5,
+            num_states=3,
             plot_path=working_directory + "BCPAHMM/states.png",
         )
         # Create movement kernels using Sum of Gaussians on segments
@@ -51,13 +51,15 @@ if __name__ == "__main__":
             rnge=120,
             state_col="state",
             is_brownian=True,
-            plot_dir=working_directory + "TERRAIN/kernels2.png",
+            plot_dir=working_directory + "BCPAHMM/kernels2.png",
             mass_percentile=0.95,
-            )
+        )
         neighborhoods = walker.save_kernel_neighborhoods(
             kernels,
-            out_dir=working_directory + "TERRAIN/neighborhoods",
+            out_dir=working_directory + "BCPAHMM/neighborhoods",
         )
+        terrain_weights = walker.estimate_terrain_pair_weights(neighborhoods, lo=0.5, hi=1.5, count_self_transitions=False)
+        print(terrain_weights)
         print(f"Saved {len(neighborhoods)} kernel terrain neighborhoods")
         print(kernels)
         exit()

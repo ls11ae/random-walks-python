@@ -28,7 +28,7 @@ from randomwalks.core.MixedWalker import MixedWalker
 from randomwalks.core.WalkerHelper import WalkerHelper
 from randomwalks.bindings.data_structures.Kernels import kernel_array, kernel_for_grid, kernel_state_value, \
     normalize_kernel
-from randomwalks.bindings.step_segments import segments_for_steps
+from randomwalks.bindings.step_segments import segments_for_steps, terrain_pair_weights_from_neighborhoods
 from randomwalks.move_apps_patch import apply_moveapps_id_dtype_patch, debug_patch_state, force_tc_id_object_inplace, \
     merge_traj_collections
 
@@ -83,7 +83,7 @@ class StateDependentWalker(MixedWalker):
             plot_path=None,
     ):
         super()._process_movebank_data(create_landcover=True)
-
+        
         self.n_hmm_states = num_states
         if self.original_data is None:
             self.original_data = self.animal_proc.traj_coll
@@ -192,7 +192,8 @@ class StateDependentWalker(MixedWalker):
         import rasterio
 
         saved = []
-        for traj in self.animal_proc.traj.trajectories:
+        for i, traj in enumerate(self.animal_proc.traj.trajectories):
+            print(f"Saving neighborhoods for: {i}/{len(self.animal_proc.traj.trajectories)}\n")
             animal_id = str(traj.id)
             tiff_path = self.animal_proc.terrain_TIFFs.get(animal_id)
             if tiff_path is None:
@@ -208,6 +209,7 @@ class StateDependentWalker(MixedWalker):
             with rasterio.open(tiff_path) as src:
                 tiff_steps = steps_gdf.to_crs(src.crs) if src.crs is not None else steps_gdf
                 for step_index in range(len(tiff_steps)):
+                    print(f"  {step_index}/{len(tiff_steps)}\n")
                     state = steps.iloc[step_index][state_col]
                     kernel = _kernel_for_state(kernels, state)
                     if kernel is None:
@@ -233,10 +235,10 @@ class StateDependentWalker(MixedWalker):
                         (tiff_steps.geometry.iloc[index].x, tiff_steps.geometry.iloc[index].y)
                         for index in candidate_indices
                         if tiff_steps.geometry.iloc[index] is not None
-                        and not tiff_steps.geometry.iloc[index].is_empty
+                           and not tiff_steps.geometry.iloc[index].is_empty
                     ]
 
-                    _, _, window = _terrain_neighborhood_window(
+                    focal_row, focal_col, window = _terrain_neighborhood_window(
                         src,
                         focal.x,
                         focal.y,
@@ -259,6 +261,20 @@ class StateDependentWalker(MixedWalker):
 
                     if len(terrain_values) < min_terrain_types or len(selected_points) < min_points:
                         continue
+
+                    obs_dx = None
+                    obs_dy = None
+                    observed_endpoint_pixel = None
+                    if step_index + 1 < len(tiff_steps):
+                        observed = tiff_steps.geometry.iloc[step_index + 1]
+                        if observed is not None and not observed.is_empty:
+                            observed_row, observed_col = src.index(observed.x, observed.y)
+                            obs_dx = int(observed_col - focal_col)
+                            obs_dy = int(observed_row - focal_row)
+                            observed_endpoint_pixel = [
+                                int(observed_col - window.col_off),
+                                int(observed_row - window.row_off),
+                            ]
 
                     stem = _safe_filename(f"{animal_id}_step_{step_index}_state_{state}_r{int(round(radius_m))}")
                     animal_dir = out_dir / _safe_filename(animal_id)
@@ -293,6 +309,13 @@ class StateDependentWalker(MixedWalker):
                         "terrain_values": terrain_values,
                         "point_count": len(selected_points),
                         "candidate_step_indices": [int(index) for index in candidate_indices],
+                        "focal_pixel": [
+                            int(focal_col - window.col_off),
+                            int(focal_row - window.row_off),
+                        ],
+                        "observed_endpoint_pixel": observed_endpoint_pixel,
+                        "obs_dx": obs_dx,
+                        "obs_dy": obs_dy,
                         "matrix_shape": [int(matrix.shape[0]), int(matrix.shape[1])],
                         "tiff_path": str(tiff_path),
                         "matrix_path": str(matrix_path) if save_matrix else None,
@@ -320,6 +343,46 @@ class StateDependentWalker(MixedWalker):
 
         self.kernel_neighborhood_paths = saved
         return saved
+
+    def estimate_terrain_pair_weights(
+            self,
+            neighborhoods=None,
+            kernels=None,
+            *,
+            out_dir=None,
+            terrain_values=None,
+            exclude_terrain_values=(0,),
+            lambda_=1.0,
+            log_clip=None,
+            lo=0.5,
+            hi=1.5,
+            count_self_transitions=True,
+            save_heatmaps=True,
+            verbose=True,
+    ):
+        kernels = kernels if kernels is not None else self.state_kernels
+        if not kernels:
+            raise ValueError("Call get_kernels() before estimate_terrain_pair_weights().")
+
+        neighborhoods = neighborhoods if neighborhoods is not None else self.kernel_neighborhood_paths
+        if not neighborhoods:
+            neighborhoods = self.save_kernel_neighborhoods(kernels=kernels, plot=False, save_matrix=True)
+
+        out_dir = Path(out_dir or Path(self.out_directory or ".") / "terrain_pair_weights")
+        return terrain_pair_weights_from_neighborhoods(
+            neighborhoods,
+            kernels,
+            out_dir=out_dir,
+            terrain_values=terrain_values,
+            exclude_terrain_values=exclude_terrain_values,
+            lambda_=lambda_,
+            log_clip=log_clip,
+            lo=lo,
+            hi=hi,
+            count_self_transitions=count_self_transitions,
+            save_heatmaps=save_heatmaps,
+            verbose=verbose,
+        )
 
     def __get_steps(self):
         return {traj.id: traj.df for traj in self.animal_proc.traj.trajectories}

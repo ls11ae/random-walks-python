@@ -14,6 +14,8 @@ from environmentcma import (
     grid_shape_from_bbox,
     grid_to_geo,
     padded_bbox,
+    traj_utm,
+    utm_to_grid,
 )
 
 from randomwalks.bindings.data_structures.Terrain import TerrainMapHandle
@@ -173,12 +175,49 @@ class AnimalMovementProcessor:
     def create_landcover_data_txt(self, is_marine: bool = False, resolution: int = 200,
                                   out_directory: str | None = None) -> dict[Any, str]:
         self.resolution = resolution
-        self.terrain_paths = env_create_landcover_data_txt(
-            traj=self.traj,
-            is_marine=is_marine,
-            resolution=resolution,
-            out_directory=out_directory,
-        )
+        expected_paths = {
+            trajectory.id: _landcover_txt_path(trajectory, resolution, out_directory)
+            for trajectory in self.traj.trajectories
+        }
+        existing = {
+            trajectory.id
+            for trajectory in self.traj.trajectories
+            if expected_paths[trajectory.id].is_file()
+        }
+
+        if not existing:
+            self.terrain_paths = env_create_landcover_data_txt(
+                traj=self.traj,
+                is_marine=is_marine,
+                resolution=resolution,
+                out_directory=out_directory,
+            )
+        else:
+            generated_paths = {}
+            missing_trajectories = []
+            for trajectory in self.traj.trajectories:
+                if trajectory.id in existing:
+                    _add_grid_coordinates(trajectory, resolution)
+                    print(f"Landcover grid already exists, skipping: {expected_paths[trajectory.id]}")
+                else:
+                    missing_trajectories.append(trajectory)
+
+            if missing_trajectories:
+                generated_paths = env_create_landcover_data_txt(
+                    traj=mpd.TrajectoryCollection(missing_trajectories),
+                    is_marine=is_marine,
+                    resolution=resolution,
+                    out_directory=out_directory,
+                )
+
+            self.terrain_paths = {
+                trajectory.id: (
+                    str(expected_paths[trajectory.id])
+                    if trajectory.id in existing
+                    else generated_paths[trajectory.id]
+                )
+                for trajectory in self.traj.trajectories
+            }
         self.terrain_TIFFs = {
             str(traj_id): _txt_to_tif_path(path, resolution)
             for traj_id, path in self.terrain_paths.items()
@@ -466,6 +505,31 @@ class AnimalMovementProcessor:
             reg_covar=reg_covar,
             reg_covariance=reg_covariance,
         )
+
+
+def _landcover_txt_path(trajectory, resolution, out_directory):
+    min_lon, min_lat, max_lon, max_lat = trajectory.df.total_bounds
+    root = Path("landcover" if out_directory is None else out_directory) / "landcover"
+    filename = (
+        f"landcover_{trajectory.id}_"
+        f"{min_lon:.2f}_{min_lat:.2f}_{max_lon:.2f}_{max_lat:.2f}_{resolution}.txt"
+    )
+    return root / filename
+
+
+def _add_grid_coordinates(trajectory, resolution):
+    utm_bounds, _ = bbox_utm(trajectory)
+    width, height = grid_shape_from_bbox(utm_bounds, resolution)
+    projected = traj_utm(trajectory)
+    grid_x, grid_y = utm_to_grid(
+        width,
+        height,
+        utm_bounds,
+        projected.df.geometry.x.values,
+        projected.df.geometry.y.values,
+    )
+    trajectory.df["grid_x"] = grid_x
+    trajectory.df["grid_y"] = grid_y
 
 
 def _txt_to_tif_path(txt_path, resolution):
