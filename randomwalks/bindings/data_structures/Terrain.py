@@ -29,6 +29,7 @@ class MesaLandcover(enum.IntEnum):
 
 
 MESA_LANDCOVER_LABELS = {
+    0: "No data",
     10: "Tree cover",
     20: "Shrubland",
     30: "Grassland",
@@ -43,6 +44,7 @@ MESA_LANDCOVER_LABELS = {
 }
 
 MESA_LANDCOVER_COLORS = {
+    0: (0.65, 0.65, 0.65, 0.75),
     10: (0.0, 0.4, 0.0, 0.85),
     20: (0.67, 0.55, 0.26, 0.85),
     30: (0.0, 0.78, 0.0, 0.75),
