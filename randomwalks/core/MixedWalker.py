@@ -14,7 +14,14 @@ from randomwalks.bindings.data_structures.Terrain import TerrainMapHandle
 from randomwalks.bindings.data_structures.types import ComputationMode, Reachability
 from randomwalks.bindings.mixed_walk import MixedWalkBinding
 from randomwalks.bindings.plotter import plot_terrain_walk
-from randomwalks.bindings.walk_visualization import LeafletGridOverlay, walk_to_osm
+from randomwalks.core.UtilizationDistribution import (
+    UtilizationDistributionGrid,
+    UtilizationDistributionMixin,
+    _resample_ud_to_common_grid,
+    _ud_output_directory,
+    combine_utilization_distributions as _combine_utilization_distributions,
+    utilization_distribution_from_forward_density,
+)
 from randomwalks.core.WalkerHelper import WalkerHelper
 
 WALK_BASE_ID_COL = "_rw_walk_base_id"
@@ -22,7 +29,7 @@ WALK_VERSION_COL = "_rw_walk_version"
 WALK_TRAJ_ID_COL = "_rw_walk_id"
 
 
-class MixedWalker:
+class MixedWalker(UtilizationDistributionMixin):
     def __init__(
             self,
             data,
@@ -55,7 +62,12 @@ class MixedWalker:
         self.id_col = self.data.get_traj_id_col()
         self.crs = crs
         self.resolution = resolution
-        self.out_directory = out_directory
+        self.out_directory = out_directory or "."
+        output_root = Path(self.out_directory)
+        self.states_directory = output_root / "states"
+        self.kernels_directory = output_root / "kernels"
+        self.ud_plots_directory = output_root / "ud_plots"
+        self.walks_directory = output_root / "walks"
         self.animal_proc = None
         self.is_marine = bool(is_marine)
         self.movement_policy = movement_policy
@@ -64,9 +76,9 @@ class MixedWalker:
         self.context_mode = context
         self._context_tempdir = None
         self.serialization_dir = os.path.join(self.out_directory, "serialization")
-        self.utilization_distributions = {}
-        self.utilization_distribution_paths = {}
+        self._initialize_utilization_distributions()
         self.plot_paths = {}
+        self.rw_grid_plot_paths = {}
 
     def _process_movebank_data(self, create_landcover=True):
         from randomwalks.core.AnimalMovement import AnimalMovementProcessor
@@ -113,7 +125,7 @@ class MixedWalker:
     def mixed_walk_gpu(*args, **kwargs):
         pass
 
-    def generate_walks(self, mapping=None, serialization_dir=None, amount=1, save_plots=False):
+    def generate_walks(self, mapping=None, serialization_dir=None, amount=1, save_plots=True):
         amount = _validate_walk_amount(amount, allow_zero=False)
         return self._randomwalks_core(
             mapping,
@@ -123,7 +135,7 @@ class MixedWalker:
             save_plots=save_plots,
         )
 
-    def generate_utilization_distribution(self, mapping=None, serialization_dir=None, sample_walks=0, save_plots=False):
+    def generate_utilization_distribution(self, mapping=None, serialization_dir=None, sample_walks=0, save_plots=True):
         sample_walks = _validate_walk_amount(sample_walks, allow_zero=True, name="sample_walks")
         return self._randomwalks_core(
             mapping,
@@ -148,9 +160,9 @@ class MixedWalker:
         steps_dict = {traj.id: traj.df for traj in self.animal_proc.traj.trajectories}
         per_animal_gdfs = []
         context_mode = ComputationMode.SERIALIZATION if serialization_dir is not None else self.context_mode
-        self.utilization_distributions = {}
-        self.utilization_distribution_paths = {}
+        self._reset_utilization_distributions()
         self.plot_paths = {}
+        self.rw_grid_plot_paths = {}
 
         for animal_id, steps in steps_dict.items():
             print(f"Generating walks for {animal_id}")
@@ -202,22 +214,14 @@ class MixedWalker:
 
                             if ud:
                                 print(f"Calculate utilization distribution:")
-                                segment_ud_handle = MixedWalkBinding.utilization_distribution(
-                                    dp_matrix=forward_density,
-                                    kernel_context=context,
-                                    end_x=end_x,
-                                    end_y=end_y,
+                                segment_ud = utilization_distribution_from_forward_density(
+                                    forward_density,
+                                    context,
+                                    terrain_map.width,
+                                    terrain_map.height,
+                                    end_x,
+                                    end_y,
                                 )
-                                try:
-                                    segment_ud = segment_ud_handle.to_numpy_sum(
-                                        terrain_map.width,
-                                        terrain_map.height,
-                                        average=True,
-                                    )
-                                except ValueError:
-                                    segment_ud = None
-                                finally:
-                                    segment_ud_handle.free()
 
                                 if segment_ud is not None and not np.isnan(segment_ud).any():
                                     total += segment_ud
@@ -244,8 +248,29 @@ class MixedWalker:
                         per_animal_gdfs.append(final_gdf)
 
                 if ud:
-                    self.utilization_distributions[str(animal_id)] = total.copy()
-                    self._save_utilization_distribution_map(animal_id, path_gdfs, total)
+                    distribution = self._store_utilization_distribution(
+                        animal_id,
+                        UtilizationDistributionGrid(
+                            total,
+                            self.animal_proc.bbox_geo(animal_id),
+                            crs="EPSG:4326",
+                        ),
+                    )
+                    ud_output_dir = _ud_output_directory(save_plots, self.out_directory)
+                    self._save_utilization_distribution_map(
+                        animal_id,
+                        path_gdfs,
+                        distribution,
+                        output_dir=ud_output_dir,
+                        observed_points=steps_df,
+                    )
+                    if save_plots:
+                        self._save_utilization_distribution_png(
+                            animal_id,
+                            observed_points=steps_df,
+                            utilization_distribution=distribution,
+                            save_plots=save_plots,
+                        )
                 if save_plots:
                     self._save_animal_plot(
                         animal_id,
@@ -260,7 +285,11 @@ class MixedWalker:
                 terrain_map.free()
 
         if ud:
-            self._save_combined_utilization_distribution_map(per_animal_gdfs)
+            self._save_combined_utilization_distribution_map(
+                per_animal_gdfs,
+                output_dir=_ud_output_directory(save_plots, self.out_directory),
+                observed_points=self.data.to_point_gdf(),
+            )
 
         if ud and amount_of_walks == 0:
             return self.data
@@ -292,121 +321,54 @@ class MixedWalker:
     def _terrain_path(self, animal_id):
         return self.animal_proc.terrain_paths.get(animal_id) or self.animal_proc.terrain_paths[str(animal_id)]
 
-    def _save_utilization_distribution_map(self, animal_id, path_gdfs, utilization_distribution):
-        output_dir = Path(self.out_directory or ".")
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        key = str(animal_id)
-        overlay = LeafletGridOverlay(
-            grid=np.asarray(utilization_distribution, dtype=float),
-            bounds=self.animal_proc.bbox_geo(animal_id),
-            name=f"{key} utilization distribution",
-        )
-        coords_by_version = _coords_by_walk_version(key, path_gdfs)
-
-        if not coords_by_version:
-            min_lon, min_lat, max_lon, max_lat = self.animal_proc.bbox_geo(animal_id)
-            center = [((min_lat + max_lat) / 2.0, (min_lon + max_lon) / 2.0)]
-            out_file = walk_to_osm(
-                center,
-                animal_id=key,
-                walk_path=str(output_dir),
-                map_filename=f"{key}_UD.html",
-                utilization_distribution_overlays={"walk": overlay},
-                draw_walk=False,
-            )
-            self.utilization_distribution_paths[key] = out_file
-            print(f"Saved utilization distribution map to {out_file}")
-            return Path(out_file)
-
-        if len(coords_by_version) == 1:
-            coords = next(iter(coords_by_version.values()))
-            walk_data = coords
-            overlays = {key: overlay}
-        else:
-            walk_data = coords_by_version
-            overlays = {"walk": overlay}
-
-        out_file = walk_to_osm(
-            walk_data,
-            animal_id=key,
-            walk_path=str(output_dir),
-            map_filename=f"{key}_UD.html",
-            utilization_distribution_overlays=overlays,
-        )
-        self.utilization_distribution_paths[key] = out_file
-        print(f"Saved utilization distribution map to {out_file}")
-        return Path(out_file)
-
-    def _save_combined_utilization_distribution_map(self, path_gdfs):
-        print(f"save combined utilization distribution map:")
-        combined = _combine_utilization_distributions(
-            (
-                (self.utilization_distributions[animal_id], self.animal_proc.bbox_geo(animal_id))
-                for animal_id in self.utilization_distributions
-            )
-        )
-        if combined is None:
-            return None
-
-        combined_grid, combined_bounds = combined
-        overlay = LeafletGridOverlay(
-            grid=combined_grid,
-            bounds=combined_bounds,
-            name="All animals utilization distribution",
-        )
-        walk_data = _primary_coords_by_animal(path_gdfs, self.id_col)
-
-        output_dir = Path(self.out_directory or ".")
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        if walk_data:
-            out_file = walk_to_osm(
-                walk_data,
-                walk_path=str(output_dir),
-                map_filename="all_trajectories_walks_ud.html",
-                utilization_distribution_overlays={"walk": overlay},
-            )
-        else:
-            min_lon, min_lat, max_lon, max_lat = combined_bounds
-            center = [((min_lat + max_lat) / 2.0, (min_lon + max_lon) / 2.0)]
-            out_file = walk_to_osm(
-                center,
-                animal_id="all",
-                walk_path=str(output_dir),
-                map_filename="all_trajectories_ud.html",
-                utilization_distribution_overlays={"walk": overlay},
-                draw_walk=False,
-            )
-
-        self.utilization_distribution_paths["all"] = out_file
-        print(f"Saved combined utilization distribution map to {out_file}")
-        return Path(out_file)
-
     def _save_animal_plot(self, animal_id, terrain_map, steps_df, full_paths, utilization_distribution, save_plots):
-        output_dir = _plot_output_dir(save_plots, self.out_directory)
+        output_dir = _plot_output_dir(
+            save_plots,
+            self.out_directory,
+            default_folder="ud_plots",
+        )
         if output_dir is None:
             return None
 
         key = str(animal_id)
-        suffix = "ud_walks" if utilization_distribution is not None else "walks"
-        out_file = output_dir / f"{_safe_filename(key)}_{suffix}.png"
         original_steps = _grid_steps_from_steps_df(steps_df)
         walk_paths = _plot_walk_paths(full_paths)
         walk = _plot_walk_argument(walk_paths, original_steps)
 
+        walk_file = output_dir / f"{_safe_filename(key)}_rw_grid_walks.png"
         plot_terrain_walk(
             terrain=terrain_map,
             walk=walk,
             steps=original_steps,
-            ud=utilization_distribution,
-            title=f"{key} utilization distribution" if utilization_distribution is not None else f"{key} walks",
+            title=f"{key} random walks",
             show=False,
-            save_path=out_file,
+            save_path=walk_file,
         )
-        self.plot_paths[key] = str(out_file)
-        print(f"Saved walk plot to {out_file}")
-        return out_file
+        saved = [walk_file]
+
+        if utilization_distribution is not None:
+            ud_array = np.asarray(utilization_distribution)
+            terrain_shape = (terrain_map.height, terrain_map.width)
+            if ud_array.shape != terrain_shape:
+                raise ValueError(
+                    f"RW-grid UD shape {ud_array.shape} does not match terrain shape {terrain_shape}."
+                )
+            ud_file = output_dir / f"{_safe_filename(key)}_rw_grid_UD.png"
+            plot_terrain_walk(
+                terrain=terrain_map,
+                steps=original_steps,
+                ud=ud_array,
+                title=f"{key} utilization distribution",
+                show=False,
+                save_path=ud_file,
+            )
+            saved.append(ud_file)
+
+        self.plot_paths[key] = str(walk_file)
+        self.rw_grid_plot_paths[key] = [str(path) for path in saved]
+        for path in saved:
+            print(f"Saved RW-grid plot to {path}")
+        return walk_file
 
     def _resolve_segment_T(self, start, end, start_time, end_time, movement_policy):
         """if movement_policy is not None:
@@ -528,11 +490,11 @@ def _validate_walk_amount(amount, *, allow_zero, name="amount"):
     return amount
 
 
-def _plot_output_dir(save_plots, out_directory):
+def _plot_output_dir(save_plots, out_directory, *, default_folder="walks"):
     if save_plots is False or save_plots is None:
         return None
     if save_plots is True:
-        output_dir = Path(out_directory or ".") / "plots"
+        output_dir = Path(out_directory or ".") / default_folder
     else:
         output_dir = Path(save_plots)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -612,149 +574,6 @@ def _normalize_walk_segment(segment, start, end):
         return fallback
 
 
-def _coords_by_walk_version(animal_id, path_gdfs):
-    if path_gdfs is None:
-        return {}
-    if isinstance(path_gdfs, gpd.GeoDataFrame):
-        path_gdfs = [path_gdfs]
-
-    coords_by_version = {}
-    for index, path_gdf in enumerate(path_gdfs, start=1):
-        coords = [
-            (point.y, point.x)
-            for point in path_gdf.geometry
-            if point is not None and not point.is_empty
-        ]
-        if not coords:
-            continue
-
-        if WALK_VERSION_COL in path_gdf.columns and len(path_gdf) > 0:
-            version = path_gdf[WALK_VERSION_COL].iloc[0]
-        else:
-            version = index
-        label = str(animal_id) if len(path_gdfs) == 1 else f"{animal_id} v{version}"
-        coords_by_version[label] = coords
-    return coords_by_version
-
-
-def _primary_coords_by_animal(path_gdfs, id_col):
-    if path_gdfs is None:
-        return {}
-    if isinstance(path_gdfs, gpd.GeoDataFrame):
-        path_gdfs = [path_gdfs]
-
-    coords_by_animal = {}
-    for path_gdf in path_gdfs:
-        if path_gdf is None or len(path_gdf) == 0:
-            continue
-        if WALK_BASE_ID_COL in path_gdf.columns:
-            animal_id = str(path_gdf[WALK_BASE_ID_COL].iloc[0])
-        elif id_col in path_gdf.columns:
-            animal_id = str(path_gdf[id_col].iloc[0])
-        else:
-            continue
-        if animal_id in coords_by_animal:
-            continue
-
-        coords = [
-            (point.y, point.x)
-            for point in path_gdf.geometry
-            if point is not None and not point.is_empty
-        ]
-        if coords:
-            coords_by_animal[animal_id] = coords
-    return coords_by_animal
-
-
-def _combine_utilization_distributions(ud_items):
-    prepared = []
-    for grid, bounds in ud_items:
-        grid = np.asarray(grid, dtype=float)
-        if grid.ndim != 2:
-            continue
-        grid = np.clip(grid, 0.0, None)
-        if not np.isfinite(grid).all() or grid.sum() <= 0:
-            continue
-
-        min_lon, min_lat, max_lon, max_lat = map(float, bounds)
-        height, width = grid.shape
-        if height <= 0 or width <= 0 or max_lon <= min_lon or max_lat <= min_lat:
-            continue
-
-        prepared.append(
-            {
-                "grid": grid,
-                "bounds": (min_lon, min_lat, max_lon, max_lat),
-                "dx": (max_lon - min_lon) / width,
-                "dy": (max_lat - min_lat) / height,
-            }
-        )
-
-    if not prepared:
-        return None
-
-    min_lon = min(item["bounds"][0] for item in prepared)
-    min_lat = min(item["bounds"][1] for item in prepared)
-    max_lon = max(item["bounds"][2] for item in prepared)
-    max_lat = max(item["bounds"][3] for item in prepared)
-    target_dx = min(item["dx"] for item in prepared if item["dx"] > 0)
-    target_dy = min(item["dy"] for item in prepared if item["dy"] > 0)
-    width = max(1, int(np.ceil((max_lon - min_lon) / target_dx)))
-    height = max(1, int(np.ceil((max_lat - min_lat) / target_dy)))
-    max_lon = min_lon + width * target_dx
-    min_lat = max_lat - height * target_dy
-
-    combined = np.zeros((height, width), dtype=np.float64)
-    for item in prepared:
-        source = _resample_ud_to_common_grid(
-            item["grid"],
-            item["bounds"],
-            (min_lon, min_lat, max_lon, max_lat),
-            (height, width),
-        )
-        source_total = source.sum()
-        if source_total > 0:
-            combined += source / source_total
-
-    total = combined.sum()
-    if total <= 0:
-        return None
-    return combined / total, (min_lon, min_lat, max_lon, max_lat)
-
-
-def _resample_ud_to_common_grid(source, source_bounds, target_bounds, target_shape):
-    src_min_lon, src_min_lat, src_max_lon, src_max_lat = source_bounds
-    dst_min_lon, dst_min_lat, dst_max_lon, dst_max_lat = target_bounds
-    dst_height, dst_width = target_shape
-    src_height, src_width = source.shape
-
-    dst_dx = (dst_max_lon - dst_min_lon) / dst_width
-    dst_dy = (dst_max_lat - dst_min_lat) / dst_height
-    src_dx = (src_max_lon - src_min_lon) / src_width
-    src_dy = (src_max_lat - src_min_lat) / src_height
-
-    col_start = max(0, int(np.floor((src_min_lon - dst_min_lon) / dst_dx)))
-    col_stop = min(dst_width, int(np.ceil((src_max_lon - dst_min_lon) / dst_dx)))
-    row_start = max(0, int(np.floor((dst_max_lat - src_max_lat) / dst_dy)))
-    row_stop = min(dst_height, int(np.ceil((dst_max_lat - src_min_lat) / dst_dy)))
-
-    target = np.zeros(target_shape, dtype=np.float64)
-    if col_stop <= col_start or row_stop <= row_start:
-        return target
-
-    cols = np.arange(col_start, col_stop)
-    rows = np.arange(row_start, row_stop)
-    lons = dst_min_lon + (cols + 0.5) * dst_dx
-    lats = dst_max_lat - (rows + 0.5) * dst_dy
-
-    src_cols = np.floor((lons - src_min_lon) / src_dx).astype(int)
-    src_rows = np.floor((src_max_lat - lats) / src_dy).astype(int)
-    src_cols = np.clip(src_cols, 0, src_width - 1)
-    src_rows = np.clip(src_rows, 0, src_height - 1)
-    target[np.ix_(rows, cols)] = source[np.ix_(src_rows, src_cols)]
-    return target
-
-
 def _custom_context(terrain, mapping, reachability, mode, serialization_dir):
     if mode == ComputationMode.KERNEL_POOL:
         return KernelContextHandle.pool(terrain, mapping, reachability)
@@ -783,10 +602,13 @@ def _custom_utilization_distribution(kernel_context, width, height, start, end, 
     end_x, end_y = WalkerHelper.validate_point(end, width, height, name="end")
     dp = MixedWalkBinding.walk(kernel_context, T, start_x, start_y)
     try:
-        ud_tensor = MixedWalkBinding.utilization_distribution(dp, kernel_context, end_x, end_y)
-        try:
-            return ud_tensor.to_numpy_sum(width, height, average=True)
-        finally:
-            ud_tensor.free()
+        return utilization_distribution_from_forward_density(
+            dp,
+            kernel_context,
+            width,
+            height,
+            end_x,
+            end_y,
+        )
     finally:
         dp.free()

@@ -33,6 +33,7 @@ from randomwalks.core.KernelFactory import (
 from randomwalks.core.MixedWalker import MixedWalker
 from randomwalks.core.MixedTimeWalker import MixedTimeWalker
 from randomwalks.core.MovementPolicy import (
+    AdaptiveKernelMovementPolicy,
     FixedStepsPolicy,
     MovementPolicy,
     SpeedBasedPolicy,
@@ -41,10 +42,11 @@ from randomwalks.core.MovementPolicy import (
     euclidean,
     manhattan,
 )
-from randomwalks.core.StateDependentWalker import StateDependentWalker
+from randomwalks.core.StateDependentWalker import StateDependentWalker, UnmodelledStatePolicy
 from randomwalks.serialization import SerializedWalk, walk_from_json, walk_to_json
 
 __all__ = [
+    "AdaptiveKernelMovementPolicy",
     "BrownianWalker",
     "CorrelatedWalker",
     "EnvWeights",
@@ -66,6 +68,7 @@ __all__ = [
     "SerializedWalk",
     "SpeedBasedPolicy",
     "StateDependentWalker",
+    "UnmodelledStatePolicy",
     "StateAnnotationMethod",
     "annotate_states",
     "feature_enum",
