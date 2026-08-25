@@ -84,10 +84,11 @@ ensure_module() {
 
 ensure_module setuptools "setuptools>=64"
 ensure_module wheel wheel
-if [[ "$install_self" -eq 1 ]]; then
-    ensure_module scikit_build_core scikit-build-core
-    ensure_module pybind11 pybind11
-fi
+# Native sibling packages (currently hmmcma) also use scikit-build-core and
+# pybind11. These must be present because editable installs below deliberately
+# disable build isolation.
+ensure_module scikit_build_core "scikit-build-core>=0.10"
+ensure_module pybind11 "pybind11>=2.13"
 
 if [[ "$build_random_walks" -eq 1 ]]; then
     cmake --build "$repo_root/build" --target random_walk

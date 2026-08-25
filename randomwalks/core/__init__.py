@@ -12,7 +12,8 @@ from randomwalks.core.MovementPolicy import (
     euclidean,
     manhattan,
 )
-from randomwalks.core.StateDependentWalker import StateDependentWalker, UnmodelledStatePolicy
+from randomwalks.core.StateDependentWalker import StateDependentWalker
+from randomwalks.core.StateWalkerConfig import UnmodelledStatePolicy
 
 __all__ = [
     "AdaptiveKernelMovementPolicy",

@@ -1,4 +1,4 @@
 [submodule "random-walks"]
 	path = random-walks
 	url = https://github.com/ls11ae/random-walks.git
-	branch = paper-version
+	branch = main

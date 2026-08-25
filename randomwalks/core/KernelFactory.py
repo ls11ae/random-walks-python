@@ -1,4 +1,5 @@
 from enum import Enum
+from math import isclose
 
 import geopandas as gpd
 from kernelcma import StateKernelFactory
@@ -41,6 +42,7 @@ def state_kernels(
         state_col="state",
         dt_tolerance=1.2,
         rnge=1000,
+        reso=None,
         out=None,
         mass_percentile=0.99,
         density_config=None,
@@ -51,13 +53,24 @@ def state_kernels(
         covariance_type=None,
         reg_covar=None,
         reg_covariance=None,
+        dt_model_s=None,
+        is_brownian=False,
 ):
+    """Fit state kernels while keeping correlated kernels at native time.
+
+    Both kernel families are returned for compatibility. ``is_brownian`` only
+    permits ``dt_model_s`` to configure the Brownian family; correlated
+    displacements are never time-rescaled and receive the inferred native
+    sampling interval as metadata.
+    """
     return _state_kernels(
         trajectory_collection,
         state_col=state_col,
         dt_tolerance=dt_tolerance,
         rnge=rnge,
+        reso=reso,
         out=out,
+        dt_model_s=dt_model_s,
         mass_percentile=mass_percentile,
         density_config=density_config,
         density_preset=density_preset,
@@ -67,6 +80,7 @@ def state_kernels(
         covariance_type=covariance_type,
         reg_covar=reg_covar,
         reg_covariance=reg_covariance,
+        is_brownian=is_brownian,
     )
 
 
@@ -75,6 +89,7 @@ def _state_kernels(
         state_col="state",
         dt_tolerance=1.2,
         rnge=1000,
+        reso=None,
         out=None,
         mass_percentile=0.99,
         density_config=None,
@@ -85,6 +100,8 @@ def _state_kernels(
         covariance_type=None,
         reg_covar=None,
         reg_covariance=None,
+        dt_model_s=None,
+        is_brownian=False,
 ):
     gdf = trajectory_collection.to_point_gdf().copy()
     time_col = trajectory_collection.t or gdf.index.name
@@ -101,6 +118,26 @@ def _state_kernels(
         time_col=time_col,
         state_col=state_col,
     )
+    # kernelcma's ``dt_model_s`` option linearly rescales correlated training
+    # displacements.  That is not a valid operation for a CRW kernel: its
+    # duration is the native interval represented by the observed turns.  Fit
+    # without that option and retain the inferred interval only as runtime
+    # metadata.  Brownian kernels may still be fitted at an explicit duration.
+    factory.build_trajectories()
+    native_dt_s = float(factory.dt_threshold) * 60.0
+    if not is_brownian and dt_model_s is not None and not isclose(
+            float(dt_model_s), native_dt_s, rel_tol=0.0, abs_tol=1e-9
+    ):
+        raise ValueError(
+            "Correlated kernels must use the trajectory's native sampling interval "
+            f"({native_dt_s:g} s); got dt_model_s={float(dt_model_s):g} s. "
+            "Omit dt_model_s to use the inferred interval."
+        )
+    brownian_dt_s = (
+        float(dt_model_s)
+        if is_brownian and dt_model_s is not None
+        else native_dt_s
+    )
     density_options = _density_options(
         density_config=density_config,
         density_preset=density_preset,
@@ -111,14 +148,20 @@ def _state_kernels(
         reg_covar=reg_covar,
         reg_covariance=reg_covariance,
     )
-    return factory.get_state_kernels(
+    correlated, brownian = factory.get_state_kernels(
         dt_tolerance=dt_tolerance,
         rnge=rnge,
-        reso=2 * rnge + 1,
+        reso=int(2 * rnge + 1) if reso is None else int(reso),
         out=out,
         density_config=density_options,
+        # Never pass dt_model_s here: doing so also rescales correlated steps.
+        dt_model_s=None,
+        brownian_dt=brownian_dt_s / 60.0,
         mass_percentile=mass_percentile,
     )
+    for kernel in correlated:
+        kernel.dt_model_s = native_dt_s
+    return correlated, brownian
 
 
 def _density_options(

@@ -128,7 +128,7 @@ class UtilizationDistributionMixin:
             observed_points=None,
             utilization_distribution=None,
             save_plots=True,
-            smoothing_metres=100.0,
+            smoothing_metres=None,
     ):
         """Save an adehabitatHR-style volume-UD PNG for one animal.
 

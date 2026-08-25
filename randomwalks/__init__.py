@@ -42,7 +42,8 @@ from randomwalks.core.MovementPolicy import (
     euclidean,
     manhattan,
 )
-from randomwalks.core.StateDependentWalker import StateDependentWalker, UnmodelledStatePolicy
+from randomwalks.core.StateDependentWalker import StateDependentWalker
+from randomwalks.core.StateWalkerConfig import UnmodelledStatePolicy
 from randomwalks.serialization import SerializedWalk, walk_from_json, walk_to_json
 
 __all__ = [

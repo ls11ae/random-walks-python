@@ -101,3 +101,76 @@ class WalkerHelper:
         if total > 0:
             resampled /= total
         return resampled
+
+    @staticmethod
+    def coerce_grid_walk(walk):
+        if walk is None:
+            return None
+        try:
+            array = np.asarray(walk, dtype=np.int64)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if array.ndim != 2 or array.shape[1] != 2 or len(array) == 0:
+            return None
+        return [(int(x), int(y)) for x, y in array]
+
+    @staticmethod
+    def normalize_grid_walk(walk, start, end):
+        coerced = WalkerHelper.coerce_grid_walk(walk)
+        if coerced is not None:
+            return coerced
+        return [
+            (int(start[0]), int(start[1])),
+            (int(end[0]), int(end[1])),
+        ]
+
+    @staticmethod
+    def validate_grid_paths(paths, width, height, label="path"):
+        for path in paths or []:
+            for x, y in path:
+                WalkerHelper.validate_point((x, y), width, height, name=f"{label} coordinate")
+
+    @staticmethod
+    def runtime_kernel(
+            base_kernel,
+            step_size,
+            cell_size,
+            source_range,
+            *,
+            externally_supplied,
+            kernel_range_m=None,
+    ):
+        """Map a physical kernel onto the policy-resolved RW grid radius."""
+        if externally_supplied and kernel_range_m is not None:
+            if not np.isfinite(kernel_range_m) or float(kernel_range_m) <= 0:
+                raise ValueError("A positive finite kernel_range_m is required for a physical kernel.")
+            if not np.isfinite(cell_size) or float(cell_size) <= 0:
+                raise ValueError("A positive finite RW cell size is required to resample a physical kernel.")
+            step_size = max(1, int(np.ceil(float(kernel_range_m) / float(cell_size))))
+        del source_range
+        return WalkerHelper.resample_kernel_to_grid(base_kernel, step_size)
+
+    @staticmethod
+    def validate_policy_resolution(T, S):
+        return tuple(
+            WalkerHelper.positive_integer(value, name)
+            for name, value in (("T", T), ("S", S))
+        )
+
+    @staticmethod
+    def positive_integer(value, name="value"):
+        if isinstance(value, (bool, np.bool_)):
+            raise ValueError(f"{name} must be a positive integer")
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be a positive integer") from exc
+        if not np.isfinite(numeric) or numeric < 1 or not numeric.is_integer():
+            raise ValueError(f"{name} must be a positive integer")
+        return int(numeric)
+
+    @staticmethod
+    def optional_positive_integer(value, name="value"):
+        if value is None:
+            return None
+        return WalkerHelper.positive_integer(value, name)

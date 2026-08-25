@@ -476,6 +476,7 @@ class AnimalMovementProcessor:
             state_col="state",
             dt_tolerance=1.2,
             rnge=1000,
+            reso=None,
             out_dir=None,
             mass_percentile=0.99,
             dt_model_s=None,
@@ -487,6 +488,7 @@ class AnimalMovementProcessor:
             covariance_type=None,
             reg_covar=None,
             reg_covariance=None,
+            is_brownian=False,
     ):
         if self.annotation_result is None:
             raise ValueError("Call annotate_behavior() before generate_state_kernels().")
@@ -495,6 +497,7 @@ class AnimalMovementProcessor:
             state_col=state_col,
             dt_tolerance=dt_tolerance,
             rnge=rnge,
+            reso=reso,
             out=out_dir,
             dt_model_s=dt_model_s,
             mass_percentile=mass_percentile,
@@ -506,6 +509,7 @@ class AnimalMovementProcessor:
             covariance_type=covariance_type,
             reg_covar=reg_covar,
             reg_covariance=reg_covariance,
+            is_brownian=is_brownian,
         )
 
 

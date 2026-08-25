@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from enum import Enum, IntEnum
 import json
 import os
 from pathlib import Path
@@ -21,29 +20,70 @@ from randomwalks.bindings.data_structures.Terrain import (
     _trajectory_points_in_window,
     plot_terrain_neighborhood,
 )
-from randomwalks.bindings.data_structures.types import Reachability
 from randomwalks.bindings.mixed_walk import MixedWalkBinding
 from randomwalks.bindings.plotter import plot_terrain_walk
+from randomwalks.core.StateKernelHelper import (
+    _is_unmodelled_state,
+    _json_scalar,
+    _kernel_and_metadata,
+    _kernel_for_state,
+    _kernel_is_clipped_to_mass,
+    _kernel_metadata_for_state,
+    _kernel_radius_m,
+    _kernel_source_radius,
+    _state_has_kernel,
+    _state_key_equal,
+    _state_for_step,
+    _terrain_values,
+)
+from randomwalks.core.StateWalkGrid import (
+    _as_epsg_crs,
+    _cap_step_radius_to_grid,
+    _grid_node_edge_bounds,
+    _grid_walk_to_geographic,
+    _marine_rw_grid_terrain,
+)
+from randomwalks.core.StateWalkerConfig import (
+    UnmodelledStatePolicy,
+    _coerce_animal,
+    _default_barrier_mode,
+    _default_barriers,
+    _every_nth_point,
+    _interpolation_stride_folder,
+    _ordinal_suffix,
+    _reachability_for_barrier_mode,
+    _resolve_barrier_mode,
+    _state_walk_progress_message,
+    _validate_interpolation_stride,
+    _validate_max_time_steps,
+    _validate_state_fill_gap,
+)
 from randomwalks.core.KernelFactory import StateAnnotationMethod
-from randomwalks.core.MixedWalker import MixedWalker, _validate_walk_amount
+from randomwalks.core.MixedWalker import (
+    WALK_TRAJ_ID_COL,
+    MixedWalker,
+    _annotate_walk_version,
+    _validate_walk_amount,
+)
 from randomwalks.core.UtilizationDistribution import (
     UtilizationDistributionGrid,
+    _safe_filename,
     combine_grid_utilization_distributions,
     utilization_distribution_from_forward_density,
 )
 from randomwalks.core.WalkerHelper import WalkerHelper
-from randomwalks.bindings.data_structures.Kernels import kernel_array, kernel_state_value, normalize_kernel
+from randomwalks.bindings.data_structures.Kernels import kernel_state_value, normalize_kernel
 from randomwalks.bindings.step_segments import segments_for_steps, terrain_pair_weights_from_neighborhoods
 from randomwalks.move_apps_patch import apply_moveapps_id_dtype_patch, debug_patch_state, force_tc_id_object_inplace, \
     merge_traj_collections
 
-
-class UnmodelledStatePolicy(str, Enum):
-    SKIP = "skip"
-    PREVIOUS = "previous"
-
-
 DEFAULT_MAX_TIME_STEPS = 1000
+
+_coerce_grid_walk = WalkerHelper.coerce_grid_walk
+_normalize_grid_walk = WalkerHelper.normalize_grid_walk
+_runtime_kernel = WalkerHelper.runtime_kernel
+_validate_policy_resolution = WalkerHelper.validate_policy_resolution
+_validate_rw_grid_coordinates = WalkerHelper.validate_grid_paths
 
 
 class StateDependentWalker(MixedWalker):
@@ -152,6 +192,7 @@ class StateDependentWalker(MixedWalker):
             self,
             dt_tolerance,
             rnge,
+            reso=None,
             state_col="state",
             is_brownian=False,
             plot_dir=None,
@@ -187,6 +228,7 @@ class StateDependentWalker(MixedWalker):
             state_col=state_col,
             dt_tolerance=self.dt_tolerance,
             rnge=self.rnge,
+            reso=reso,
             out_dir=plot_dir or None,
             dt_model_s=dt_model_s,
             mass_percentile=mass_percentile,
@@ -198,8 +240,9 @@ class StateDependentWalker(MixedWalker):
             covariance_type=covariance_type,
             reg_covar=reg_covar,
             reg_covariance=reg_covariance,
+            is_brownian=is_brownian,
         )
-        selected_kernels = brw_zs if is_brownian and self.animal != Animal.AIRBORNE else cor_zs
+        selected_kernels = brw_zs if is_brownian else cor_zs
         state_kernels = {}
         state_kernel_metadata = {}
         for state_kernel in selected_kernels:
@@ -207,8 +250,12 @@ class StateDependentWalker(MixedWalker):
             kernel, metadata = _kernel_and_metadata(state_kernel, rnge, mass_percentile)
             if kernel is None or np.sum(kernel) == 0:
                 continue
-            if metadata.get("dt_model_s") is None and dt_model_s is not None:
+            if metadata.get("dt_model_s") is None and is_brownian and dt_model_s is not None:
                 metadata["dt_model_s"] = float(dt_model_s)
+            if metadata.get("dt_model_s") is None and not is_brownian:
+                raise ValueError(
+                    "Correlated kernel is missing its inferred native sampling interval."
+                )
             state_kernels[state] = normalize_kernel(kernel)
             state_kernel_metadata[state] = metadata
 
@@ -472,6 +519,7 @@ class StateDependentWalker(MixedWalker):
             max_state_fill_gap=None,
             max_time_steps=DEFAULT_MAX_TIME_STEPS,
             save_plots=True,
+            save_intermediate_plots=False,
     ):
         self.barrier_mode = _resolve_barrier_mode(
             getattr(self, "animal", Animal.TERRESTRIAL),
@@ -489,6 +537,7 @@ class StateDependentWalker(MixedWalker):
             amount_of_walks=amount,
             ud=False,
             save_plots=save_plots,
+            save_intermediate_plots=save_intermediate_plots,
             max_cell_size=max_cell_size,
             max_time_steps=max_time_steps,
             unmodelled_state_policy=unmodelled_state_policy,
@@ -508,6 +557,7 @@ class StateDependentWalker(MixedWalker):
             unmodelled_state_policy: UnmodelledStatePolicy | str = UnmodelledStatePolicy.SKIP,
             max_state_fill_gap=None,
             max_time_steps=DEFAULT_MAX_TIME_STEPS,
+            save_intermediate_plots=False,
     ):
         """Generate state-dependent UDs on one finest-resolution grid per animal.
 
@@ -525,6 +575,8 @@ class StateDependentWalker(MixedWalker):
         Steps touching an unmodelled state are skipped by default. ``previous``
         uses the closest earlier modelled state only when
         ``max_state_fill_gap`` is not exceeded.
+        Final UD maps and PNGs follow ``save_plots``. Per-segment RW-grid plots
+        are separate and disabled unless ``save_intermediate_plots`` is true.
         """
         sample_walks = _validate_walk_amount(sample_walks, allow_zero=True, name="sample_walks")
         self.barrier_mode = _resolve_barrier_mode(
@@ -537,6 +589,7 @@ class StateDependentWalker(MixedWalker):
             amount_of_walks=sample_walks,
             ud=True,
             save_plots=save_plots,
+            save_intermediate_plots=save_intermediate_plots,
             max_cell_size=max_cell_size,
             max_time_steps=max_time_steps,
             kernels=kernels,
@@ -553,6 +606,7 @@ class StateDependentWalker(MixedWalker):
             ud=False,
             movement_policy=None,
             save_plots=False,
+            save_intermediate_plots=False,
             max_cell_size=10,
             max_time_steps=DEFAULT_MAX_TIME_STEPS,
             kernels=None,
@@ -586,7 +640,7 @@ class StateDependentWalker(MixedWalker):
             full_observed_points = self.animal_proc.traj.get_trajectory(animal_id).df
             segments = segments_for_steps(steps, max_cell_size=max_cell_size, resolution=self.resolution)
             endpoint_pair_count = max(0, len(steps) - 1)
-            animal_rows = []
+            animal_rows_by_walk = [[] for _ in range(amount_of_walks)]
             animal_ud_grids = []
 
             for segment in segments:
@@ -706,6 +760,8 @@ class StateDependentWalker(MixedWalker):
                             cell_size_m=float(cell_size),
                         )
                         T, S = _validate_policy_resolution(T, S)
+                        requested_T, requested_S = T, S
+
                         same_grid_cell = start_x == end_x and start_y == end_y
                         exceeds_time_guard = (
                                 max_time_steps is not None and T > max_time_steps
@@ -731,17 +787,18 @@ class StateDependentWalker(MixedWalker):
                             )
                         )
                         if same_grid_cell:
-                            segment_plot_walks.append([(start_x, start_y)])
+                            segment_plot_walks.extend(
+                                [[(start_x, start_y)] for _ in range(max(1, amount_of_walks))]
+                            )
                             if ud and amount_of_walks == 0:
                                 continue
-                            animal_rows.append(
-                                {
+                            for animal_rows in animal_rows_by_walk:
+                                animal_rows.append({
                                     id_col: animal_id,
                                     t_col: start_time,
                                     "geometry": Point(start_lon, start_lat),
                                     "segment_id": int(steps["segment_id"].iloc[st_idx]),
-                                }
-                            )
+                                })
                             continue
                         if exceeds_time_guard:
                             continue
@@ -765,7 +822,9 @@ class StateDependentWalker(MixedWalker):
                                     None if kernel_timestep_s is None else float(kernel_timestep_s)
                                 ),
                                 "rw_cell_size_m": float(cell_size),
+                                "requested_step_radius_cells": int(requested_S),
                                 "step_radius_cells": int(S),
+                                "step_radius_was_capped": bool(S != requested_S),
                                 "source_shape": list(np.shape(base_kernel)),
                                 "runtime_shape": list(np.shape(grid_kernel)),
                             }
@@ -798,6 +857,7 @@ class StateDependentWalker(MixedWalker):
                             mapping, context = cached_context
 
                         try:
+                            sampled_segment_points = []
                             if ud:
                                 forward_density = MixedWalkBinding.walk(context, T, start_x, start_y)
                                 try:
@@ -811,55 +871,65 @@ class StateDependentWalker(MixedWalker):
                                     )
                                     if step_ud is not None:
                                         segment_ud += step_ud
-                                    segment_points = (
-                                        MixedWalkBinding.backtrace(
+                                    for _ in range(amount_of_walks):
+                                        sampled_segment_points.append(MixedWalkBinding.backtrace(
                                             forward_density,
                                             context,
                                             end_x,
                                             end_y,
-                                        )
-                                        if amount_of_walks > 0 or save_plots else None
-                                    )
+                                        ))
+                                    if amount_of_walks == 0 and save_intermediate_plots:
+                                        sampled_segment_points.append(MixedWalkBinding.backtrace(
+                                            forward_density,
+                                            context,
+                                            end_x,
+                                            end_y,
+                                        ))
                                 finally:
                                     forward_density.free()
                             else:
-                                segment_points = MixedWalkBinding.single_state_walk(
-                                    context,
-                                    T,
-                                    start_x,
-                                    start_y,
-                                    end_x,
-                                    end_y,
-                                )
+                                for _ in range(amount_of_walks):
+                                    sampled_segment_points.append(
+                                        MixedWalkBinding.single_state_walk(
+                                            context,
+                                            T,
+                                            start_x,
+                                            start_y,
+                                            end_x,
+                                            end_y,
+                                        )
+                                    )
                         finally:
                             if context_cache is None:
                                 context.free()
                                 mapping.free()
 
                         if ud and amount_of_walks == 0:
-                            plot_walk = _coerce_grid_walk(segment_points)
-                            if plot_walk is not None:
-                                segment_plot_walks.append(plot_walk)
+                            for segment_points in sampled_segment_points:
+                                plot_walk = _coerce_grid_walk(segment_points)
+                                if plot_walk is not None:
+                                    segment_plot_walks.append(plot_walk)
                             continue
-                        segment_points = _normalize_grid_walk(
-                            segment_points,
-                            (start_x, start_y),
-                            (end_x, end_y),
-                        )
-                        segment_plot_walks.append(segment_points)
-                        geo_walk = _grid_walk_to_geographic(segment_points, utm_bbox, nx, ny, inv)
-                        times = pd.date_range(start=start_time, end=end_time, periods=len(geo_walk))
-                        for (lon, lat), t in zip(geo_walk, times):
-                            animal_rows.append(
-                                {
-                                    id_col: animal_id,
-                                    t_col: t,
-                                    "geometry": Point(lon, lat),
-                                    "segment_id": int(steps["segment_id"].iloc[st_idx]),
-                                }
+                        for walk_index, segment_points in enumerate(sampled_segment_points):
+                            segment_points = _normalize_grid_walk(
+                                segment_points,
+                                (start_x, start_y),
+                                (end_x, end_y),
                             )
+                            segment_plot_walks.append(segment_points)
+                            geo_walk = _grid_walk_to_geographic(segment_points, utm_bbox, nx, ny, inv)
+                            times = pd.date_range(start=start_time, end=end_time, periods=len(geo_walk))
+                            for (lon, lat), t in zip(geo_walk, times):
+                                animal_rows_by_walk[walk_index].append(
+                                    {
+                                        id_col: animal_id,
+                                        t_col: t,
+                                        "geometry": Point(lon, lat),
+                                        "segment_id": int(steps["segment_id"].iloc[st_idx]),
+                                    }
+                                )
 
-                    if save_plots:
+                    if save_intermediate_plots:
                         self._save_rw_grid_plots(
                             animal_id,
                             segment,
@@ -867,7 +937,11 @@ class StateDependentWalker(MixedWalker):
                             walks=segment_plot_walks,
                             steps=segment_grid_steps,
                             utilization_distribution=segment_ud,
-                            save_plots=save_plots,
+                            save_plots=(
+                                save_plots
+                                if save_plots not in (False, None)
+                                else True
+                            ),
                         )
                 finally:
                     if context_cache is not None:
@@ -891,8 +965,12 @@ class StateDependentWalker(MixedWalker):
                     )
 
             animal_path_gdfs = []
-            if animal_rows:
+            for walk_index, animal_rows in enumerate(animal_rows_by_walk):
+                if not animal_rows:
+                    continue
                 animal_gdf = gpd.GeoDataFrame(animal_rows, geometry="geometry", crs="EPSG:4326")
+                if amount_of_walks > 1:
+                    animal_gdf = _annotate_walk_version(animal_gdf, animal_id, walk_index + 1)
                 per_animal_gdfs.append(animal_gdf)
                 animal_path_gdfs.append(animal_gdf)
 
@@ -914,6 +992,7 @@ class StateDependentWalker(MixedWalker):
                             observed_points=full_observed_points,
                             utilization_distribution=combined_ud,
                             save_plots=ud_output_dir,
+                            smoothing_metres=max_cell_size,
                         )
 
         if ud:
@@ -927,11 +1006,23 @@ class StateDependentWalker(MixedWalker):
             return self.original_data
 
         if len(per_animal_gdfs) == 0:
-            return mpd.TrajectoryCollection(gpd.GeoDataFrame(columns=["geometry"]), traj_id_col=id_col, t=t_col)
+            result_id_col = WALK_TRAJ_ID_COL if amount_of_walks > 1 else id_col
+            columns = [id_col, t_col, "geometry"]
+            if result_id_col not in columns:
+                columns.append(result_id_col)
+            empty = gpd.GeoDataFrame(columns=columns, geometry="geometry", crs="EPSG:4326")
+            return mpd.TrajectoryCollection(empty, traj_id_col=result_id_col, t=t_col)
 
         combined_gdf = gpd.GeoDataFrame(pd.concat(per_animal_gdfs, ignore_index=True), geometry="geometry",
                                         crs="EPSG:4326")
         combined_gdf[t_col] = pd.to_datetime(combined_gdf[t_col])
+        if amount_of_walks > 1:
+            return mpd.TrajectoryCollection(
+                combined_gdf,
+                traj_id_col=WALK_TRAJ_ID_COL,
+                t=t_col,
+                crs="EPSG:4326",
+            )
         return merge_traj_collections(self.original_data, combined_gdf)
 
     def _save_rw_grid_plots(
@@ -991,431 +1082,6 @@ class StateDependentWalker(MixedWalker):
         for path in saved:
             print(f"Saved RW-grid plot to {path}")
         return saved
-
-
-def _coerce_animal(animal_type):
-    if isinstance(animal_type, Animal):
-        return animal_type
-    if isinstance(animal_type, IntEnum):
-        return Animal(int(animal_type))
-    if isinstance(animal_type, str):
-        return Animal[animal_type.upper()]
-    return Animal(animal_type)
-
-
-def _validate_interpolation_stride(n):
-    if isinstance(n, bool):
-        raise ValueError("n must be a positive integer")
-    try:
-        numeric = float(n)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("n must be a positive integer") from exc
-    if not np.isfinite(numeric) or numeric < 1 or not numeric.is_integer():
-        raise ValueError("n must be a positive integer")
-    return int(numeric)
-
-
-def _every_nth_point(steps, n):
-    """Select interpolation endpoints strictly by zero-based row position."""
-    n = _validate_interpolation_stride(n)
-    if n == 1 or len(steps) <= 1:
-        return steps.copy()
-    return steps.iloc[::n].copy()
-
-
-def _interpolation_stride_folder(n):
-    n = _validate_interpolation_stride(n)
-    return None if n == 1 else f"every_{n}{_ordinal_suffix(n)}_point"
-
-
-def _ordinal_suffix(value):
-    value = int(value)
-    if 10 <= value % 100 <= 20:
-        return "th"
-    return {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
-
-
-def _marine_rw_grid_terrain(width, height, utm_bbox, epsg, lonlat_bbox):
-    """Classify land at every native RW grid node and return that exact grid."""
-    import geopandas as gpd
-    from environmentcma.ocean_cover import marine_cover_path
-    from shapely import intersects_xy
-
-    min_lon, min_lat, max_lon, max_lat = lonlat_bbox
-    land = gpd.read_file(marine_cover_path()).to_crs("EPSG:4326")
-    land.geometry = land.geometry.make_valid()
-    land = land.clip((min_lon, min_lat, max_lon, max_lat))
-
-    if land.empty:
-        return TerrainMapHandle.single_value(MesaLandcover.PERMANENT_WATER, width, height)
-
-    land = land.to_crs(_as_epsg_crs(epsg))
-    land.geometry = land.geometry.make_valid()
-    land_geometry = land.geometry.union_all()
-
-    min_x, min_y, max_x, max_y = map(float, utm_bbox)
-    x_coords = np.full(1, (min_x + max_x) / 2.0) if width == 1 else np.linspace(min_x, max_x, width)
-    y_coords = np.full(1, (min_y + max_y) / 2.0) if height == 1 else np.linspace(max_y, min_y, height)
-    grid_x, grid_y = np.meshgrid(x_coords, y_coords)
-    is_land = intersects_xy(land_geometry, grid_x, grid_y)
-
-    terrain = TerrainMapHandle(width=width, height=height)
-    for y in range(height):
-        for x in range(width):
-            terrain.set(
-                x,
-                y,
-                MesaLandcover.TREE_COVER if is_land[y, x] else MesaLandcover.PERMANENT_WATER,
-            )
-    return terrain
-
-
-def _normalize_grid_walk(walk, start, end):
-    fallback = [(int(start[0]), int(start[1])), (int(end[0]), int(end[1]))]
-    if walk is None:
-        return fallback
-    try:
-        array = np.asarray(walk, dtype=np.int64)
-    except (TypeError, ValueError, OverflowError):
-        return fallback
-    if array.ndim != 2 or array.shape[1] != 2 or len(array) == 0:
-        return fallback
-    return [(int(x), int(y)) for x, y in array]
-
-
-def _coerce_grid_walk(walk):
-    if walk is None:
-        return None
-    try:
-        array = np.asarray(walk, dtype=np.int64)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if array.ndim != 2 or array.shape[1] != 2 or len(array) == 0:
-        return None
-    return [(int(x), int(y)) for x, y in array]
-
-
-def _validate_rw_grid_coordinates(paths, width, height, label):
-    for path in paths or []:
-        for x, y in path:
-            if not (0 <= int(x) < width and 0 <= int(y) < height):
-                raise ValueError(
-                    f"{label} coordinate {(x, y)} is outside RW terrain grid "
-                    f"width={width}, height={height}."
-                )
-
-
-def _default_barriers(animal):
-    """Return preset terrain barriers for an animal type."""
-    return [MesaLandcover.TREE_COVER] if animal == Animal.MARINE else []
-
-
-def _default_barrier_mode(animal):
-    """Marine land is impassable by default; other presets retain avoidance."""
-    if animal == Animal.AIRBORNE: return BarrierMode.ALLOW
-    return BarrierMode.FORBID if animal == Animal.MARINE else BarrierMode.AVOID
-
-
-def _resolve_barrier_mode(animal, barrier_mode):
-    if barrier_mode is None:
-        return _default_barrier_mode(animal)
-    return BarrierMode(barrier_mode)
-
-
-def _reachability_for_barrier_mode(barrier_mode):
-    return {
-        BarrierMode.FORBID: Reachability.HARD,
-        BarrierMode.AVOID: Reachability.RELAXED,
-        BarrierMode.ALLOW: Reachability.FULL,
-    }[BarrierMode(barrier_mode)]
-
-
-def _as_epsg_crs(epsg):
-    value = str(epsg)
-    return value if value.upper().startswith("EPSG:") else f"EPSG:{value}"
-
-
-def _grid_walk_to_geographic(walk_segment, utm_bbox, width, height, inverse_transformer):
-    """Convert grid points to lon/lat, including one-row or one-column grids."""
-    if width < 1 or height < 1:
-        raise ValueError("Grid dimensions must be greater than zero")
-
-    min_x, min_y, max_x, max_y = map(float, utm_bbox)
-    result = []
-    for x, y in walk_segment:
-        utm_x = (
-            (min_x + max_x) / 2.0
-            if width == 1
-            else min_x + float(x) / (width - 1) * (max_x - min_x)
-        )
-        utm_y = (
-            (min_y + max_y) / 2.0
-            if height == 1
-            else max_y - float(y) / (height - 1) * (max_y - min_y)
-        )
-        lon, lat = inverse_transformer.transform(utm_x, utm_y)
-        result.append((float(lon), float(lat)))
-    return result
-
-
-def _grid_node_edge_bounds(bounds, width, height):
-    """Convert bounds of grid-node centres to the raster's outer pixel edges."""
-    if width < 1 or height < 1:
-        raise ValueError("Grid dimensions must be greater than zero")
-    min_x, min_y, max_x, max_y = map(float, bounds)
-    if width > 1:
-        half_dx = (max_x - min_x) / (width - 1) / 2.0
-        min_x -= half_dx
-        max_x += half_dx
-    if height > 1:
-        half_dy = (max_y - min_y) / (height - 1) / 2.0
-        min_y -= half_dy
-        max_y += half_dy
-    return min_x, min_y, max_x, max_y
-
-
-def _is_unmodelled_state(state):
-    if pd.isna(state):
-        return True
-    try:
-        return float(state) < 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _validate_state_fill_gap(policy, max_state_fill_gap):
-    if policy is UnmodelledStatePolicy.SKIP:
-        return None
-    if max_state_fill_gap is None:
-        raise ValueError("max_state_fill_gap is required when unmodelled_state_policy='previous'.")
-    gap = pd.Timedelta(max_state_fill_gap)
-    if gap <= pd.Timedelta(0):
-        raise ValueError("max_state_fill_gap must be positive.")
-    return gap
-
-
-def _state_for_step(steps, step_index, *, state_col, kernels, policy, max_fill_gap):
-    start_state = steps[state_col].iloc[step_index]
-    end_state = steps[state_col].iloc[step_index + 1]
-    if _state_has_kernel(start_state, kernels) and _state_has_kernel(end_state, kernels):
-        return start_state
-    if policy is UnmodelledStatePolicy.SKIP:
-        return None
-
-    for previous_index in range(step_index, -1, -1):
-        previous_state = steps[state_col].iloc[previous_index]
-        if not _state_has_kernel(previous_state, kernels):
-            continue
-        elapsed = pd.Timestamp(steps.index[step_index + 1]) - pd.Timestamp(steps.index[previous_index])
-        return previous_state if elapsed <= max_fill_gap else None
-    return None
-
-
-def _state_has_kernel(state, kernels):
-    return not _is_unmodelled_state(state) and _kernel_for_state(kernels, state) is not None
-
-
-def _kernel_for_state(kernels, state):
-    if state in kernels:
-        return kernels[state]
-    for key, kernel in kernels.items():
-        if _state_key_equal(key, state):
-            return kernel
-    return None
-
-
-def _kernel_metadata_for_state(metadata_by_state, state):
-    if not metadata_by_state:
-        return None
-    if state in metadata_by_state:
-        return metadata_by_state[state]
-    for key, metadata in metadata_by_state.items():
-        if _state_key_equal(key, state):
-            return metadata
-    return None
-
-
-def _state_key_equal(left, right):
-    if left == right:
-        return True
-    try:
-        return int(left) == int(right)
-    except (TypeError, ValueError):
-        return str(left) == str(right)
-
-
-def _kernel_and_metadata(state_kernel, fallback_radius, mass_percentile):
-    kernel = kernel_array(state_kernel)
-    metadata = {
-        "rnge": getattr(state_kernel, "rnge", None),
-        "reso": getattr(state_kernel, "reso", None),
-        "dx": getattr(state_kernel, "dx", None),
-        "radius_cells": getattr(state_kernel, "radius_cells", None),
-        "retained_mass": getattr(state_kernel, "retained_mass", None),
-        "mass_percentile": getattr(state_kernel, "mass_percentile", None),
-        "dt_model_s": getattr(state_kernel, "dt_model_s", None),
-    }
-    if _kernel_is_clipped_to_mass(kernel, metadata, mass_percentile):
-        return kernel, metadata
-
-    from kernelcma.postprocessing import clip_density_to_mass
-
-    source_radius = _kernel_source_radius(kernel, metadata, fallback_radius)
-    clipped = clip_density_to_mass(kernel, source_radius, mass_percentile=mass_percentile)
-    return clipped.Z, {
-        "rnge": clipped.rnge,
-        "reso": clipped.reso,
-        "dx": clipped.dx,
-        "radius_cells": clipped.radius_cells,
-        "retained_mass": clipped.retained_mass,
-        "mass_percentile": clipped.mass_percentile,
-        "dt_model_s": metadata["dt_model_s"],
-    }
-
-
-def _kernel_is_clipped_to_mass(kernel, metadata, mass_percentile):
-    kernel = np.asarray(kernel) if kernel is not None else None
-    if kernel is None or kernel.ndim != 2 or kernel.shape[0] != kernel.shape[1]:
-        return False
-    radius_cells = metadata.get("radius_cells")
-    actual_percentile = metadata.get("mass_percentile")
-    if radius_cells is None or actual_percentile is None:
-        return False
-    try:
-        same_percentile = np.isclose(float(actual_percentile), float(mass_percentile))
-        expected_size = 2 * int(radius_cells) + 1
-    except (TypeError, ValueError):
-        return False
-    return bool(same_percentile and kernel.shape == (expected_size, expected_size))
-
-
-def _kernel_source_radius(kernel, metadata, fallback_radius):
-    kernel = np.asarray(kernel)
-    dx = metadata.get("dx")
-    if dx is not None:
-        try:
-            dx = float(dx)
-            if np.isfinite(dx) and dx > 0:
-                return kernel.shape[0] * dx / 2.0
-        except (TypeError, ValueError):
-            pass
-    return float(fallback_radius)
-
-
-def _kernel_radius_m(kernel, *, metadata=None, fallback_radius=None, mass_percentile=0.99):
-    if metadata and metadata.get("rnge") is not None:
-        return float(metadata["rnge"])
-
-    if fallback_radius is not None:
-        try:
-            from kernelcma.postprocessing import clip_density_to_mass
-
-            return float(
-                clip_density_to_mass(
-                    kernel,
-                    fallback_radius,
-                    mass_percentile=mass_percentile,
-                ).rnge
-            )
-        except Exception:
-            pass
-
-    kernel = np.asarray(kernel)
-    if kernel.ndim >= 2 and min(kernel.shape[-2:]) > 1:
-        return float(min(kernel.shape[-2], kernel.shape[-1]) // 2)
-    return float(fallback_radius or 0)
-
-
-def _terrain_values(matrix, nodata):
-    values = np.unique(matrix)
-    result = []
-    for value in values:
-        if nodata is not None and value == nodata:
-            continue
-        result.append(_json_scalar(value))
-    return result
-
-
-def _json_scalar(value):
-    if hasattr(value, "item"):
-        return value.item()
-    return value
-
-
-def _runtime_kernel(
-        base_kernel,
-        step_size,
-        cell_size,
-        rnge,
-        *,
-        externally_supplied,
-        kernel_range_m=None,
-):
-    # Backward compatibility for direct callers of the old external-kernel
-    # helper. StateDependentWalker now passes the policy-resolved physical S
-    # and deliberately omits kernel_range_m, so no spatial decision is made
-    # here or later in the interpolation loop.
-    if externally_supplied and kernel_range_m is not None:
-        if kernel_range_m is None or not np.isfinite(kernel_range_m) or float(kernel_range_m) <= 0:
-            raise ValueError("A positive finite kernel_range_m is required for a physical kernel.")
-        if not np.isfinite(cell_size) or float(cell_size) <= 0:
-            raise ValueError("A positive finite RW cell size is required to resample a physical kernel.")
-        runtime_radius = max(1, int(np.ceil(float(kernel_range_m) / float(cell_size))))
-        return WalkerHelper.resample_kernel_to_grid(base_kernel, runtime_radius)
-    del cell_size, rnge
-    return WalkerHelper.resample_kernel_to_grid(base_kernel, step_size)
-
-
-def _validate_policy_resolution(T, S):
-    values = []
-    for name, value in (("T", T), ("S", S)):
-        numeric = float(value)
-        if not np.isfinite(numeric) or numeric < 1 or not numeric.is_integer():
-            raise ValueError(f"Movement policy returned invalid {name}={value!r}; expected a positive integer.")
-        values.append(int(numeric))
-    return tuple(values)
-
-
-def _validate_max_time_steps(max_time_steps):
-    if max_time_steps is None:
-        return None
-    numeric = float(max_time_steps)
-    if not np.isfinite(numeric) or numeric < 1 or not numeric.is_integer():
-        raise ValueError(
-            "max_time_steps must be a positive integer or None, "
-            f"got {max_time_steps!r}."
-        )
-    return int(numeric)
-
-
-def _state_walk_progress_message(
-        animal_id,
-        animal_index,
-        animal_count,
-        pair_index,
-        pair_count,
-        *,
-        state=None,
-        S=None,
-        T=None,
-        status=None,
-):
-    state_text = "NA" if state is None else str(_json_scalar(state))
-    s_text = "NA" if S is None else str(int(S))
-    t_text = "NA" if T is None else str(int(T))
-    message = (
-        f"{animal_id} [animal {animal_index}/{animal_count}] "
-        f"endpoint pair {pair_index}/{pair_count} | state={state_text}, S={s_text}, T={t_text}"
-    )
-    return f"{message} ({status})" if status else message
-
-
-def _safe_filename(value):
-    safe = "".join(
-        char if char.isalnum() or char in {"-", "_", "."} else "_"
-        for char in str(value)
-    ).strip("_")
-    return safe or "value"
 
 
 __all__ = ["StateDependentWalker", "UnmodelledStatePolicy"]
