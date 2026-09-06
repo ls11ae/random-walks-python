@@ -39,9 +39,12 @@ from randomwalks.core.StateKernelHelper import (
 from randomwalks.core.StateWalkGrid import (
     _as_epsg_crs,
     _cap_step_radius_to_grid,
+    _coarsen_grid_to_cell_size,
+    _grid_node_cell_size,
     _grid_node_edge_bounds,
     _grid_walk_to_geographic,
     _marine_rw_grid_terrain,
+    _padded_projected_point_bounds,
 )
 from randomwalks.core.StateWalkerConfig import (
     UnmodelledStatePolicy,
@@ -49,9 +52,10 @@ from randomwalks.core.StateWalkerConfig import (
     _default_barrier_mode,
     _default_barriers,
     _every_nth_point,
+    _hard_barrier_endpoints,
     _interpolation_stride_folder,
     _ordinal_suffix,
-    _reachability_for_barrier_mode,
+    _reachability_for_segment,
     _resolve_barrier_mode,
     _state_walk_progress_message,
     _validate_interpolation_stride,
@@ -89,8 +93,9 @@ _validate_rw_grid_coordinates = WalkerHelper.validate_grid_paths
 class StateDependentWalker(MixedWalker):
     def __init__(self, data, animal_type, resolution, out_directory, movement_policy, barriers: list[int] | None = None,
                  time_col="timestamp", lon_col="location-long", lat_col="location-lat",
-                 id_col="individual_local_identifier", crs="EPSG:4326", n=1):
+                 id_col="individual_local_identifier", crs="EPSG:4326", n=1, cuda=False):
         self.n = _validate_interpolation_stride(n)
+        self.cuda = bool(cuda)
         self.interpolation_stride = self.n
         self.interpolation_point_counts = {}
         self.state_kernels = None
@@ -102,6 +107,7 @@ class StateDependentWalker(MixedWalker):
         self.state_kernel_metadata = {}
         self.annotation_result = None
         self.runtime_kernel_resampling = []
+        self.skipped_endpoint_pairs = []
         self.rw_grid_plot_paths = {}
         self.barrier_mode = _default_barrier_mode(self.animal)
         self.barriers = _default_barriers(self.animal) if barriers is None else list(barriers)
@@ -190,8 +196,8 @@ class StateDependentWalker(MixedWalker):
 
     def get_kernels(
             self,
-            dt_tolerance,
-            rnge,
+            dt_tolerance=None,
+            rnge=None,
             reso=None,
             state_col="state",
             is_brownian=False,
@@ -206,9 +212,24 @@ class StateDependentWalker(MixedWalker):
             reg_covariance=None,
             mass_percentile=0.99,
             dt_model_s=None,
+            time_factor=None,
+            kernel_config=None,
     ):
         if self.animal_proc is None or self.animal_proc.annotation_result is None:
             raise ValueError("Call annotate_behavior() before get_kernels().")
+        if kernel_config is not None:
+            if dt_tolerance is not None or rnge is not None or dt_model_s is not None or time_factor is not None:
+                raise ValueError("Pass either kernel_config or individual kernel parameters, not both.")
+            dt_tolerance = kernel_config.dt_tolerance
+            rnge = kernel_config.range_m
+            reso = kernel_config.resolution
+            mass_percentile = kernel_config.mass_percentile
+            dt_model_s = kernel_config.timestep_s
+            time_factor = kernel_config.time_factor
+            density_config = dict(kernel_config.density) or None
+            is_brownian = kernel_config.is_brownian
+        if dt_tolerance is None or rnge is None:
+            raise ValueError("dt_tolerance and rnge are required without a KernelConfig.")
         self.dt_tolerance = dt_tolerance
         self.rnge = rnge
         self.is_brownian = is_brownian
@@ -231,6 +252,7 @@ class StateDependentWalker(MixedWalker):
             reso=reso,
             out_dir=plot_dir or None,
             dt_model_s=dt_model_s,
+            time_factor=time_factor,
             mass_percentile=mass_percentile,
             density_config=density_config,
             density_preset=density_preset,
@@ -558,8 +580,11 @@ class StateDependentWalker(MixedWalker):
             max_state_fill_gap=None,
             max_time_steps=DEFAULT_MAX_TIME_STEPS,
             save_intermediate_plots=False,
+            combined_cell_size=None,
+            target_cell_size=None,
+            save_combined_map=True,
     ):
-        """Generate state-dependent UDs on one finest-resolution grid per animal.
+        """Generate state-dependent UDs on one common grid per animal.
 
         All state kernels are treated as physical density rasters. Internally
         fitted kernels use the per-state range and model-timestep metadata from
@@ -577,6 +602,13 @@ class StateDependentWalker(MixedWalker):
         ``max_state_fill_gap`` is not exceeded.
         Final UD maps and PNGs follow ``save_plots``. Per-segment RW-grid plots
         are separate and disabled unless ``save_intermediate_plots`` is true.
+        ``combined_cell_size`` fixes the final per-animal raster resolution;
+        leave it ``None`` for the historical finest-segment resolution.
+        ``target_cell_size`` coarsens each native RW grid towards that physical
+        node spacing (without exceeding ``max_cell_size``). This retains the
+        physical kernel range while avoiding unnecessarily large runtime
+        kernels and barrier contexts.
+        ``save_combined_map=False`` skips only the additional all-animal HTML.
         """
         sample_walks = _validate_walk_amount(sample_walks, allow_zero=True, name="sample_walks")
         self.barrier_mode = _resolve_barrier_mode(
@@ -596,6 +628,9 @@ class StateDependentWalker(MixedWalker):
             kernel_ranges=kernel_ranges,
             unmodelled_state_policy=unmodelled_state_policy,
             max_state_fill_gap=max_state_fill_gap,
+            combined_cell_size=combined_cell_size,
+            target_cell_size=target_cell_size,
+            save_combined_map=save_combined_map,
         )
 
     def _randomwalks_core(
@@ -613,6 +648,9 @@ class StateDependentWalker(MixedWalker):
             kernel_ranges=None,
             unmodelled_state_policy: UnmodelledStatePolicy | str = UnmodelledStatePolicy.SKIP,
             max_state_fill_gap=None,
+            combined_cell_size=None,
+            target_cell_size=None,
+            save_combined_map=True,
     ):
         external_kernels = kernels is not None
         py_kernels = self.state_kernels if kernels is None else kernels
@@ -623,7 +661,14 @@ class StateDependentWalker(MixedWalker):
         unmodelled_state_policy = UnmodelledStatePolicy(unmodelled_state_policy)
         max_state_fill_gap = _validate_state_fill_gap(unmodelled_state_policy, max_state_fill_gap)
         max_time_steps = _validate_max_time_steps(max_time_steps)
+        if target_cell_size is not None:
+            target_cell_size = float(target_cell_size)
+            if not np.isfinite(target_cell_size) or target_cell_size <= 0:
+                raise ValueError("target_cell_size must be positive and finite.")
+            if target_cell_size > float(max_cell_size):
+                raise ValueError("target_cell_size must not exceed max_cell_size.")
         self.runtime_kernel_resampling = []
+        self.skipped_endpoint_pairs = []
         self.rw_grid_plot_paths = {}
         t_col = self.original_data.t
         id_col = self.original_data.get_traj_id_col()
@@ -654,8 +699,31 @@ class StateDependentWalker(MixedWalker):
                     padding=0.2,
                     max_cell_size=max_cell_size,
                 )
+                segment_utm_points = [
+                    fwd.transform(
+                        steps.geometry.iloc[point_idx].x,
+                        steps.geometry.iloc[point_idx].y,
+                    )
+                    for point_idx in range(seg_start, seg_end + 1)
+                ]
+                # Projected extrema can occur between the four geographic BBox
+                # corners on long, highly distorted segments. Bound the actual
+                # observations so no valid endpoint maps outside the RW grid.
+                utm_bbox = _padded_projected_point_bounds(
+                    segment_utm_points,
+                    padding=0.2,
+                    minimum_padding=max_cell_size,
+                )
                 min_utm_x, min_utm_y, max_utm_x, max_utm_y = utm_bbox
                 nx, ny = grid_shape_from_bbox(utm_bbox, self.resolution)
+                full_resolution_shape = (nx, ny)
+                if target_cell_size is not None:
+                    nx, ny = _coarsen_grid_to_cell_size(
+                        utm_bbox,
+                        nx,
+                        ny,
+                        target_cell_size,
+                    )
 
                 if self.is_marine:
                     min_lon_pad, min_lat_pad = inv.transform(min_utm_x, min_utm_y)
@@ -680,18 +748,41 @@ class StateDependentWalker(MixedWalker):
                         max_lat=max_lat_pad,
                     )
 
-                cell_size = min(max((max_utm_x - min_utm_x) / max(nx, 1), 1.0), max_cell_size)
-                segment_ud = np.zeros((ny, nx), dtype=np.float64) if ud else None
+                if target_cell_size is None:
+                    # Preserve the historical grid convention unless explicit
+                    # physical coarsening was requested.
+                    cell_size = min(
+                        max((max_utm_x - min_utm_x) / max(nx, 1), 1.0),
+                        max_cell_size,
+                    )
+                else:
+                    cell_size = _grid_node_cell_size(utm_bbox, nx, ny)
+                    print(
+                        f"RW grid {full_resolution_shape[0]}x{full_resolution_shape[1]} "
+                        f"coarsened to {nx}x{ny} at {cell_size:g} m/cell "
+                        f"(target {target_cell_size:g} m)"
+                    )
+                segment_ud = np.zeros((ny, nx), dtype=np.float32) if ud else None
                 segment_plot_walks = []
                 segment_grid_steps = []
-                for point_idx in range(seg_start, seg_end + 1):
-                    point_lon = steps.geometry.iloc[point_idx].x
-                    point_lat = steps.geometry.iloc[point_idx].y
-                    point_utm_x, point_utm_y = fwd.transform(point_lon, point_lat)
+                for point_utm_x, point_utm_y in segment_utm_points:
                     segment_grid_steps.append(
                         utm_to_grid(nx, ny, utm_bbox, point_utm_x, point_utm_y)
                     )
-                context_cache = {} if kernels is not None else None
+                # A state/S context is invariant across endpoint pairs on this
+                # terrain segment. Reuse fitted and externally supplied kernels
+                # alike instead of rebuilding the native kernel map each time.
+                context_cache = {}
+                terrain_values = {int(value) for value in terrain.unique_values()}
+                segment_barriers = [
+                    barrier for barrier in self.barriers
+                    if int(barrier) in terrain_values
+                ]
+                segment_reachability = _reachability_for_segment(
+                    self.barrier_mode,
+                    segment_barriers,
+                    terrain_values,
+                )
 
                 try:
                     for st_idx in range(seg_start, seg_end):
@@ -722,10 +813,50 @@ class StateDependentWalker(MixedWalker):
                             )
                             continue
 
-                        st_utm_x, st_utm_y = fwd.transform(start_lon, start_lat)
-                        en_utm_x, en_utm_y = fwd.transform(end_lon, end_lat)
+                        st_utm_x, st_utm_y = segment_utm_points[st_idx - seg_start]
+                        en_utm_x, en_utm_y = segment_utm_points[en_idx - seg_start]
                         start_x, start_y = utm_to_grid(nx, ny, utm_bbox, st_utm_x, st_utm_y)
                         end_x, end_y = utm_to_grid(nx, ny, utm_bbox, en_utm_x, en_utm_y)
+
+                        barrier_endpoints = (
+                            _hard_barrier_endpoints(
+                                terrain,
+                                segment_barriers,
+                                (start_x, start_y),
+                                (end_x, end_y),
+                                self.barrier_mode,
+                            )
+                            if self.is_marine
+                            else ()
+                        )
+                        if barrier_endpoints:
+                            record = {
+                                "animal_id": str(animal_id),
+                                "endpoint_pair": int(st_idx + 1),
+                                "segment": [int(seg_start), int(seg_end)],
+                                "start_time": str(start_time),
+                                "end_time": str(end_time),
+                                "start_grid": [int(start_x), int(start_y)],
+                                "end_grid": [int(end_x), int(end_y)],
+                                "barrier_endpoints": list(barrier_endpoints),
+                                "reason": "marine_hard_endpoint_on_barrier",
+                            }
+                            self.skipped_endpoint_pairs.append(record)
+                            print(
+                                _state_walk_progress_message(
+                                    animal_id,
+                                    animal_index,
+                                    len(steps_dict),
+                                    st_idx + 1,
+                                    endpoint_pair_count,
+                                    state=state,
+                                    status=(
+                                        "skipped: HARD marine endpoint on barrier "
+                                        f"({', '.join(barrier_endpoints)})"
+                                    ),
+                                )
+                            )
+                            continue
 
                         directions = 1 if self.is_brownian else 8
                         base_kernel = _kernel_for_state(py_kernels, state)
@@ -761,6 +892,14 @@ class StateDependentWalker(MixedWalker):
                         )
                         T, S = _validate_policy_resolution(T, S)
                         requested_T, requested_S = T, S
+                        T, S = _cap_step_radius_to_grid(
+                            T=T,
+                            S=S,
+                            start_point=(start_x, start_y),
+                            end_point=(end_x, end_y),
+                            width=nx,
+                            height=ny,
+                        )
 
                         same_grid_cell = start_x == end_x and start_y == end_y
                         exceeds_time_guard = (
@@ -804,7 +943,7 @@ class StateDependentWalker(MixedWalker):
                             continue
 
                         cache_key = (str(state), int(S), directions)
-                        cached_context = context_cache.get(cache_key) if context_cache is not None else None
+                        cached_context = context_cache.get(cache_key)
                         if cached_context is None:
                             grid_kernel = _runtime_kernel(
                                 base_kernel,
@@ -822,6 +961,12 @@ class StateDependentWalker(MixedWalker):
                                     None if kernel_timestep_s is None else float(kernel_timestep_s)
                                 ),
                                 "rw_cell_size_m": float(cell_size),
+                                "rw_target_cell_size_m": (
+                                    None if target_cell_size is None else float(target_cell_size)
+                                ),
+                                "requested_time_steps": int(requested_T),
+                                "time_steps": int(T),
+                                "time_steps_were_increased": bool(T != requested_T),
                                 "requested_step_radius_cells": int(requested_S),
                                 "step_radius_cells": int(S),
                                 "step_radius_was_capped": bool(S != requested_S),
@@ -838,57 +983,70 @@ class StateDependentWalker(MixedWalker):
                                 terrain,
                                 grid_kernel,
                                 directions,
-                                forbidden_terrains=(
-                                    [] if self.barrier_mode == BarrierMode.ALLOW else self.barriers
-                                ),
+                                forbidden_terrains=segment_barriers,
                             )
                             try:
                                 context = KernelContextHandle.pool(
                                     terrain,
                                     mapping,
-                                    _reachability_for_barrier_mode(self.barrier_mode),
+                                    segment_reachability,
                                 )
                             except Exception:
                                 mapping.free()
                                 raise
-                            if context_cache is not None:
-                                context_cache[cache_key] = (mapping, context)
+                            context_cache[cache_key] = (mapping, context)
                         else:
                             mapping, context = cached_context
 
-                        try:
-                            sampled_segment_points = []
-                            if ud:
-                                forward_density = MixedWalkBinding.walk(context, T, start_x, start_y)
-                                try:
-                                    step_ud = utilization_distribution_from_forward_density(
+                        sampled_segment_points = []
+                        if ud:
+                            forward_density = MixedWalkBinding.walk(
+                                context, T, start_x, start_y, cuda=self.cuda
+                            )
+                            try:
+                                step_ud = utilization_distribution_from_forward_density(
+                                    forward_density,
+                                    context,
+                                    nx,
+                                    ny,
+                                    end_x,
+                                    end_y,
+                                    cuda=self.cuda,
+                                )
+                                if step_ud is not None:
+                                    segment_ud += step_ud
+                                for _ in range(amount_of_walks):
+                                    sampled_segment_points.append(MixedWalkBinding.backtrace(
                                         forward_density,
                                         context,
-                                        nx,
-                                        ny,
                                         end_x,
                                         end_y,
+                                    ))
+                                if amount_of_walks == 0 and save_intermediate_plots:
+                                    sampled_segment_points.append(MixedWalkBinding.backtrace(
+                                        forward_density,
+                                        context,
+                                        end_x,
+                                        end_y,
+                                    ))
+                            finally:
+                                forward_density.free()
+                        else:
+                            for _ in range(amount_of_walks):
+                                if self.cuda:
+                                    forward_density = MixedWalkBinding.walk(
+                                        context, T, start_x, start_y, cuda=True
                                     )
-                                    if step_ud is not None:
-                                        segment_ud += step_ud
-                                    for _ in range(amount_of_walks):
+                                    try:
                                         sampled_segment_points.append(MixedWalkBinding.backtrace(
                                             forward_density,
                                             context,
                                             end_x,
                                             end_y,
                                         ))
-                                    if amount_of_walks == 0 and save_intermediate_plots:
-                                        sampled_segment_points.append(MixedWalkBinding.backtrace(
-                                            forward_density,
-                                            context,
-                                            end_x,
-                                            end_y,
-                                        ))
-                                finally:
-                                    forward_density.free()
-                            else:
-                                for _ in range(amount_of_walks):
+                                    finally:
+                                        forward_density.free()
+                                else:
                                     sampled_segment_points.append(
                                         MixedWalkBinding.single_state_walk(
                                             context,
@@ -899,10 +1057,6 @@ class StateDependentWalker(MixedWalker):
                                             end_y,
                                         )
                                     )
-                        finally:
-                            if context_cache is None:
-                                context.free()
-                                mapping.free()
 
                         if ud and amount_of_walks == 0:
                             for segment_points in sampled_segment_points:
@@ -944,10 +1098,9 @@ class StateDependentWalker(MixedWalker):
                             ),
                         )
                 finally:
-                    if context_cache is not None:
-                        for mapping, context in context_cache.values():
-                            context.free()
-                            mapping.free()
+                    for mapping, context in context_cache.values():
+                        context.free()
+                        mapping.free()
                     terrain.free()
 
                 if ud and segment_ud.sum() > 0:
@@ -975,18 +1128,24 @@ class StateDependentWalker(MixedWalker):
                 animal_path_gdfs.append(animal_gdf)
 
             if ud:
-                combined_ud = combine_grid_utilization_distributions(animal_ud_grids)
+                combined_ud = combine_grid_utilization_distributions(
+                    animal_ud_grids,
+                    target_cell_size=combined_cell_size,
+                )
+                # The combined grid owns its data; release all segment grids
+                # before creating maps or benchmark serialization copies.
+                animal_ud_grids.clear()
                 if combined_ud is not None:
                     combined_ud = self._store_utilization_distribution(animal_id, combined_ud)
-                    ud_output_dir = self._ud_output_directory_for_run(save_plots)
-                    self._save_utilization_distribution_map(
-                        animal_id,
-                        animal_path_gdfs,
-                        combined_ud,
-                        output_dir=ud_output_dir,
-                        observed_points=full_observed_points,
-                    )
                     if save_plots:
+                        ud_output_dir = self._ud_output_directory_for_run(save_plots)
+                        self._save_utilization_distribution_map(
+                            animal_id,
+                            animal_path_gdfs,
+                            combined_ud,
+                            output_dir=ud_output_dir,
+                            observed_points=full_observed_points,
+                        )
                         self._save_utilization_distribution_png(
                             animal_id,
                             observed_points=full_observed_points,
@@ -995,7 +1154,7 @@ class StateDependentWalker(MixedWalker):
                             smoothing_metres=max_cell_size,
                         )
 
-        if ud:
+        if ud and save_plots and save_combined_map:
             self._save_combined_utilization_distribution_map(
                 per_animal_gdfs,
                 output_dir=self._ud_output_directory_for_run(save_plots),

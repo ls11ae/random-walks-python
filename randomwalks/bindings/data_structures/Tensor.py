@@ -103,10 +103,11 @@ class Tensor4DHandle:
     dll.tensor4D_free.restype = None
     free_4d = dll.tensor4D_free
 
-    def __init__(self, T=None, ptr=None, owned=True):
+    def __init__(self, T=None, ptr=None, owned=True, layer_count=None):
         self._ptr = ptr
         self._owned = owned
         self._T = T
+        self._layer_count = T if layer_count is None else layer_count
 
     @property
     def ptr(self):
@@ -117,15 +118,15 @@ class Tensor4DHandle:
         return self._T
 
     @classmethod
-    def from_ptr(cls, ptr, T):
-        return cls(T=T, ptr=ptr)
+    def from_ptr(cls, ptr, T, *, layer_count=None):
+        return cls(T=T, ptr=ptr, layer_count=layer_count)
 
     def to_numpy_sum(self, width, height, *, average=True):
         if not self._ptr:
             raise ValueError("NULL Tensor4D pointer")
 
         acc = np.zeros((height, width), dtype=np.float64)
-        for t in range(self._T):
+        for t in range(self._layer_count):
             tensor_ptr = self._ptr[t]
             if not tensor_ptr:
                 continue
@@ -139,13 +140,13 @@ class Tensor4DHandle:
                 values = np.ctypeslib.as_array(matrix.points, shape=(height, width))
                 acc += values
 
-        if average and self._T:
-            acc /= self._T
+        if average and self._layer_count:
+            acc /= self._layer_count
         return acc
 
     def free(self):
         if self._owned and self._ptr:
-            self.free_4d(self._ptr, self._T)
+            self.free_4d(self._ptr, self._layer_count)
         self._ptr = None
 
     def __bool__(self):

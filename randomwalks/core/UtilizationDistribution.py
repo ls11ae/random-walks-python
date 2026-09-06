@@ -37,11 +37,20 @@ class UtilizationDistributionMixin:
     def _store_utilization_distribution(self, animal_id, distribution):
         distribution = _coerce_grid(distribution)
         key = str(animal_id)
-        self.utilization_distributions[key] = distribution.grid.copy()
+        # UDs are normalized later with float64 accumulation. Keeping their
+        # large resident rasters as contiguous float32 halves storage and does
+        # not create a second copy when the combiner already returned float32.
+        grid = np.ascontiguousarray(distribution.grid, dtype=np.float32)
+        self.utilization_distributions[key] = grid
         self.utilization_distribution_bounds[key] = distribution.bounds
         self.utilization_distribution_cell_sizes[key] = _canonical_cell_size(_cell_size(distribution))
         self.utilization_distribution_crs[key] = distribution.crs
-        return distribution
+        return UtilizationDistributionGrid(
+            grid,
+            distribution.bounds,
+            distribution.cell_size,
+            distribution.crs,
+        )
 
     def _utilization_distribution_for(self, animal_id):
         key = str(animal_id)
@@ -144,7 +153,7 @@ class UtilizationDistributionMixin:
             distribution = self._utilization_distribution_for(key)
         else:
             distribution = _coerce_grid(utilization_distribution)
-        grid = np.clip(np.asarray(distribution.grid, dtype=np.float64), 0.0, None)
+        grid = np.clip(np.asarray(distribution.grid, dtype=np.float32), 0.0, None)
         if grid.ndim != 2 or not np.isfinite(grid).all() or grid.sum() <= 0:
             return None
         grid /= grid.sum()
@@ -318,23 +327,26 @@ def utilization_distribution_from_forward_density(
         height,
         end_x,
         end_y,
+        *,
+        cuda=False,
 ):
     """Convert a forward-density tensor into a finite 2D UD, if possible."""
-    ud_handle = MixedWalkBinding.utilization_distribution(
+    ud_handle = MixedWalkBinding.utilization_distribution_sum(
         dp_matrix=forward_density,
         kernel_context=kernel_context,
         end_x=end_x,
         end_y=end_y,
+        cuda=cuda,
     )
     try:
         try:
-            distribution = ud_handle.to_numpy_sum(width, height, average=True)
+            distribution = ud_handle.to_numpy()
         except ValueError:
             return None
     finally:
         ud_handle.free()
 
-    distribution = np.asarray(distribution, dtype=np.float64)
+    distribution = np.asarray(distribution, dtype=np.float32)
     if distribution.shape != (height, width) or not np.isfinite(distribution).all():
         return None
     return distribution
@@ -347,20 +359,37 @@ def combine_grid_utilization_distributions(
         target_crs=None,
         normalize_sources=False,
         normalize_result=False,
+        dtype=np.float32,
+        resample_chunk_rows=256,
 ):
-    """Resample and add spatial UDs on a grid using the finest input cell size."""
+    """Resample and add spatial UDs without full-grid coordinate temporaries.
+
+    ``target_cell_size`` should be set for large, heterogeneous segment grids;
+    otherwise the historical finest-input-cell behavior is retained. Raster
+    values default to float32 while totals and normalization use float64.
+    """
     prepared = []
     for distribution in distributions:
         try:
             distribution = _coerce_grid(distribution)
         except (TypeError, ValueError):
             continue
-        grid = np.clip(np.asarray(distribution.grid, dtype=float), 0.0, None)
-        if grid.ndim != 2 or not np.isfinite(grid).all() or grid.sum() <= 0:
+        grid = np.asarray(distribution.grid)
+        if (
+            grid.ndim != 2
+            or not np.issubdtype(grid.dtype, np.number)
+            or not np.isfinite(grid).all()
+            or _positive_sum(grid) <= 0
+        ):
             continue
         if not _valid_bounds(distribution.bounds):
             continue
-        prepared.append(UtilizationDistributionGrid(grid, distribution.bounds, distribution.cell_size, distribution.crs))
+        prepared.append(UtilizationDistributionGrid(
+            grid,
+            distribution.bounds,
+            distribution.cell_size,
+            distribution.crs,
+        ))
 
     if not prepared:
         return None
@@ -381,24 +410,20 @@ def combine_grid_utilization_distributions(
     width = max(1, int(np.ceil((max_x - min_x) / target_dx)))
     height = max(1, int(np.ceil((max_y - min_y) / target_dy)))
     target_bounds = (min_x, max_y - height * target_dy, min_x + width * target_dx, max_y)
-    combined = np.zeros((height, width), dtype=np.float64)
+    combined = np.zeros((height, width), dtype=dtype)
 
     for item in prepared:
-        source = resample_utilization_distribution(
+        _add_resampled_utilization_distribution(
+            combined,
             item,
             target_bounds=target_bounds,
-            target_shape=(height, width),
             target_crs=target_crs,
             preserve_mass=True,
+            normalize=normalize_sources,
+            chunk_rows=resample_chunk_rows,
         )
-        source_total = source.sum()
-        if source_total <= 0:
-            continue
-        if normalize_sources:
-            source = source / source_total
-        combined += source
 
-    total = combined.sum()
+    total = combined.sum(dtype=np.float64)
     if total <= 0:
         return None
     if normalize_result:
@@ -430,36 +455,118 @@ def resample_utilization_distribution(
         target_shape,
         target_crs=None,
         preserve_mass=True,
+        dtype=np.float32,
+        chunk_rows=256,
 ):
+    dst_height, dst_width = map(int, target_shape)
+    target = np.zeros((dst_height, dst_width), dtype=dtype)
+    _add_resampled_utilization_distribution(
+        target,
+        distribution,
+        target_bounds=target_bounds,
+        target_crs=target_crs,
+        preserve_mass=preserve_mass,
+        normalize=False,
+        chunk_rows=chunk_rows,
+    )
+    return target
+
+
+def _add_resampled_utilization_distribution(
+        target,
+        distribution,
+        *,
+        target_bounds,
+        target_crs=None,
+        preserve_mass=True,
+        normalize=False,
+        chunk_rows=256,
+):
+    """Resample one UD into ``target`` using bounded row chunks.
+
+    A short first pass obtains the resampled mass needed for exact source-mass
+    preservation. The second pass writes directly into the combined raster, so
+    no second target-sized array exists at any point.
+    """
     distribution = _coerce_grid(distribution)
-    source = np.asarray(distribution.grid, dtype=np.float64)
+    source_total = _positive_sum(distribution.grid)
+    if source_total <= 0:
+        return 0.0
+
+    sampled_total = 0.0
+    for _, _, _, sampled in _resampled_utilization_chunks(
+            distribution,
+            target_bounds=target_bounds,
+            target_shape=target.shape,
+            target_crs=target_crs,
+            chunk_rows=chunk_rows,
+    ):
+        sampled_total += float(sampled.sum(dtype=np.float64))
+    if sampled_total <= 0:
+        return 0.0
+
+    if normalize:
+        scale = 1.0 / sampled_total
+    elif preserve_mass:
+        scale = source_total / sampled_total
+    else:
+        scale = 1.0
+
+    for row_start, row_stop, valid, sampled in _resampled_utilization_chunks(
+            distribution,
+            target_bounds=target_bounds,
+            target_shape=target.shape,
+            target_crs=target_crs,
+            chunk_rows=chunk_rows,
+    ):
+        target_chunk = target[row_start:row_stop]
+        target_chunk[valid] += (sampled * scale).astype(target.dtype, copy=False)
+    return sampled_total * scale
+
+
+def _resampled_utilization_chunks(
+        distribution,
+        *,
+        target_bounds,
+        target_shape,
+        target_crs,
+        chunk_rows,
+):
+    source = np.asarray(distribution.grid)
     src_min_x, src_min_y, src_max_x, src_max_y = distribution.bounds
     dst_min_x, dst_min_y, dst_max_x, dst_max_y = map(float, target_bounds)
     dst_height, dst_width = map(int, target_shape)
     src_height, src_width = source.shape
-    target = np.zeros((dst_height, dst_width), dtype=np.float64)
+    chunk_rows = _positive_chunk_rows(chunk_rows)
 
     dst_dx = (dst_max_x - dst_min_x) / dst_width
     dst_dy = (dst_max_y - dst_min_y) / dst_height
-    cols = np.arange(dst_width)
-    rows = np.arange(dst_height)
-    target_x = dst_min_x + (cols + 0.5) * dst_dx
-    target_y = dst_max_y - (rows + 0.5) * dst_dy
-    xs, ys = np.meshgrid(target_x, target_y)
-    xs, ys = _transform_coordinates(xs, ys, target_crs, distribution.crs)
-
+    target_x = dst_min_x + (np.arange(dst_width) + 0.5) * dst_dx
     src_dx = (src_max_x - src_min_x) / src_width
     src_dy = (src_max_y - src_min_y) / src_height
-    valid = (xs >= src_min_x) & (xs < src_max_x) & (ys >= src_min_y) & (ys < src_max_y)
-    src_cols = np.floor((xs - src_min_x) / src_dx).astype(int)
-    src_rows = np.floor((src_max_y - ys) / src_dy).astype(int)
-    src_cols = np.clip(src_cols, 0, src_width - 1)
-    src_rows = np.clip(src_rows, 0, src_height - 1)
-    target[valid] = source[src_rows[valid], src_cols[valid]]
 
-    if preserve_mass and target.sum() > 0:
-        target *= source.sum() / target.sum()
-    return target
+    for row_start in range(0, dst_height, chunk_rows):
+        row_stop = min(dst_height, row_start + chunk_rows)
+        rows = np.arange(row_start, row_stop)
+        target_y = dst_max_y - (rows + 0.5) * dst_dy
+        xs, ys = np.meshgrid(target_x, target_y)
+        xs, ys = _transform_coordinates(xs, ys, target_crs, distribution.crs)
+        valid = (
+            (xs >= src_min_x)
+            & (xs < src_max_x)
+            & (ys >= src_min_y)
+            & (ys < src_max_y)
+        )
+        if not valid.any():
+            yield row_start, row_stop, valid, np.empty(0, dtype=source.dtype)
+            continue
+
+        src_cols = np.floor((xs - src_min_x) / src_dx).astype(np.int32)
+        src_rows = np.floor((src_max_y - ys) / src_dy).astype(np.int32)
+        np.clip(src_cols, 0, src_width - 1, out=src_cols)
+        np.clip(src_rows, 0, src_height - 1, out=src_rows)
+        sampled = np.maximum(source[src_rows[valid], src_cols[valid]], 0)
+        yield row_start, row_stop, valid, sampled
 
 
 def _resample_ud_to_common_grid(source, source_bounds, target_bounds, target_shape):
@@ -474,7 +581,7 @@ def _resample_ud_to_common_grid(source, source_bounds, target_bounds, target_sha
 
 def _coerce_grid(distribution):
     if isinstance(distribution, UtilizationDistributionGrid):
-        grid = np.asarray(distribution.grid, dtype=np.float64)
+        grid = np.asarray(distribution.grid)
         bounds = tuple(map(float, distribution.bounds))
         return UtilizationDistributionGrid(grid, bounds, distribution.cell_size, distribution.crs)
     if not isinstance(distribution, (tuple, list)) or len(distribution) < 2:
@@ -482,7 +589,23 @@ def _coerce_grid(distribution):
     grid, bounds = distribution[:2]
     cell_size = distribution[2] if len(distribution) > 2 else None
     crs = distribution[3] if len(distribution) > 3 else None
-    return UtilizationDistributionGrid(np.asarray(grid, dtype=np.float64), tuple(map(float, bounds)), cell_size, crs)
+    return UtilizationDistributionGrid(np.asarray(grid), tuple(map(float, bounds)), cell_size, crs)
+
+
+def _positive_chunk_rows(value):
+    if isinstance(value, bool) or int(value) != value or int(value) < 1:
+        raise ValueError("chunk_rows must be a positive integer")
+    return int(value)
+
+
+def _positive_sum(values):
+    """Sum a normally non-negative raster without allocating a clipped copy."""
+    values = np.asarray(values)
+    if values.size == 0:
+        return 0.0
+    if float(values.min()) >= 0:
+        return float(values.sum(dtype=np.float64))
+    return float(values[values > 0].sum(dtype=np.float64))
 
 
 def _valid_bounds(bounds):
@@ -524,10 +647,10 @@ def _cell_size_in_crs(distribution, target_crs):
 
 def _volume_percent_grid(probability):
     """Cumulative volume of the smallest high-density region per grid cell."""
-    flat = np.asarray(probability, dtype=np.float64).ravel()
+    flat = np.asarray(probability, dtype=np.float32).ravel()
     order = np.argsort(-flat, kind="stable")
     sorted_probability = flat[order]
-    cumulative_percent = np.cumsum(sorted_probability) * 100.0
+    cumulative_percent = np.cumsum(sorted_probability, dtype=np.float64) * 100.0
     group_ends = np.r_[
         np.flatnonzero(sorted_probability[:-1] != sorted_probability[1:]),
         len(sorted_probability) - 1,
@@ -672,7 +795,7 @@ def _leaflet_grid(distribution):
     keeps every probability cell aligned with the basemap.
     """
     distribution = _coerce_grid(distribution)
-    source = np.clip(np.asarray(distribution.grid, dtype=np.float64), 0.0, None)
+    source = np.clip(np.asarray(distribution.grid, dtype=np.float32), 0.0, None)
     if source.ndim != 2 or not np.isfinite(source).all() or source.sum() <= 0:
         return source, _transform_bounds(distribution.bounds, distribution.crs, "EPSG:4326")
 
@@ -695,7 +818,7 @@ def _leaflet_grid(distribution):
             height,
             *source_bounds,
         )
-        display = np.zeros((target_height, target_width), dtype=np.float64)
+        display = np.zeros((target_height, target_width), dtype=np.float32)
         reproject(
             source=source,
             destination=display,
