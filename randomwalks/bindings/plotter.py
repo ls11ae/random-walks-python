@@ -8,7 +8,7 @@ from randomwalks.bindings.data_structures.Terrain import (
 )
 
 
-def ud_isopleth_mask(ud, p=0.95):
+def ud_isopleth_mask(ud, p=1):
     ud = np.asarray(ud, dtype=float)
     ud = np.clip(ud, 0, None)
     total = ud.sum()
@@ -24,7 +24,7 @@ def ud_isopleth_mask(ud, p=0.95):
     return normalized >= level, level
 
 
-def ud_isopleth_band_map(ud, step=5, max_p=95):
+def ud_isopleth_band_map(ud, step=5, max_p=100):
     ud = np.asarray(ud, dtype=float)
     ud = np.clip(ud, 0, None)
     total = ud.sum()
@@ -49,6 +49,7 @@ def plot_terrain_walk(
     walk=None,
     steps=None,
     ud=None,
+    ud_alpha=0.45,
     width=None,
     height=None,
     title=None,
@@ -105,7 +106,7 @@ def plot_terrain_walk(
             cmap=cmap,
             norm=norm,
             origin="lower",
-            alpha=0.9,
+            alpha=float(ud_alpha),
             interpolation="nearest",
             extent=(-0.5, width - 0.5, -0.5, height - 0.5),
             zorder=5,

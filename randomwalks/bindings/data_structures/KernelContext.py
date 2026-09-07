@@ -23,11 +23,11 @@ class KernelContextHandle:
     free_ptr = dll.kernel_context_free
 
     def __init__(self, *, ptr, owned=True, mapping: KernelMapping | None = None):
-        if not ptr:
-            raise RuntimeError("Failed to allocate KernelContext")
         self._ptr = ptr
         self._owned = owned
         self._mapping = mapping
+        if not ptr:
+            raise RuntimeError("Failed to allocate KernelContext")
 
     @classmethod
     def on_fly(cls, terrain, mapping, reachability):

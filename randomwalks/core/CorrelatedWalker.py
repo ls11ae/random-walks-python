@@ -39,7 +39,6 @@ class CorrelatedWalker:
             self.D = D
         if S is not None:
             self.S = S
-
         if kernel is None:
             width = 2 * self.S + 1
             self.kernels = KernelFactory.correlated(

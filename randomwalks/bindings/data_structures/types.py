@@ -496,6 +496,7 @@ class KernelContext(Structure):
         ("dir_kernels_map", DirKernelsMapPtr),
         ("dp_dir", c_char_p),
         ("kernel_pool_dir", c_char_p),
+        ("cuda_kernel_pool", c_void_p),
     ]
 
 

@@ -7,8 +7,6 @@ from typing import Any
 
 import numpy as np
 
-from randomwalks import TerrainMapHandle
-
 
 @dataclass
 class SerializedWalk:
@@ -141,7 +139,7 @@ def walk_from_json(json_file):
 
 
 def plot_walk_from_json(json_file, *, title=None, show=True, ax=None, show_legend=True):
-    from randomwalks import plot_terrain_walk
+    from randomwalks.bindings.plotter import plot_terrain_walk
 
     serialized = walk_from_json(json_file)
     return plot_terrain_walk(
@@ -159,6 +157,8 @@ def plot_walk_from_json(json_file, *, title=None, show=True, ax=None, show_legen
 
 
 def _optional_array(value, *, dtype):
+    from randomwalks.bindings.data_structures.Terrain import TerrainMapHandle
+
     if value is None:
         return None
     if isinstance(value, TerrainMapHandle):

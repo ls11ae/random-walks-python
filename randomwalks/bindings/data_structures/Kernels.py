@@ -1,4 +1,4 @@
-from ctypes import POINTER
+from __future__ import annotations
 
 import numpy as np
 
@@ -6,6 +6,43 @@ from randomwalks.bindings.data_structures.Matrix import MatrixHandle
 from randomwalks.bindings.data_structures.Tensor import TensorHandle
 from randomwalks.bindings.data_structures.types import *
 from randomwalks.wrapper import dll
+
+
+def kernel_array(state_kernel):
+    return getattr(state_kernel, "Z", state_kernel)
+
+
+def kernel_state_value(state_kernel):
+    return getattr(state_kernel, "state_value", 0)
+
+
+def normalize_kernel(kernel):
+    kernel = np.maximum(np.asarray(kernel, dtype=np.float64), 0)
+    total = kernel.sum()
+    if total > 0:
+        kernel = kernel / total
+    return kernel
+
+
+def clip_kernel(kernel, radius):
+    kernel = np.asarray(kernel, dtype=np.float64)
+    radius = max(1, int(radius))
+    center_y = kernel.shape[0] // 2
+    center_x = kernel.shape[1] // 2
+    y0 = max(0, center_y - radius)
+    y1 = min(kernel.shape[0], center_y + radius + 1)
+    x0 = max(0, center_x - radius)
+    x1 = min(kernel.shape[1], center_x + radius + 1)
+    return kernel[y0:y1, x0:x1]
+
+
+def kernel_for_grid(base_kernel, step_size, cell_size, rnge, *, resample, preserve_full_kernel=False):
+    if preserve_full_kernel:
+        return resample(base_kernel, step_size)
+
+    kernel_radius = min(rnge, int(step_size * cell_size))
+    clipped = normalize_kernel(clip_kernel(base_kernel, kernel_radius))
+    return resample(clipped, step_size)
 
 
 class KernelFactory:

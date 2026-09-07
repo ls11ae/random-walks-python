@@ -211,6 +211,71 @@ def _add_grid_overlays_for_id(
         )
 
 
+def _flatten_leaflet_coords(coords_or_mapping):
+    if coords_or_mapping is None:
+        return []
+    if isinstance(coords_or_mapping, Mapping):
+        coordinate_groups = coords_or_mapping.values()
+    else:
+        coordinate_groups = [coords_or_mapping]
+
+    finite_coords = []
+    for coordinates in coordinate_groups:
+        for coordinate in coordinates or []:
+            try:
+                latitude, longitude = map(float, coordinate)
+            except (TypeError, ValueError):
+                continue
+            if np.isfinite((latitude, longitude)).all():
+                finite_coords.append((latitude, longitude))
+    return finite_coords
+
+
+def _add_geographic_reference_layers(
+        map_object,
+        *,
+        observed_coords=None,
+        coastline_geojson=None,
+):
+    """Draw reference data above raster overlays on a Leaflet map."""
+    added = False
+    if coastline_geojson is not None:
+        folium.GeoJson(
+            coastline_geojson,
+            name="Coastline (marine barrier)",
+            style_function=lambda _: {
+                "color": "#244F26",
+                "weight": 1.5,
+                "fillOpacity": 0.0,
+            },
+            smooth_factor=0.5,
+        ).add_to(map_object)
+        added = True
+
+    coordinates = _flatten_leaflet_coords(observed_coords)
+    if coordinates:
+        point_layer = folium.FeatureGroup(
+            name="Original observed fixes",
+            overlay=True,
+            control=True,
+            show=True,
+        )
+        for latitude, longitude in coordinates:
+            folium.CircleMarker(
+                location=(latitude, longitude),
+                radius=2,
+                color="white",
+                weight=1,
+                fill=True,
+                fill_color="white",
+                fill_opacity=0.9,
+                tooltip="Observed fix",
+            ).add_to(point_layer)
+        point_layer.add_to(map_object)
+        added = True
+    return added
+
+
 def _resolve_grid_overlay_map(
         overlays,
         overlay_bounds,
@@ -419,6 +484,8 @@ def walks_to_osm_multi(
         terrain_opacity: float = 0.6,
         utilization_distribution_opacity: float = 0.7,
         draw_walks: bool = True,
+        observed_coords=None,
+        coastline_geojson=None,
 ) -> str:
     """
     Create a single map with separate polylines for each animal id in geodetic_walks,
@@ -497,7 +564,12 @@ def walks_to_osm_multi(
             walk_layer.add_to(m)
             has_walk_layers = True
 
-    if terrain_overlay_map or ud_overlay_map or has_walk_layers:
+    has_reference_layers = _add_geographic_reference_layers(
+        m,
+        observed_coords=observed_coords,
+        coastline_geojson=coastline_geojson,
+    )
+    if terrain_overlay_map or ud_overlay_map or has_walk_layers or has_reference_layers:
         folium.LayerControl().add_to(m)
 
     os.makedirs(out_path, exist_ok=True)
@@ -522,6 +594,8 @@ def walk_to_osm(
         terrain_opacity: float = 0.6,
         utilization_distribution_opacity: float = 0.7,
         draw_walk: bool = True,
+        observed_coords=None,
+        coastline_geojson=None,
 ):
     """
     Backwards-compatible entry point:
@@ -549,6 +623,8 @@ def walk_to_osm(
             terrain_opacity=terrain_opacity,
             utilization_distribution_opacity=utilization_distribution_opacity,
             draw_walks=draw_walk,
+            observed_coords=observed_coords,
+            coastline_geojson=coastline_geojson,
         )
 
     # Otherwise, assume a single coordinate sequence
@@ -637,7 +713,12 @@ def walk_to_osm(
     if walk_layer is not None:
         walk_layer.add_to(m)
 
-    if terrain_overlay_map or ud_overlay_map or walk_layer is not None:
+    has_reference_layers = _add_geographic_reference_layers(
+        m,
+        observed_coords=observed_coords,
+        coastline_geojson=coastline_geojson,
+    )
+    if terrain_overlay_map or ud_overlay_map or walk_layer is not None or has_reference_layers:
         folium.LayerControl().add_to(m)
 
     # Save

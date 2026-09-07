@@ -102,26 +102,25 @@ class MixedTimeWalker(MixedWalker):
         else:
             owns_env_weights = False
 
-        steps_dict = self.animal_proc.create_movement_data_dict()
+        steps_dict = {traj.id: traj.df for traj in self.animal_proc.traj.trajectories}
         per_animal_gdfs = []
 
         try:
-            for animal_id, trajectory in steps_dict.items():
+            for animal_id, steps in steps_dict.items():
                 terrain_path = self._terrain_path(animal_id)
                 terrain_map = TerrainMapHandle.from_file(terrain_path, delim=" ")
                 mapping = mapping or KernelMapping.mesa_default()
 
                 try:
-                    steps = trajectory.df
                     full_paths = [[] for _ in range(amount_of_walks)]
-                    steps_df = steps_dict[animal_id].df
+                    steps_df = steps
                     idx = steps_df.index
                     segment_boundaries = [[0] for _ in range(amount_of_walks)]
 
                     for i in range(len(idx) - 1):
                         start_x, start_y = int(steps["grid_x"].iloc[i]), int(steps["grid_y"].iloc[i])
                         end_x, end_y = int(steps["grid_x"].iloc[i + 1]), int(steps["grid_y"].iloc[i + 1])
-                        start_date, end_date = steps["time"].iloc[i], steps["time"].iloc[i + 1]
+                        start_date, end_date = idx[i], idx[i + 1]
                         sampled_segments = []
 
                         if start_x == end_x and start_y == end_y:

@@ -7,12 +7,15 @@ from randomwalks.bindings.data_structures.Point2D import Point2DArrayHandle, Poi
 from randomwalks.bindings.data_structures.Tensor import Tensor4DHandle, TensorHandle
 from randomwalks.bindings.data_structures.Terrain import (
     Animal,
+    BarrierMode,
     KernelsMap3DHandle,
     MesaLandcover,
     TerrainMapHandle,
-    BarrierMode,
+    plot_terrain_neighborhood,
+    terrain_neighborhood_matrix,
 )
 from randomwalks.bindings.data_structures.types import ComputationMode, Reachability
+from randomwalks.bindings.step_segments import terrain_pair_weights_from_neighborhoods
 from randomwalks.bindings.plotter import (
     plot_terrain_walk,
     plot_walk_from_json,
@@ -21,9 +24,16 @@ from randomwalks.bindings.plotter import (
 )
 from randomwalks.core.BrownianWalker import BrownianWalker
 from randomwalks.core.CorrelatedWalker import CorrelatedWalker
+from randomwalks.core.KernelFactory import (
+    StateAnnotationMethod,
+    annotate_states,
+    feature_enum,
+    state_kernels,
+)
 from randomwalks.core.MixedWalker import MixedWalker
 from randomwalks.core.MixedTimeWalker import MixedTimeWalker
 from randomwalks.core.MovementPolicy import (
+    AdaptiveKernelMovementPolicy,
     FixedStepsPolicy,
     MovementPolicy,
     SpeedBasedPolicy,
@@ -33,9 +43,11 @@ from randomwalks.core.MovementPolicy import (
     manhattan,
 )
 from randomwalks.core.StateDependentWalker import StateDependentWalker
+from randomwalks.core.StateWalkerConfig import UnmodelledStatePolicy
 from randomwalks.serialization import SerializedWalk, walk_from_json, walk_to_json
 
 __all__ = [
+    "AdaptiveKernelMovementPolicy",
     "BrownianWalker",
     "CorrelatedWalker",
     "EnvWeights",
@@ -57,11 +69,19 @@ __all__ = [
     "SerializedWalk",
     "SpeedBasedPolicy",
     "StateDependentWalker",
+    "UnmodelledStatePolicy",
+    "StateAnnotationMethod",
+    "annotate_states",
+    "feature_enum",
+    "state_kernels",
     "Tensor4DHandle",
     "TensorHandle",
     "TerrainMapHandle",
     "TimeStepPolicy",
     "BarrierMode",
+    "plot_terrain_neighborhood",
+    "terrain_neighborhood_matrix",
+    "terrain_pair_weights_from_neighborhoods",
     "chebyshev",
     "euclidean",
     "manhattan",
