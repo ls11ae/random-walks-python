@@ -112,7 +112,9 @@ class MixedWalkBinding:
             raise RuntimeError(
                 "CUDA mixed-walk support is unavailable; rebuild random_walk with ENABLE_CUDA=ON"
             )
-        ptr = walk(kernel_context.ptr, c_ssize_t(T), c_ssize_t(start_x), c_ssize_t(start_y))
+        # CPU functions count stored layers; CUDA functions count transitions.
+        native_T = T if cuda else T + 1
+        ptr = walk(kernel_context.ptr, c_ssize_t(native_T), c_ssize_t(start_x), c_ssize_t(start_y))
         if cuda and not ptr:
             raise RuntimeError("CUDA mixed forward-density calculation failed")
         return Tensor4DHandle.from_ptr(ptr, T, layer_count=T + 1)
@@ -125,7 +127,7 @@ class MixedWalkBinding:
             raise ValueError("Tensor4DHandle with a T value is required")
         walk_handle = None
         try:
-            walk_handle = Point2DArrayHandle.from_ptr(cls.m_walk_backtrace(dp_ptr, T, kernel_context.ptr, end_x, end_y))
+            walk_handle = Point2DArrayHandle.from_ptr(cls.m_walk_backtrace(dp_ptr, T + 1, kernel_context.ptr, end_x, end_y))
             return walk_handle.to_numpy()
         except Exception as e:
             print(f"Error in backtrace: {e}")
@@ -163,7 +165,7 @@ class MixedWalkBinding:
             raise RuntimeError(
                 "CUDA mixed-walk UD support is unavailable; rebuild random_walk with ENABLE_CUDA=ON"
             )
-        ptr = calculate(dp_ptr, T, kernel_context.ptr, end_x, end_y)
+        ptr = calculate(dp_ptr, T if cuda else T + 1, kernel_context.ptr, end_x, end_y)
         if cuda and not ptr:
             raise RuntimeError("CUDA mixed utilization-distribution calculation failed")
         return Tensor4DHandle.from_ptr(ptr, T, layer_count=T + 1)
@@ -198,6 +200,7 @@ class MixedWalkBinding:
                 "The memory-bounded mixed-walk UD reducer is unavailable; "
                 "rebuild the random_walk native library"
             )
+        # The streaming reducer counts transitions on both backends.
         ptr = calculate(dp_matrix.ptr, T, kernel_context.ptr, end_x, end_y)
         if not ptr:
             raise RuntimeError("Mixed utilization-distribution reduction failed")
@@ -207,7 +210,7 @@ class MixedWalkBinding:
     def single_state_walk(cls, kernel_context: KernelContextHandle, T, start_x, start_y, end_x, end_y):
         print("[randomwalks] single-state walk: CPU", flush=True)
         ptr = cls.single_state_walk_ptr(
-            c_ssize_t(T),
+            c_ssize_t(T + 1),
             kernel_context.ptr,
             c_ssize_t(start_x),
             c_ssize_t(start_y),
