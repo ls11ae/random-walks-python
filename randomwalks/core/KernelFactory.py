@@ -43,7 +43,7 @@ def state_kernels(
         trajectory_collection,
         state_col="state",
         dt_tolerance=1.2,
-        rnge=1000,
+        rnge=None,
         reso=None,
         out=None,
         mass_percentile=0.99,
@@ -92,7 +92,7 @@ def _state_kernels(
         trajectory_collection,
         state_col="state",
         dt_tolerance=1.2,
-        rnge=1000,
+        rnge=None,
         reso=None,
         out=None,
         mass_percentile=0.99,
@@ -151,7 +151,8 @@ def _state_kernels(
     correlated, brownian = factory.get_state_kernels(
         dt_tolerance=dt_tolerance,
         rnge=rnge,
-        reso=int(2 * rnge + 1) if reso is None else int(reso),
+        reso=(int(2 * rnge + 1) if rnge is not None else None)
+        if reso is None else int(reso),
         out=out,
         density_config=density_options,
         dt_model_s=model_dt_s,

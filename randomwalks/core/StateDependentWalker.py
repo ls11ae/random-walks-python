@@ -215,8 +215,17 @@ class StateDependentWalker(MixedWalker):
             time_factor=None,
             kernel_config=None,
     ):
-        if self.animal_proc is None or self.animal_proc.annotation_result is None:
-            raise ValueError("Call annotate_behavior() before get_kernels().")
+        # Kernel fitting can use states created by annotate_behavior(), but it
+        # can equally use a state column supplied by the caller.  Lazily run
+        # the common trajectory/terrain preprocessing for that second case.
+        if self.animal_proc is None:
+            super()._process_movebank_data(create_landcover=True)
+        if self.animal_proc.annotation_result is None:
+            points = self.animal_proc.traj.to_point_gdf()
+            if state_col not in points.columns:
+                raise ValueError(f"State column {state_col!r} not found in trajectory data.")
+            if points[state_col].notna().sum() == 0:
+                raise ValueError(f"State column {state_col!r} contains no modelled states.")
         if kernel_config is not None:
             if dt_tolerance is not None or rnge is not None or dt_model_s is not None or time_factor is not None:
                 raise ValueError("Pass either kernel_config or individual kernel parameters, not both.")
@@ -226,10 +235,15 @@ class StateDependentWalker(MixedWalker):
             mass_percentile = kernel_config.mass_percentile
             dt_model_s = kernel_config.timestep_s
             time_factor = kernel_config.time_factor
+            if dt_model_s is None and time_factor is None:
+                # KernelConfig defaults to the inferred native sampling
+                # interval. The lower-level legacy API keeps its historical
+                # defaults when no config object is used.
+                time_factor = 1.0
             density_config = dict(kernel_config.density) or None
             is_brownian = kernel_config.is_brownian
-        if dt_tolerance is None or rnge is None:
-            raise ValueError("dt_tolerance and rnge are required without a KernelConfig.")
+        if dt_tolerance is None:
+            raise ValueError("dt_tolerance is required without a KernelConfig.")
         self.dt_tolerance = dt_tolerance
         self.rnge = rnge
         self.is_brownian = is_brownian
@@ -312,7 +326,7 @@ class StateDependentWalker(MixedWalker):
         if not kernels:
             raise ValueError("Call get_kernels() before save_kernel_neighborhoods().")
         if self.animal_proc is None or self.animal_proc.traj is None:
-            raise ValueError("Call annotate_behavior() before save_kernel_neighborhoods().")
+            raise ValueError("Call get_kernels() before save_kernel_neighborhoods().")
         if not self.animal_proc.terrain_TIFFs:
             raise ValueError("No terrain GeoTIFFs are available.")
 

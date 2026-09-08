@@ -149,10 +149,10 @@ def boars_ud():
         # Create movement kernels using Sum of Gaussians on segments
         walker.get_kernels(
             dt_tolerance=2.2,
-            rnge=100,
-            state_col="state",
+            state_col="state",  # default
             is_brownian=False,
-            mass_percentile=0.95,
+            time_factor=2,
+            mass_percentile=0.99,  # default
         )
         """neighborhoods = walker.save_kernel_neighborhoods(
             kernels,

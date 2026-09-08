@@ -34,6 +34,10 @@ transition count from each observed interval:
 
 ```python
 movement_policy = AdaptiveKernelMovementPolicy()
+kernel_config = KernelConfig(
+    kind="correlated",
+    mass_percentile=0.99,
+)
 
 with StateDependentWalker(
     data=trajectories,
@@ -44,10 +48,23 @@ with StateDependentWalker(
     barriers=barriers,
     n=10,
 ) as walker:
-    walker.annotate_behavior(...)
-    walker.get_kernels(..., is_brownian=False)
+    # Use behavioural states already present in the trajectory collection.
+    # annotate_behavior(...) remains available when states must first be inferred.
+    walker.get_kernels(kernel_config=kernel_config, state_col="state")
     walker.generate_utilization_distribution(max_cell_size=5)
 ```
+
+`get_kernels()` accepts an existing state column directly and performs the
+required trajectory and terrain preprocessing lazily. Behaviour annotation is
+therefore optional; pass the input column name through `state_col` when it is
+not named `state`.
+
+`KernelConfig` uses automatic spatial support by default (`range_m=None`) for
+both correlated and Brownian kernels. The fitted Gaussian mixture is searched
+for the smallest centred square containing `mass_percentile`; the final raster
+is generated only after that range is known. Each behavioural state can
+therefore retain a different physical radius. A positive explicit `range_m`
+keeps the legacy fixed-window behavior.
 
 `n` controls only the observed endpoints used by random-walk interpolation and
 UD generation. Its default is `1` (all points). For example, `n=10` uses points

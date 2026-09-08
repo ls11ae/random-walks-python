@@ -475,7 +475,7 @@ class AnimalMovementProcessor:
             *,
             state_col="state",
             dt_tolerance=1.2,
-            rnge=1000,
+            rnge=None,
             reso=None,
             out_dir=None,
             mass_percentile=0.99,
@@ -491,8 +491,6 @@ class AnimalMovementProcessor:
             reg_covariance=None,
             is_brownian=False,
     ):
-        if self.annotation_result is None:
-            raise ValueError("Call annotate_behavior() before generate_state_kernels().")
         return state_kernels(
             self.traj,
             state_col=state_col,
